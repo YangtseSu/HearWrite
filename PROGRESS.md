@@ -101,5 +101,5 @@ Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 ## Open decisions (not blocking)
 
 - License: ✅ GPL-3.0-or-later (2026-09-02, LICENSE file). Upstream alice is MIT and this is a from-scratch rewrite (no code reuse); data provenance unaffected — ECDICT is MIT (bundling allowed), 教育部词表 is a public document.
-- GitHub remote (`YangtseSu/HearWrite`) and Play/分发 channel: TBD.
+- GitHub remote: ✅ `YangtseSu/HearWrite` (private, 2026-09-02; flip public before first release). Play/分发 channel: TBD.
 - App icon design: placeholder until Phase 10.
