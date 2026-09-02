@@ -11,7 +11,7 @@ Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 | 2. Domain: word-line parsing | ✅ 2026-09-02 | 48 unit tests green incl. `data/` fixtures |
 | 3. Built-in library | ✅ 2026-09-02 | Library browser: 10 categories, list previews, search finds lists by name or word |
 | 4. Dictation engine + system TTS | ✅ 2026-09-02 | Paste list → EN & 汉字 dictation runs end-to-end |
-| 5. 汉字组词朗读 | ⬜ | `"月" → "月，月亮的月"`, 多音字 reads correctly |
+| 5. 汉字组词朗读 | ✅ 2026-09-02 | 月 → "月亮的月" → 月; 长 cháng/zhǎng read 长期/增长 |
 | 6. Wrong words / history / favorites | ⬜ | 标记错词 → 错词本 review → export to clipboard |
 | 7. Youdao TTS + sound effects | ⬜ | Words voiced by Youdao, tick/chime audible |
 | 8. OCR import | ⬜ | Photo of word list → editable text |
@@ -62,12 +62,15 @@ Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 - [x] Accept — device (Redmi 2407FRK8EC) evidence: full EN run (apple…car, each word twice with the 700 ms gap, countdown paced exactly — instrumented engine logs show countdown END = start + interval ± 10 ms at 2.5 s and 9 s); full 汉字 run (香蕉/学校/苹果/月亮/生日 all spoken twice in zh-CN, 9.07 s cadence); 标记错词 mid-run → red dial flash + chip, finish card shows 错词 1; ★ dragging the interval slider mid-countdown restarts the countdown instantly (ring jumps to the new value — screenshot shows 2 秒 right after a 7 → 2 drag; the following word arrives at the restarted deadline, e.g. +9.0 s after a mid-countdown 4.5 → 9 drag); 朗读释义 on → apple / 苹果 (zh-CN gloss) / apple; back key mid-run → 结束听写? dialog — 继续听写 resumes, 结束 stops and exits; the draft survived force-stop; interval/朗读释义 persist across sessions and restarts.
 - Commits: `feat: dictation engine`, `feat: system tts with datastore settings`, `feat: home paste import`, `feat: dictation screen`.
 
-## Phase 5 — 汉字组词朗读 ⬜
+## Phase 5 — 汉字组词朗读 ✅ (2026-09-02)
 
-- [ ] `compounds.json` loader; port `cjkWordSpeech`: learned-first → frequency-ordered fallback, polyphone syllable matching (tone digits, `ü=v`, neutral passes), `NO_COMPOUND_HEADS` stoplist; speak `组词，X的X` pattern per original.
-- [ ] Unit tests with real fixture chars: 月 (月亮), 长 (cháng/zhǎng), function char (的/了).
-- Accept: single-char dictation speaks `X，组词的X`; 多音字 picks the reading-matching compound.
-- Commit: `feat: cjk compound speech for char dictation` + tests.
+- [x] `domain/CjkWordSpeech.kt`: `CompoundTables` (+`EMPTY`) & `CompoundWord`, `parseCompoundTables` (kotlinx-serialization dynamic JSON — no codegen plugin), `cjkWordSpeech(entry, tables, learnedWords)` ported from `dictation.ts` with AGENTS.md's rules: tier ① meaning column (split `；;` then `，,、`, parens/edge punct stripped, 2-char containing the head, **not** pinyin-filtered — textbook gloss authoritative); tier ② learned pool (current list's 2-char words in appearance order + `learned` rows syllable-filtered) merged with ① and ranked by the common-word table (unranked keep appearance order, stable first-lowest-rank pick); tier ③ common pool walk (reading-filtered, first pass wins). `toneToDigit` (`yuè→yue4`, ü→v), `syllableMatches` (digit-form equality; either side unmarked passes — 石头·tou vs tóu), `NO_COMPOUND_HEADS` stoplist (的 地 得 着 了 吗 呢 吧 啊 呀 啦 嘛 么 → bare char). ⚠️ **No candidate dedupe anywhere** — pools are walked raw so dual readings of one word survive (澄 pool: 澄清 cheng2 ✗ → 澄清 deng4 ✓; 朝 pool: 朝阳 zhao1 and 朝阳 chao2 side by side); upstream's `seen`-before-filter dedupe is deliberately not ported.
+- [x] `data/CompoundRepository.kt`: lazy `compounds.json` asset parse on `Dispatchers.IO`, process-lifetime singleton (`HearWriteApplication.compoundRepository`), load failure degrades to `EMPTY` — never blocks dictation; never on the startup path.
+- [x] Engine voice routing: `DictationEngine` gained a **phrase speaker** slot alongside the word speaker — the 组词 pass always speaks through it in zh-CN (pinned to the system TTS link; words + EN glosses ride the word chain; Phase 7 wires a real chain in and must keep phrases on `phraseSpeaker`). `setCompoundTables()` before `start()`; both speakers stop on pause/skip/stop/leave. A single char with no matching compound (虚词 or no candidate) gets **no** phrase pass — the word speaks twice bare (upstream behavior; replaces the Phase 4 char-itself placeholder).
+- [x] `DictationViewModel` loads the tables (IO) before `engine.start()`.
+- [x] Tests (33 new, 93 total): `CjkWordSpeechTest` (13) against the real `data/compounds/compounds.json` fixture — 月|yuè|月亮 → 月亮的月; bare 月|yuè → 月亮的月 (learned row beats the common-pool walk, which would say 岁月); 长 cháng → 长期的长 / zhǎng → 增长的长 (polyphone walk); 朝 zhāo → 朝阳的朝 / cháo → 朝廷的朝 (gloss authoritative), bare 朝 zhāo → 明朝的朝 (real walk 朝鲜✗→朝廷✗→明朝✓), 澄|dèng → 澄清的澄 (no-dedupe regression guard), 虚词 stoplist all "", multi-char/non-CJK heads "", meaning-senses split & rank (出生、生长、生活 → 生活的生), list-word appearance order + rank precedence, real row 朝|cháo|朝代 → 朝代的朝. `DictationEngineTest`: single CJK char now asserts 月 → 月亮的月 (phrase speaker) → 月 and 虚词 的 gets no phrase pass.
+- Accept — device (2A241JEGR02531) logcat evidence, zh-CN system TTS: `月 → 月亮的月 → 月`, `长 → 长期的长 → 长`, `长 → 增长的长 → 长` (same char, two pinyin rows → two different compounds), `朝 → 朝阳的朝 → 朝`, `的 → 的` (function word, no phrase), 14 utterances then 已完成; re-verified on the final (filler reverted) build via the persisted draft.
+- Commit: `feat: cjk compound speech for char dictation + tests`.
 
 ## Phase 6 — Wrong words / history / favorites ⬜
 
