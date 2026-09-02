@@ -7,7 +7,7 @@ Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 | Phase | Status | Demo |
 | --- | --- | --- |
 | 0. Bootstrap (docs + data) | ✅ 2026-09-02 | — (repo docs, data assets in place) |
-| 1. Project scaffold | 🚧 | App installs, shows named empty screens |
+| 1. Project scaffold | ✅ 2026-09-02 | App installs, shows named empty screens |
 | 2. Domain: word-line parsing | ⬜ | Unit tests green |
 | 3. Built-in library | ⬜ | 词库 drawer browses/searches all textbook lists |
 | 4. Dictation engine + system TTS | ⬜ | Paste list → EN & 汉字 dictation runs end-to-end |
@@ -26,13 +26,13 @@ Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 - [x] `PROMPTS.md` — per-phase prompts for the coding agent.
 - Commits: `docs: …`, `data: …`.
 
-## Phase 1 — Project scaffold 🚧
+## Phase 1 — Project scaffold ✅ (2026-09-02)
 
-- [ ] Gradle project: single `:app` module, version catalog, pins from AGENTS.md (Gradle 9.7.1 wrapper, AGP 9.3.0, Kotlin 2.4.10, Compose BOM 2026.08.00), `minSdk 36` / `targetSdk 37` / `compileSdk 37`, package `org.yangtse.hearwrite`, app name "HearWrite 听写".
-- [ ] Compose skeleton: Material 3 theme (light/dark), `HomeScreen` / `DictationScreen` / `SettingsScreen` as placeholder routes via navigation-compose, `HearWriteApplication` with manual singletons.
-- [ ] `sdkmanager "platforms;android-37"` done; debug build + install verified on device/emulator.
-- Accept: `./gradlew :app:assembleDebug` green; app launches showing three screens.
-- Commit: `chore: scaffold compose app` (+ any follow-up fixes as separate commits).
+- [x] Gradle project: single `:app` module, version catalog, pins from AGENTS.md (Gradle 9.7.1 wrapper, AGP 9.3.0, Kotlin 2.4.10, Compose BOM 2026.08.00), `minSdk 36` / `targetSdk 37` / `compileSdk 37`, package `org.yangtse.hearwrite`, app name "HearWrite 听写". AGP 9 built-in Kotlin: the Kotlin pin rides on the Compose compiler plugin (applying `org.jetbrains.kotlin.android` is forbidden by AGP 9); wrapper distribution URL points at the Tencent mirror pinned to the official SHA-256 (`services.gradle.org` unreachable from this network); daemon on JDK 21 via `org.gradle.java.home`; boring-list deps recorded at latest stable.
+- [x] Compose skeleton: Material 3 theme (light/dark follow system), `HomeScreen` / `DictationScreen` / `SettingsScreen` as placeholder routes via navigation-compose, `HearWriteApplication` as the empty manual-singleton container.
+- [x] `sdkmanager "platforms;android-37"` done (official cmdline-tools 16111833 — the distro-packaged sdkmanager's index lacks android-37); debug build + install verified on device (Redmi 2407FRK8EC).
+- Accept: `./gradlew :app:assembleDebug` + `:app:testDebugUnitTest` green; app cold-starts (1.0 s) and 首页 → 听写 → 设置 switching verified on device with screenshots; dark mode follows system night mode.
+- Commits: `chore: bootstrap gradle project`, `feat: compose navigation skeleton`, `docs: mark phase 1 complete`.
 
 ## Phase 2 — Domain: word-line parsing ⬜
 
