@@ -1,5 +1,7 @@
 package org.yangtse.hearwrite.ui
 
+import android.content.Context
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -8,17 +10,23 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -27,6 +35,7 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -52,6 +61,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -74,11 +84,19 @@ import kotlin.math.ceil
 
 private val DONE_GREEN = Color(0xFF2E7D32)
 
+private fun formatElapsed(sec: Long): String =
+    if (sec >= 60) "${sec / 60} 分 ${sec % 60} 秒" else "$sec 秒"
+
+private fun toast(context: Context, message: String) {
+    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+}
+
 /**
  * The dictation surface: countdown ring with the current word hidden by
  * default (tap to reveal), POS/meaning hints, 标记错词, prev/pause/next/stop,
  * and the live interval slider + auto-next toggle. Leaving mid-session asks
- * for confirmation; a finished session exits directly.
+ * for confirmation; a finished session shows the score card with the 错词本
+ * (复习错词 / 导出错词 / 移除 / 清空) and exits directly.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,6 +105,7 @@ fun DictationScreen(
     viewModel: DictationViewModel = viewModel(),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
+    val runLines by viewModel.activeLines.collectAsStateWithLifecycle()
     var showWord by remember { mutableStateOf(false) }
     var metaExpanded by remember { mutableStateOf(false) }
     var exitDialogVisible by remember { mutableStateOf(false) }
@@ -95,6 +114,13 @@ fun DictationScreen(
     LaunchedEffect(ui.index) {
         showWord = false
         metaExpanded = false
+    }
+    // … and when a new run starts (复习错词 round) even if the index is unchanged.
+    LaunchedEffect(ui.finished) {
+        if (!ui.finished) {
+            showWord = false
+            metaExpanded = false
+        }
     }
 
     val requestStop: () -> Unit = {
@@ -152,6 +178,7 @@ fun DictationScreen(
 
             else -> DictationContent(
                 ui = ui,
+                runLines = runLines,
                 viewModel = viewModel,
                 showWord = showWord,
                 onToggleWord = { showWord = !showWord },
@@ -189,6 +216,7 @@ private fun StatusPill(ui: DictationUiState) {
 @Composable
 private fun DictationContent(
     ui: DictationUiState,
+    runLines: List<String>,
     viewModel: DictationViewModel,
     showWord: Boolean,
     onToggleWord: () -> Unit,
@@ -223,7 +251,7 @@ private fun DictationContent(
                 Spacer(Modifier.width(12.dp))
                 Surface(color = MaterialTheme.colorScheme.errorContainer, shape = CircleShape) {
                     Text(
-                        "已标记 ${ui.wrongWords.size} 个错词",
+                        "错词本 ${ui.wrongWords.size} 词",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
@@ -238,12 +266,19 @@ private fun DictationContent(
             contentAlignment = Alignment.Center,
         ) {
             if (ui.finished) {
-                FinishCard(ui, onClose)
+                FinishCard(
+                    ui = ui,
+                    onReviewWrong = viewModel::reviewWrongWords,
+                    onExportWrong = viewModel::exportWrongWords,
+                    onClearWrong = viewModel::clearWrongWords,
+                    onRemoveWrong = viewModel::removeWrongWord,
+                    onClose = onClose,
+                )
             } else {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     WatchDial(
                         ui = ui,
-                        line = viewModel.lines.getOrNull(ui.index),
+                        line = runLines.getOrNull(ui.index),
                         showWord = showWord,
                         onToggleWord = onToggleWord,
                         metaExpanded = metaExpanded,
@@ -273,9 +308,31 @@ private fun DictationContent(
     }
 }
 
+/**
+ * Score card of a finished run: 词数 / 正确数 / 用时, then the 错词本 actions —
+ * 复习错词 re-runs a dictation over exactly the wrong set, 导出错词 copies the
+ * words to the clipboard (pasteable back into the Home input), chips remove
+ * single words and 清空错词本 empties the book.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun FinishCard(ui: DictationUiState, onClose: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+private fun FinishCard(
+    ui: DictationUiState,
+    onReviewWrong: () -> Unit,
+    onExportWrong: () -> Int,
+    onClearWrong: () -> Unit,
+    onRemoveWrong: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    val context = LocalContext.current
+    val wrong = ui.wrongWords
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Icon(
             Icons.Filled.CheckCircle,
             contentDescription = null,
@@ -285,15 +342,84 @@ private fun FinishCard(ui: DictationUiState, onClose: () -> Unit) {
         Text(
             "听写完成",
             style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(top = 12.dp),
+            modifier = Modifier.padding(top = 8.dp),
         )
         Text(
-            "共 ${ui.total} 词 · 错词 ${ui.wrongWords.size}",
+            "共 ${ui.total} 词 · 用时 ${ui.elapsedSec?.let(::formatElapsed) ?: "—"}",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp),
+            modifier = Modifier.padding(top = 6.dp),
         )
-        Button(onClick = onClose, modifier = Modifier.padding(top = 20.dp)) { Text("返回") }
+        if (wrong.isNotEmpty()) {
+            val correct = (ui.total - wrong.size).coerceAtLeast(0)
+            Text(
+                "正确 $correct 词 · 错词 ${wrong.size}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        if (wrong.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Button(onClick = onReviewWrong, modifier = Modifier.weight(1f)) {
+                    Text("复习错词")
+                }
+                OutlinedButton(
+                    onClick = {
+                        val n = onExportWrong()
+                        if (n > 0) toast(context, "已复制 $n 个错词到剪贴板")
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("导出错词")
+                }
+            }
+        }
+
+        if (wrong.isNotEmpty()) {
+            Text(
+                "错词本（${wrong.size}）· 点按移除",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+            FlowRow(
+                modifier = Modifier.padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                wrong.forEach { word ->
+                    AssistChip(
+                        onClick = {
+                            onRemoveWrong(word)
+                            toast(context, "已移除 $word")
+                        },
+                        label = { Text(word) },
+                        trailingIcon = {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "移除 $word",
+                                modifier = Modifier.size(16.dp),
+                            )
+                        },
+                    )
+                }
+            }
+            TextButton(onClick = {
+                onClearWrong()
+                toast(context, "已清空错词本")
+            }) {
+                Text("清空错词本", color = MaterialTheme.colorScheme.error)
+            }
+        }
+
+        Button(onClick = onClose, modifier = Modifier.padding(top = 12.dp)) { Text("返回") }
+        Spacer(Modifier.height(8.dp))
     }
 }
 

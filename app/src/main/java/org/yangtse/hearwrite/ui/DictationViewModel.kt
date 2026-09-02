@@ -1,6 +1,9 @@
 package org.yangtse.hearwrite.ui
 
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.delay
@@ -9,6 +12,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.yangtse.hearwrite.HearWriteApplication
@@ -16,8 +20,6 @@ import org.yangtse.hearwrite.domain.DictationEngine
 import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.PlayState
-import org.yangtse.hearwrite.domain.entryToLine
-import org.yangtse.hearwrite.domain.parseWordLine
 import org.yangtse.hearwrite.domain.speakTextFromEntry
 
 /** Everything the dictation screen renders. */
@@ -32,19 +34,24 @@ data class DictationUiState(
     val wrongWords: List<String>,
     val markedFlash: Boolean,
     val ready: Boolean,
+    val elapsedSec: Long?,
 ) {
     val isActive: Boolean get() = state == PlayState.PLAYING || state == PlayState.PAUSED
 }
 
 /**
  * Owns the per-session [DictationEngine] (its own scope, disposed with the
- * ViewModel) plus the session settings. Wrong-word marking is in-memory for
- * Phase 4 (Room persistence and the review flow land in Phase 6).
+ * ViewModel) plus the session settings. The 错词本 is the persisted global
+ * book (AGENTS.md "Persistence"): seeded from Room before the run starts,
+ * session marks append and persist immediately; the finish surface offers
+ * 复习错词 (re-run over exactly the wrong set), 导出错词 (clipboard) and
+ * remove/clear book management.
  */
 class DictationViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as HearWriteApplication
     private val settings = app.settingsRepository
+    private val wrongWordsRepository = app.wrongWordsRepository
 
     /** Lines handed over by the launching screen (slice → shuffle applied). */
     val lines: List<String> = app.dictationSession.lines.ifEmpty { emptyList() }
@@ -73,6 +80,21 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     /** False until the persisted settings snapshot has been applied. */
     val ready: StateFlow<Boolean> = _ready.asStateFlow()
 
+    /** Word count of the run in progress (a 复习错词 round restarts with fewer). */
+    private val _total = MutableStateFlow(lines.size)
+    val total: StateFlow<Int> = _total.asStateFlow()
+
+    private val _elapsedSec = MutableStateFlow<Long?>(null)
+    /** Whole seconds of the finished run (score summary); null mid-run. */
+    val elapsedSec: StateFlow<Long?> = _elapsedSec.asStateFlow()
+
+    /** Lines of the run in progress (initial session or a review round). */
+    private val _activeLines = MutableStateFlow(lines)
+    val activeLines: StateFlow<List<String>> = _activeLines.asStateFlow()
+
+    /** Wall-clock start of the current run (init session or a review round). */
+    private var runStartedAtMs = 0L
+
     private data class EngineStateView(
         val state: PlayState,
         val finished: Boolean,
@@ -95,23 +117,27 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         combine(_intervalSec, _autoNext, _wrongWords, _markedFlash, _ready) { i, a, w, f, r ->
             SessionStateView(i, a, w, f, r)
         },
-    ) { engineView, sessionView ->
+        _total,
+        _elapsedSec,
+    ) { engineView, sessionView, totalCount, elapsed ->
         DictationUiState(
             state = engineView.state,
             finished = engineView.finished,
             index = engineView.index,
-            total = lines.size,
+            total = totalCount,
             remainingMs = engineView.remainingMs,
             intervalSec = sessionView.intervalSec,
             autoNext = sessionView.autoNext,
             wrongWords = sessionView.wrongWords,
             markedFlash = sessionView.markedFlash,
             ready = sessionView.ready,
+            elapsedSec = elapsed,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), snapshot())
 
     init {
-        // Apply the persisted settings snapshot, then start the session.
+        // Apply the persisted settings snapshot, seed the 错词本 from Room,
+        // then start the session.
         viewModelScope.launch {
             val snapshot = settings.snapshot()
             app.systemSpeaker.setSpeechRate(snapshot.speechRate)
@@ -123,12 +149,38 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
             // 组词 tables load off the main thread before the session starts
             // (first lookup parses compounds.json, then it is cached forever).
             engine.setCompoundTables(app.compoundRepository.tables())
+            // The wrong-word book seeds before the run starts, so the first
+            // possible mark (engine must be PLAYING) sees the full book.
+            _wrongWords.value = try {
+                wrongWordsRepository.observe().first()
+            } catch (e: Exception) {
+                emptyList()
+            }
             _ready.value = true
-            engine.start(lines)
+            beginRun(lines)
+        }
+        // Score summary: capture the elapsed time once when the run completes
+        // (a review round resets it via beginRun).
+        viewModelScope.launch {
+            engine.finished.collect { finished ->
+                if (finished && _elapsedSec.value == null) {
+                    val wall = System.currentTimeMillis() - runStartedAtMs
+                    _elapsedSec.value = maxOf(1L, (wall + 500) / 1000)
+                }
+            }
         }
     }
 
     // ------------------------------------------------------------- controls
+
+    /** Start a run (initial session or 复习错词 round) and reset its stats. */
+    private fun beginRun(runLines: List<String>) {
+        runStartedAtMs = System.currentTimeMillis()
+        _elapsedSec.value = null
+        _total.value = runLines.size
+        _activeLines.value = runLines
+        engine.start(runLines)
+    }
 
     fun togglePlay() {
         if (engine.state.value == PlayState.PLAYING) engine.pause()
@@ -156,25 +208,81 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
 
     // --------------------------------------------------------- wrong words
 
-    /** 标记错词 for the current word (speakable headword, in-memory set). */
+    /** 标记错词 for the current word (speakable headword, deduped book). */
     fun markCurrentWrong() {
         val ui = uiState.value
         if (!ui.isActive || ui.index >= ui.total) return
-        val head = speakTextFromEntry(lines[ui.index])
+        val head = speakTextFromEntry(_activeLines.value.getOrNull(ui.index) ?: return)
         if (head.isEmpty() || _wrongWords.value.contains(head)) return
         _wrongWords.value = _wrongWords.value + head
         _markedFlash.value = true
+        viewModelScope.launch {
+            try {
+                wrongWordsRepository.add(head)
+            } catch (e: Exception) {
+                // Persistence must never break dictation; the session list
+                // still carries the mark for the finish/review flow.
+            }
+        }
         viewModelScope.launch {
             delay(MARKED_FLASH_MS)
             _markedFlash.value = false
         }
     }
 
-    /** Display entry for the current line (headword + pos + meaning hints). */
-    fun entryAt(index: Int) = lines.getOrNull(index)?.let(::parseWordLine)
+    /** Remove one word from the 错词本 (finish card chip tap). */
+    fun removeWrongWord(word: String) {
+        if (word !in _wrongWords.value) return
+        _wrongWords.value = _wrongWords.value - word
+        viewModelScope.launch {
+            try {
+                wrongWordsRepository.remove(word)
+            } catch (e: Exception) {
+                // Best effort; the book is reseeded on the next session.
+            }
+        }
+    }
 
-    /** Canonical line export for a later re-dictation of the wrong set. */
-    fun lineOf(entry: org.yangtse.hearwrite.domain.WordEntry): String = entryToLine(entry)
+    /** Empty the 错词本. */
+    fun clearWrongWords() {
+        if (_wrongWords.value.isEmpty()) return
+        _wrongWords.value = emptyList()
+        viewModelScope.launch {
+            try {
+                wrongWordsRepository.clear()
+            } catch (e: Exception) {
+                // Best effort.
+            }
+        }
+    }
+
+    /**
+     * Copy the 错词本 to the clipboard as one word per line — pasteable back
+     * into the Home input to start a new dictation. Returns the copied count
+     * (0 when the book is empty; nothing is written then).
+     */
+    fun exportWrongWords(): Int {
+        val book = _wrongWords.value
+        if (book.isEmpty()) return 0
+        val clipboard =
+            app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("错词", book.joinToString("\n")))
+        return book.size
+    }
+
+    /**
+     * 复习错词: re-run a dictation round over exactly the wrong set, restoring
+     * the enriched session line for each headword when it is still present in
+     * the current word list (upstream `handleRetryWrong`).
+     */
+    fun reviewWrongWords() {
+        val book = _wrongWords.value
+        if (book.isEmpty()) return
+        val reviewLines = book.map { word ->
+            lines.firstOrNull { speakTextFromEntry(it) == word } ?: word
+        }
+        beginRun(reviewLines)
+    }
 
     private fun snapshot(): DictationUiState = DictationUiState(
         state = engine.state.value,
@@ -187,6 +295,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         wrongWords = emptyList(),
         markedFlash = false,
         ready = false,
+        elapsedSec = null,
     )
 
     override fun onCleared() {
