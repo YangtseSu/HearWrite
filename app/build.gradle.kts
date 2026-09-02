@@ -47,5 +47,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
+    // Recorded in the catalog at scaffold time; JSON parsing for config/fixtures.
+    implementation(libs.kotlinx.serialization.json)
+
     testImplementation(libs.junit)
 }
