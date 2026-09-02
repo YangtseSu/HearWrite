@@ -140,7 +140,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         if (_ocrTestState.value is OcrTestState.Testing) return
         _ocrTestState.value = OcrTestState.Testing
         viewModelScope.launch {
-            val error = ocrService.testConnection(cfg)
+            val error = try {
+                ocrService.testConnection(cfg)
+            } catch (e: Exception) {
+                // Network/JSON failures degrade to a Chinese message.
+                "网络请求失败，请检查 URL 与网络"
+            }
             _ocrTestState.value =
                 if (error == null) OcrTestState.Ok else OcrTestState.Failed(error)
         }
@@ -149,7 +154,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     /** Persist the entered config (trimmed) as the OCR provider. */
     fun saveOcrConfig() {
         val cfg = currentOcrConfig() ?: return
-        viewModelScope.launch { settings.setOcrProviderConfig(cfg) }
+        viewModelScope.launch {
+            try {
+                settings.setOcrProviderConfig(cfg)
+            } catch (e: Exception) {
+                // DataStore failures must never crash the screen (AGENTS.md).
+            }
+        }
     }
 
     private fun currentOcrConfig(): OcrProviderConfig? =

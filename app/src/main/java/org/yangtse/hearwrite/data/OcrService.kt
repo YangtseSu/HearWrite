@@ -124,10 +124,25 @@ class OcrService(
     suspend fun compressToDataUrl(uri: Uri): String? = withContext(Dispatchers.IO) {
         try {
             val resolver = context.contentResolver
+
+            // Size probe: inJustDecodeBounds decodes no pixels and returns
+            // null, but fills outWidth/outHeight — check the fields, not the
+            // (null) return value.
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-                ?: return@withContext null
-            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@withContext null
+            val probe = resolver.openInputStream(uri)
+            if (probe == null) {
+                Log.d(TAG, "compress: openInputStream null for $uri")
+                return@withContext null
+            }
+            try {
+                BitmapFactory.decodeStream(probe, null, bounds)
+            } finally {
+                probe.close()
+            }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                Log.d(TAG, "compress: cannot decode bounds for $uri")
+                return@withContext null
+            }
 
             // inSampleSize keeps the decode buffer bounded; the exact ≤1600
             // longest edge is applied afterwards.
@@ -139,7 +154,11 @@ class OcrService(
 
             val decoded = resolver.openInputStream(uri)?.use {
                 BitmapFactory.decodeStream(it, null, options)
-            } ?: return@withContext null
+            }
+            if (decoded == null) {
+                Log.d(TAG, "compress: decode failed for $uri")
+                return@withContext null
+            }
             val scaled = if (max(decoded.width, decoded.height) > OCR_MAX_EDGE) {
                 val scale = OCR_MAX_EDGE.toFloat() / max(decoded.width, decoded.height)
                 Bitmap.createScaledBitmap(

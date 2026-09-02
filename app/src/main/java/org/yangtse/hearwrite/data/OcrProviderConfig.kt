@@ -1,14 +1,13 @@
 package org.yangtse.hearwrite.data
 
-import kotlinx.serialization.Serializable
-
 /**
  * BYOK OCR provider config (AGENTS.md OCR import) — the user's own key only,
  * no built-in key, no credits/quota (the upstream paid stack is excluded
  * entirely). Stored as one JSON blob under the DataStore settings file, same
- * shape as alice's `alice_ocr_provider_config`.
+ * shape as alice's `alice_ocr_provider_config`. This module has no
+ * kotlinx-serialization codegen (AGENTS.md: JSON handled dynamically), so
+ * SettingsRepository encodes/decodes the blob field by field.
  */
-@Serializable
 data class OcrProviderConfig(
     val baseUrl: String = "",
     val apiKey: String = "",

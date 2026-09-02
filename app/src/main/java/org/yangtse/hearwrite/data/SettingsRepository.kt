@@ -11,6 +11,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.yangtse.hearwrite.domain.DEFAULT_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.DEFAULT_SPEECH_RATE
 import org.yangtse.hearwrite.domain.TtsSource
@@ -57,16 +62,15 @@ class SettingsRepository(private val context: Context) {
 
     /**
      * BYOK OCR provider config (拍照识词) stored as one JSON blob — null when
-     * never configured or unparseable (AGENTS.md Persistence).
+     * never configured or unparseable (AGENTS.md Persistence). JSON is
+     * handled dynamically — this module has no serialization codegen.
      */
     val ocrProviderConfig: Flow<OcrProviderConfig?> = dataStore.data.map { prefs ->
-        prefs[KEY_OCR_PROVIDER_CONFIG]?.let { raw ->
-            runCatching { ocrJson.decodeFromString<OcrProviderConfig>(raw) }.getOrNull()
-        }
+        prefs[KEY_OCR_PROVIDER_CONFIG]?.let(::decodeOcrConfig)
     }
 
     suspend fun setOcrProviderConfig(cfg: OcrProviderConfig) {
-        dataStore.edit { it[KEY_OCR_PROVIDER_CONFIG] = ocrJson.encodeToString(cfg) }
+        dataStore.edit { it[KEY_OCR_PROVIDER_CONFIG] = encodeOcrConfig(cfg) }
     }
 
     suspend fun setDraft(value: String) {
@@ -106,6 +110,24 @@ class SettingsRepository(private val context: Context) {
         ttsSource = ttsSource.first(),
         soundEnabled = soundEnabled.first(),
     )
+
+    /** `{"baseUrl":…,"apiKey":…,"model":…}` — same shape as alice's stored config. */
+    private fun encodeOcrConfig(cfg: OcrProviderConfig): String = buildJsonObject {
+        put("baseUrl", cfg.baseUrl)
+        put("apiKey", cfg.apiKey)
+        put("model", cfg.model)
+    }.toString()
+
+    private fun decodeOcrConfig(raw: String): OcrProviderConfig? = try {
+        val obj = ocrJson.parseToJsonElement(raw).jsonObject
+        OcrProviderConfig(
+            baseUrl = obj["baseUrl"]?.jsonPrimitive?.contentOrNull?.trim() ?: "",
+            apiKey = obj["apiKey"]?.jsonPrimitive?.contentOrNull?.trim() ?: "",
+            model = obj["model"]?.jsonPrimitive?.contentOrNull?.trim() ?: "",
+        )
+    } catch (e: Exception) {
+        null
+    }
 
     private companion object {
         val KEY_DRAFT = stringPreferencesKey("word_input_draft")
