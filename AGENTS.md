@@ -151,6 +151,12 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk   # deploy to device/em
 
 No emulator is guaranteed — verify on a connected device or emulator via `adb`; every phase's demo must run on a real surface.
 
+### adb device-driving notes (real-device verification)
+
+- **The screen sleeps**: a black screenshot, an empty `uiautomator dump`, or silently swallowed `input text` usually means the screen timed out mid-session — not a crash. Check `adb shell dumpsys window | grep mCurrentFocus` and logcat before debugging. During long drives keep the device awake with `adb shell svc power stayon true`, then restore `adb shell svc power stayon false`.
+- **The default IME is a Chinese keyboard**: on zh-CN devices the input method (Gboard pinyin mode) intercepts `adb shell input text` — injected ASCII letters land in the composition/candidate buffer and never reach the field. Disable the IME first (`adb shell ime disable <ime-id>` from `adb shell ime list -s`; optionally switch to a non-keyboard IME) so input goes through the hardware-keyboard path, then `adb shell ime enable <ime-id>` to restore.
+- **Swipe direction**: `adb shell input swipe x y1 x y2` dragging from a top area **downward** opens the notification shade / lock screen — a top-down swipe meant to scroll a list up near its top hides the app behind the shade and later inputs get eaten. List-scroll swipes go bottom-to-top (e.g. `540 1900 540 500`).
+
 ## Code Conventions
 
 - **Language**: identifiers, comments, docstrings (KDoc), and commit messages in **English**; user-facing UI strings and spoken sample text hardcoded **Chinese**, inline in code — no `strings.xml`, no i18n.
