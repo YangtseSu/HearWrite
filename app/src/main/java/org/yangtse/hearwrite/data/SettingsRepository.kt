@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.yangtse.hearwrite.domain.DEFAULT_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.DEFAULT_SPEECH_RATE
+import org.yangtse.hearwrite.domain.TtsSource
 
 private val Context.settingsDataStore by preferencesDataStore(name = "settings")
 
@@ -42,6 +43,13 @@ class SettingsRepository(private val context: Context) {
     val readTranslation: Flow<Boolean> =
         dataStore.data.map { it[KEY_READ_TRANSLATION] ?: false }
 
+    /** 发音来源: Youdao dict voice (default) or the system TTS. */
+    val ttsSource: Flow<TtsSource> = dataStore.data.map { prefs ->
+        prefs[KEY_TTS_SOURCE]?.let { stored ->
+            TtsSource.entries.firstOrNull { it.name.equals(stored, ignoreCase = true) }
+        } ?: TtsSource.YOUDAO
+    }
+
     suspend fun setDraft(value: String) {
         dataStore.edit { it[KEY_DRAFT] = value }
     }
@@ -62,12 +70,17 @@ class SettingsRepository(private val context: Context) {
         dataStore.edit { it[KEY_READ_TRANSLATION] = on }
     }
 
+    suspend fun setTtsSource(source: TtsSource) {
+        dataStore.edit { it[KEY_TTS_SOURCE] = source.name.lowercase() }
+    }
+
     /** One-shot snapshot used when a dictation session starts. */
     suspend fun snapshot(): SettingsSnapshot = SettingsSnapshot(
         intervalSec = intervalSec.first(),
         speechRate = speechRate.first(),
         autoNext = autoNext.first(),
         readTranslation = readTranslation.first(),
+        ttsSource = ttsSource.first(),
     )
 
     private companion object {
@@ -76,6 +89,7 @@ class SettingsRepository(private val context: Context) {
         val KEY_SPEECH_RATE = floatPreferencesKey("speech_rate")
         val KEY_AUTO_NEXT = booleanPreferencesKey("auto_next")
         val KEY_READ_TRANSLATION = booleanPreferencesKey("read_translation")
+        val KEY_TTS_SOURCE = stringPreferencesKey("tts_source")
     }
 }
 
@@ -85,4 +99,5 @@ data class SettingsSnapshot(
     val speechRate: Float,
     val autoNext: Boolean,
     val readTranslation: Boolean,
+    val ttsSource: TtsSource,
 )

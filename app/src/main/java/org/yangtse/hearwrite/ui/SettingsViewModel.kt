@@ -11,13 +11,15 @@ import kotlinx.coroutines.launch
 import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.domain.MAX_SPEECH_RATE
 import org.yangtse.hearwrite.domain.MIN_SPEECH_RATE
+import org.yangtse.hearwrite.domain.TtsSource
 import kotlin.math.roundToInt
 
 /**
  * Settings screen state: 语速 and 朗读释义 persist through the DataStore
  * settings repository; the rate applies live to the shared system speaker.
- * Interval/auto-next live on the dictation screen; Phase 10 consolidates the
- * full settings screen.
+ * TTS 来源 (youdao/system) and 提示音 toggle ride the same repository and take
+ * effect from the next dictation session. Interval/auto-next live on the
+ * dictation screen; Phase 10 consolidates the full settings screen.
  */
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -30,9 +32,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _readTranslation = MutableStateFlow(false)
     val readTranslation: StateFlow<Boolean> = _readTranslation.asStateFlow()
 
+    private val _ttsSource = MutableStateFlow(TtsSource.YOUDAO)
+    val ttsSource: StateFlow<TtsSource> = _ttsSource.asStateFlow()
+
     init {
         viewModelScope.launch { _speechRate.value = settings.speechRate.first() }
         viewModelScope.launch { _readTranslation.value = settings.readTranslation.first() }
+        viewModelScope.launch { _ttsSource.value = settings.ttsSource.first() }
     }
 
     fun onSpeechRateChange(rate: Float) {
@@ -47,4 +53,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _readTranslation.value = on
         viewModelScope.launch { settings.setReadTranslation(on) }
     }
+
+    fun onTtsSourceChange(source: TtsSource) {
+        _ttsSource.value = source
+        viewModelScope.launch { settings.setTtsSource(source) }
+    }
+
 }

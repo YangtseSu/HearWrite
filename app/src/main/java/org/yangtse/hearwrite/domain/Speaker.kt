@@ -21,6 +21,13 @@ interface Speaker {
     fun stop()
 }
 
+/**
+ * Active voice source for the word pass (AGENTS.md "TTS priority chain").
+ * YOUDAO is the default; SYSTEM pins the chain to `TextToSpeech`. Phase 9
+ * adds a third value for the optional OpenAI-compatible provider.
+ */
+enum class TtsSource { YOUDAO, SYSTEM }
+
 /** Playback defaults shared by the engine, settings and UI (AGENTS.md). */
 const val DEFAULT_INTERVAL_SEC = 7.0
 const val MIN_INTERVAL_SEC = 1.0

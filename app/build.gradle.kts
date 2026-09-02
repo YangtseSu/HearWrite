@@ -66,6 +66,9 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
+    // Youdao dict-voice downloads (TTS priority chain).
+    implementation(libs.okhttp)
+
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     // compounds.json fixtures parse through the same domain function as the app.

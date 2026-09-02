@@ -1,5 +1,6 @@
 package org.yangtse.hearwrite.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,11 +32,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.yangtse.hearwrite.domain.MAX_SPEECH_RATE
 import org.yangtse.hearwrite.domain.MIN_SPEECH_RATE
+import org.yangtse.hearwrite.domain.TtsSource
 import java.util.Locale
 
 /**
- * Playback settings: 语速 (system TTS rate, applied live) and 朗读释义
- * (English gloss pass toggle). Interval/auto-next are adjusted on the
+ * Playback settings: 语速 (system TTS rate, applied live), 朗读释义 and the
+ * TTS source (有道词典/系统语音). Interval/auto-next are adjusted on the
  * dictation screen itself; Phase 10 consolidates the remaining settings.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,6 +48,7 @@ fun SettingsScreen(
 ) {
     val speechRate by viewModel.speechRate.collectAsStateWithLifecycle()
     val readTranslation by viewModel.readTranslation.collectAsStateWithLifecycle()
+    val ttsSource by viewModel.ttsSource.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -114,6 +118,40 @@ fun SettingsScreen(
                     onCheckedChange = viewModel::onReadTranslationChange,
                     modifier = Modifier.semantics { contentDescription = "朗读释义" },
                 )
+            }
+
+            Text(
+                "语音",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 20.dp, bottom = 4.dp),
+            )
+            HorizontalDivider()
+
+            // ---- 发音来源 ---------------------------------------------------
+            Column(modifier = Modifier.padding(top = 12.dp)) {
+                Text("发音来源", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "有道词典为真人词典发音，需要网络；断网或失败时自动改用系统语音",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+                Row(
+                    modifier = Modifier.padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(
+                        selected = ttsSource == TtsSource.YOUDAO,
+                        onClick = { viewModel.onTtsSourceChange(TtsSource.YOUDAO) },
+                        label = { Text("有道词典") },
+                    )
+                    FilterChip(
+                        selected = ttsSource == TtsSource.SYSTEM,
+                        onClick = { viewModel.onTtsSourceChange(TtsSource.SYSTEM) },
+                        label = { Text("系统语音") },
+                    )
+                }
             }
 
             Text(

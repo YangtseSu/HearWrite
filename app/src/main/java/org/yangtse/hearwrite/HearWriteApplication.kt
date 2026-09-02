@@ -11,7 +11,9 @@ import org.yangtse.hearwrite.data.HearWriteDatabase
 import org.yangtse.hearwrite.data.HistoryRepository
 import org.yangtse.hearwrite.data.SettingsRepository
 import org.yangtse.hearwrite.data.SystemSpeaker
+import org.yangtse.hearwrite.data.TtsChainSpeaker
 import org.yangtse.hearwrite.data.WrongWordsRepository
+import org.yangtse.hearwrite.data.YoudaoTts
 
 /**
  * Application-scoped singleton container (manual DI per AGENTS.md — no
@@ -25,6 +27,20 @@ class HearWriteApplication : Application() {
 
     /** System TTS engine; created lazily on the first utterance. */
     val systemSpeaker: SystemSpeaker by lazy { SystemSpeaker(this) }
+
+    /**
+     * Youdao dict-voice downloads (disk cache + single flight); the phrase
+     * pass never uses it — 组词 always speaks via the system TTS link.
+     */
+    val youdaoTts: YoudaoTts by lazy { YoudaoTts(this) }
+
+    /**
+     * The word-pass voice chain: Youdao ready-cache → system TTS, chosen by
+     * the persisted source (AGENTS.md "TTS priority chain").
+     */
+    val ttsChain: TtsChainSpeaker by lazy {
+        TtsChainSpeaker(youdaoTts, systemSpeaker)
+    }
 
     /** 组词 candidate tables (compounds.json); parsed lazily on first lookup. */
     val compoundRepository: CompoundRepository by lazy { CompoundRepository(assets) }

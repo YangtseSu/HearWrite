@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -20,7 +21,10 @@ import org.yangtse.hearwrite.domain.DictationEngine
 import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.PlayState
+import org.yangtse.hearwrite.domain.isCjkEntry
+import org.yangtse.hearwrite.domain.parseWordLine
 import org.yangtse.hearwrite.domain.speakTextFromEntry
+import org.yangtse.hearwrite.domain.speakableMeaning
 
 /** Everything the dictation screen renders. */
 data class DictationUiState(
@@ -57,12 +61,11 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     val lines: List<String> = app.dictationSession.lines.ifEmpty { emptyList() }
 
     /**
-     * Word passes ride the active TTS chain; the 组词 phrase pass is pinned to
-     * the system speaker (Youdao's dict voice cannot serve such sentences —
-     * AGENTS.md "TTS priority chain"; still the same object until a later
-     * phase introduces the chain).
+     * Word passes ride the TTS chain (Youdao ready-cache → system); the 组词
+     * phrase pass stays pinned to the system speaker — Youdao's dict voice
+     * cannot serve such sentences (AGENTS.md "TTS priority chain").
      */
-    val engine = DictationEngine(app.systemSpeaker, phraseSpeaker = app.systemSpeaker)
+    val engine = DictationEngine(app.ttsChain, phraseSpeaker = app.systemSpeaker)
 
     private val _intervalSec = MutableStateFlow(MIN_INTERVAL_SEC)
     val intervalSec: StateFlow<Double> = _intervalSec.asStateFlow()
@@ -94,6 +97,10 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
 
     /** Wall-clock start of the current run (init session or a review round). */
     private var runStartedAtMs = 0L
+
+    /** 朗读释义 state for the session (dictation screen mirrors the setting). */
+    @Volatile
+    private var readTranslation = false
 
     private data class EngineStateView(
         val state: PlayState,
@@ -141,6 +148,8 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             val snapshot = settings.snapshot()
             app.systemSpeaker.setSpeechRate(snapshot.speechRate)
+            app.ttsChain.setSource(snapshot.ttsSource)
+            readTranslation = snapshot.readTranslation
             engine.setIntervalSec(snapshot.intervalSec)
             engine.setAutoNext(snapshot.autoNext)
             engine.setReadTranslation(snapshot.readTranslation)
@@ -169,9 +178,58 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
         }
+        // Background audio prefetch: on every word boundary warm the current
+        // word, the next word and the English gloss — the chain only plays
+        // ready-cached clips, so by the next countdown the Youdao voice is in.
+        viewModelScope.launch {
+            combine(engine.index, engine.state) { index, state -> index to state }
+                .distinctUntilChanged()
+                .collect { (index, state) ->
+                    if (state == PlayState.PLAYING && !engine.finished.value) {
+                        prefetchAround(index)
+                    }
+                }
+        }
     }
 
     // ------------------------------------------------------------- controls
+
+    /**
+     * Warm the audio cache around [index] (upstream `prefetchWordAudio` in
+     * the speak phase): the current line, the next line, and — only for
+     * English entries with 朗读释义 on — the gloss. 组词 phrases are never
+     * prefetched: they always speak through the system TTS link.
+     */
+    private fun prefetchAround(index: Int) {
+        val lines = _activeLines.value
+        val current = lines.getOrNull(index) ?: return
+        prefetchEntry(current)
+        lines.getOrNull(index + 1)?.let(::prefetchEntry)
+        if (!isCjkEntry(current) && readTranslation) {
+            val gloss = speakableMeaning(parseWordLine(current).meaning)
+            if (gloss.isNotEmpty()) prefetch(gloss, "zh-CN")
+        }
+    }
+
+    /** Speakable headword of [line] (strips `= you are` suffixes) → prefetch. */
+    private fun prefetchEntry(line: String) {
+        val head = speakTextFromEntry(line)
+        if (head.isNotEmpty()) {
+            val lang = if (isCjkEntry(line)) "zh-CN" else "en-US"
+            prefetch(head, lang)
+        }
+    }
+
+    private fun prefetch(text: String, lang: String) {
+        viewModelScope.launch {
+            try {
+                app.ttsChain.prefetch(text, lang)
+            } catch (e: Exception) {
+                // Prefetch must never disturb the session; the chain's own
+                // cache-miss fallback covers speech.
+            }
+        }
+    }
 
     /** Start a run (initial session or 复习错词 round) and reset its stats. */
     private fun beginRun(runLines: List<String>) {
