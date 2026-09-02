@@ -12,7 +12,7 @@ Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 | 3. Built-in library | ✅ 2026-09-02 | Library browser: 10 categories, list previews, search finds lists by name or word |
 | 4. Dictation engine + system TTS | ✅ 2026-09-02 | Paste list → EN & 汉字 dictation runs end-to-end |
 | 5. 汉字组词朗读 | ✅ 2026-09-02 | 月 → "月亮的月" → 月; 长 cháng/zhǎng read 长期/增长 |
-| 6. Wrong words / history / favorites | ⬜ | 标记错词 → 错词本 review → export to clipboard |
+| 6. Wrong words / history / favorites | ✅ 2026-09-03 | Mark wrong → 错词本 review → clipboard export; history/favorites drawers survive process death |
 | 7. Youdao TTS + sound effects | ⬜ | Words voiced by Youdao, tick/chime audible |
 | 8. OCR import | ⬜ | Photo of word list → editable text |
 | 9. OpenAI-compatible TTS (optional) | ⬜ | MiMo voice plays; outage falls back to system TTS |
@@ -72,12 +72,13 @@ Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 - Accept — device (2A241JEGR02531) logcat evidence, zh-CN system TTS: `月 → 月亮的月 → 月`, `长 → 长期的长 → 长`, `长 → 增长的长 → 长` (same char, two pinyin rows → two different compounds), `朝 → 朝阳的朝 → 朝`, `的 → 的` (function word, no phrase), 14 utterances then 已完成; re-verified on the final (filler reverted) build via the persisted draft.
 - Commit: `feat: cjk compound speech for char dictation + tests`.
 
-## Phase 6 — Wrong words / history / favorites ⬜
+## Phase 6 — Wrong words / history / favorites ✅ (2026-09-03)
 
-- [ ] Room: `wrong_words`, `history` (cap 50, user lists only), `favorites`; DataStore drafts already in Phase 4.
-- [ ] Finish state: score summary; 错词本 review flow (re-dictate wrong words); export wrong words to clipboard; history management (enriched text attach, delete, clear); favorites toggle in library/history.
-- Accept: dictation → mark wrong → review re-runs exactly the wrong set; export puts a pasteable list on the clipboard.
-- Commit: `feat: room persistence for wrong words history favorites`, `feat: finish screen and review flow`, `feat: history and favorites drawers`.
+- [x] Room (KSP 2.3.11 — AGP 9 built-in Kotlin needs KSP ≥ 2.3.6): `HearWriteDatabase` — `wrong_words(word PK, addedAt)`, `history(id, text, enrichedText, createdAt)`, `favorites(id)`; `WrongWordsDao` / `HistoryDao` (cap-50 trim, drop oldest) / `FavoritesDao` (orphan prune for non-`default_*` ids); lazy singletons in `HearWriteApplication`, never on the startup path. DAO + Flow. Repositories port `alice/src/lib/storage.ts` semantics: the wrong-word book is keyed by speakable headword in insertion order; history is user lists only, deduped by exact text (a re-run bumps the row to the front), enriched text attached; favorites store stable entry ids (`default_<category>_<label>` or history ids).
+- [x] Finish state: score summary (词数 / 正确数 / 错词 / 用时 — captured once at run end, review rounds re-time); 复习错词 re-dictates exactly the wrong set (lines restored from the session list, upstream `handleRetryWrong`); 导出错词 writes one headword per line to the clipboard — pasteable straight back into the Home draft; chips remove single words; 清空错词本. The session wrong list seeds from Room before `engine.start()` and every mark persists immediately (upstream global-book model), so the book survives process death; the run's `total`/active lines follow engine restarts, so a review round shows `n / 1`.
+- [x] Home 历史 / 收藏 bottom sheets (M3 `ModalBottomSheet`): history rows (title, 词数, timestamp) — tap loads `enrichedText ?? text` into the draft, star toggles the favorite, trash deletes, 清空 asks a confirm dialog; the favorites sheet resolves both sources — library lists via the asset repository, history rows via Room — and skips orphaned ids. The Home start flow enriches bare English lines with the offline ECDICT meta (`DictionaryRepository`: 3.3 MB map parsed lazily on first lookup; `enrichText` ported from `dictionary.ts`) and records the user list in history before navigating. 词库 list rows gained star toggles.
+- Accept — device (2A241JEGR02531): 4-word EN run, apple marked during word 1 → 错词本 1 词 chip; finish card 共 4 词 · 用时 39 秒 / 正确 3 词 · 错词 1; 复习错词 → logcat shows exactly `apple` twice (hw-9/hw-10, en-US), round card 共 1 词 · 用时 9 秒; 导出 → PASTE into the Home draft = `apple`, 共 1 词, re-dictated; `am force-stop` → relaunch: 收藏 sheet still 收藏（1）→ 中考1600 / A · 103 词, 历史 rows intact, a fresh dictation finished showing the seeded 错词本 1 词 (apple) with zero marks in that run; applying the history row loads the enriched lines (`apple | n. | 苹果, 家伙；苹果` …); row delete 历史记录（2）→（1）, 清空 + confirm → 历史记录（0）暂无历史记录, and the library favorite survives the history clear.
+- Commits: `feat: room persistence for wrong words history favorites`, `feat: finish screen and review flow`, `feat: history favorites drawers`, `docs: mark phase 6 complete`.
 
 ## Phase 7 — Youdao TTS + sound effects ⬜
 
