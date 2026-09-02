@@ -2,9 +2,11 @@ package org.yangtse.hearwrite.ui
 
 import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import org.yangtse.hearwrite.HearWriteApplication
 
 /** Top-level navigation routes. Finish (听写结束) is a DictationScreen end state, not a route. */
 object Routes {
@@ -26,10 +28,18 @@ object Routes {
 @Composable
 fun HearWriteApp() {
     val navController = rememberNavController()
+    val app = LocalContext.current.applicationContext as HearWriteApplication
+
+    /** Stage the prepared lines (slice → shuffle already applied) and start. */
+    val startDictation: (List<String>) -> Unit = { lines ->
+        app.dictationSession.lines = lines
+        navController.navigate(Routes.DICTATION)
+    }
+
     NavHost(navController = navController, startDestination = Routes.HOME) {
         composable(Routes.HOME) {
             HomeScreen(
-                onStartDictation = { navController.navigate(Routes.DICTATION) },
+                onStartDictation = startDictation,
                 onOpenLibrary = { navController.navigate(Routes.LIBRARY) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
             )
@@ -58,7 +68,7 @@ fun HearWriteApp() {
                 onBack = { navController.popBackStack() },
             )
         }
-        composable(Routes.LIBRARY_PREVIEW) { entry ->
+        composable(Routes.LIBRARY_PREVIEW) {
             LibraryPreviewScreen(onBack = { navController.popBackStack() })
         }
     }
