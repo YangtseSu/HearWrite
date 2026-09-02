@@ -1,24 +1,51 @@
 package org.yangtse.hearwrite.ui
 
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import org.yangtse.hearwrite.domain.MAX_SPEECH_RATE
+import org.yangtse.hearwrite.domain.MIN_SPEECH_RATE
+import java.util.Locale
 
-/** Placeholder settings screen; consolidated settings land in Phases 4-10. */
+/**
+ * Playback settings: 语速 (system TTS rate, applied live) and 朗读释义
+ * (English gloss pass toggle). Interval/auto-next are adjusted on the
+ * dictation screen itself; Phase 10 consolidates the remaining settings.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onClose: () -> Unit) {
+fun SettingsScreen(
+    onClose: () -> Unit,
+    viewModel: SettingsViewModel = viewModel(),
+) {
+    val speechRate by viewModel.speechRate.collectAsStateWithLifecycle()
+    val readTranslation by viewModel.readTranslation.collectAsStateWithLifecycle()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -31,13 +58,70 @@ fun SettingsScreen(onClose: () -> Unit) {
             )
         },
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
-            contentAlignment = Alignment.Center,
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp),
         ) {
-            Text("设置将在后续阶段实现")
+            Text(
+                "听写",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 20.dp, bottom = 4.dp),
+            )
+            HorizontalDivider()
+
+            // ---- 语速 ------------------------------------------------------
+            Column(modifier = Modifier.padding(top = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("语速", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Text(
+                        String.format(Locale.ROOT, "%.1f", speechRate),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Slider(
+                    value = speechRate,
+                    onValueChange = viewModel::onSpeechRateChange,
+                    valueRange = MIN_SPEECH_RATE..MAX_SPEECH_RATE,
+                    steps = 9, // 0.1 steps → 11 stops incl. endpoints
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { contentDescription = "听写语速" },
+                )
+            }
+
+            // ---- 朗读释义 ---------------------------------------------------
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("朗读释义", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "英文词朗读后跟读中文释义",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = readTranslation,
+                    onCheckedChange = viewModel::onReadTranslationChange,
+                    modifier = Modifier.semantics { contentDescription = "朗读释义" },
+                )
+            }
+
+            Text(
+                "间隔与自动播报可在听写页调整",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 12.dp),
+            )
         }
     }
 }
