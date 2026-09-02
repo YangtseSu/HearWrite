@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pre-Compose window theme only; all theming happens in Compose (ui/theme). -->
+    <style name="Theme.HearWrite" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
