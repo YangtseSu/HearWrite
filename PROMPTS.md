@@ -53,6 +53,7 @@
 验收：:app:testDebugUnitTest 全绿；测试输出展示从 data/ 高考3500、人教版小学语文 解析出的样例词条。
 提交：feat: word-line parser with pos normalization（实现+测试可分两个 commit），更新 PROGRESS.md。
 
+```
 ## Phase 3 — 内置词库
 
 ```text
@@ -115,7 +116,10 @@ Playback engine 与 Persistence 契约。
       本级整体按常用词表频级排序；
    ③ compounds.json 的 compounds 常用词池（过滤，频级升序）。
    多音字按条目带调拼音过滤候选（音节一致才可读；任一方无调放行）；NO_COMPOUND_HEADS 虚词直接读单字。
-   ⚠️ 禁止按"词"去重候选：朝阳/澄清 等约 21 个词带双读音，去重后 朝|zhāo 永远选不中"朝阳"。
+   ⚠️ 禁止按"词"去重候选——必须遍历原始数组、取第一个通过读音过滤的。真实遍历（朝|zhāo，无释义列、
+   词表无其他含"朝"的词、常用词池）：朝鲜(chao2)✗ → 朝廷(chao2)✗ → 明朝(zhao1)✓ → "明朝的朝"。
+   去重的实际受害者是 澄|dèng：遍历 澄清(cheng2)✗ → 澄清(deng4)✓ → "澄清的澄"；
+   若去重只留第一条 澄清(cheng2)，dèng 读音永远选不出任何候选，只能读单字。
 3. 组词 pass 强制走系统 zh-CN TTS（有道词典音发不出短语）。
 4. 单元测试用真实数据：月（月亮）、长（cháng→长期 / zhǎng→增长）、朝（zhāo→朝阳 / cháo→朝廷，验证双读音不去重）、
    虚词"的"（返回空）。
@@ -213,6 +217,8 @@ tick/chime 可听到。
    应用图标与自适应图标。
 3. 发布配置：gitignored keystore.properties 签名（模板 keystore.properties.example）、
    R8 minify 的 assembleRelease 可出签名 APK；确定 versionCode/versionName 规则。
+4. 词典加载打磨项（观测优先，不要预优化）：冷启动若实测超过 500ms（adb 启动计时，首次进入含词典查询的页面），
+   仅把英汉词典单独转 SQLite（Room createFromAsset），其余词库仍走 assets；未超阈值就不动。
 
 验收：签名 release APK 安装并完整演示一轮（导入 → 听写 → 复习）；暗色主题无违和。
 提交：feat: settings consolidation、feat: app icon and theming、chore: release signing and minify，更新 PROGRESS.md。
