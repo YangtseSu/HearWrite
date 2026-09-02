@@ -11,6 +11,7 @@ navigationCompose = "2.10.0"
 datastorePreferences = "1.2.1"
 coroutines = "1.10.2"
 room = "2.8.4"
+ksp = "2.3.11"               # AGP 9 built-in Kotlin needs KSP ≥ 2.3.6
 kotlinxSerializationJson = "1.11.0"
 okhttp = "5.5.0"
 junit = "4.13.2"
@@ -39,3 +40,4 @@ androidx-compose-material-icons-extended = { group = "androidx.compose.material"
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

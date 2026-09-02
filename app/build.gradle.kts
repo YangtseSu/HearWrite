@@ -2,6 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
     // Compose compiler plugin; its version ref pins Kotlin 2.4.10 (built-in Kotlin: no kotlin-android plugin).
     alias(libs.plugins.kotlin.compose)
+    // Room annotation processing (AGP 9 built-in Kotlin requires KSP >= 2.3.6).
+    alias(libs.plugins.ksp)
 }
 
 android {
@@ -58,6 +60,11 @@ dependencies {
 
     // Recorded in the catalog at scaffold time; JSON parsing for config/fixtures.
     implementation(libs.kotlinx.serialization.json)
+
+    // Room persistence (wrong words / history / favorites).
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
