@@ -21,7 +21,7 @@ Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 ## Phase 0 — Bootstrap ✅ (2026-09-02)
 
 - [x] `AGENTS.md` — architecture, toolchain pins, behavioral contract from alice.
-- [x] Data assets copied from alice (no network fetch): word lists `data/` (10 categories, 404 files), `data/dict/ecdict-meta.json` (ECDICT offline EN→ZH), `data/compounds/compounds.json` (converted from generated `compounds.ts`, 4724+17 chars), `data/meta/xiandaihanyuchangyongcibiao.txt` (组词 regeneration source), `data/audio/{tick,chime}.wav`.
+- [x] Data assets copied from alice (no network fetch): word lists `data/` (10 categories, 403 lists), `data/dict/ecdict-meta.json` (ECDICT offline EN→ZH), `data/compounds/compounds.json` (converted from generated `compounds.ts`, 4724+17 chars), `data/meta/xiandaihanyuchangyongcibiao.txt` (组词 regeneration source), `data/audio/{tick,chime}.wav`.
 - [x] `PROMPTS.md` — per-phase prompts for the coding agent.
 - Commits: `docs: …`, `data: …`.
 
