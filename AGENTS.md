@@ -67,6 +67,8 @@ State: `ViewModel` + `StateFlow` + `collectAsStateWithLifecycle`. **No DI framew
 
 Coroutine-driven state machine on its own `SupervisorJob` scope; per word: `speak1` → 700 ms gap → `speakMeaning` → `speak2` → `interval` countdown → next word. `speakMeaning` text: CJK **single char** → `cjkWordSpeech` output, **always** (the traditional classroom call — the 朗读释义 toggle only gates English glosses); multi-char CJK → nothing (word spoken as-is, twice); English → `speakableMeaning` only when 朗读释义 is on. Settings: interval 1–10 s (default 7, step 0.5), auto-next on/off, speech rate. Pause/resume; leaving the screen stops playback.
 
+Start options live on Home (both session-local, not persisted): **随机顺序** (Fisher–Yates over a copy of the parsed list; toggle in the playback controls, not switchable mid-dictation) and **起始序号** (start index in the word-input section, clamped when the list shrinks). Applied in order slice → shuffle before navigating to Dictation — the engine plays the list it is given and knows nothing about either.
+
 Implementation constraints (each line below mirrors a real upstream bug — do not regress):
 - Cancel via `Job.cancel()` + a **generation counter** bumped on every start/pause/stop/skip/prev; re-check `gen` after every suspension. Never boolean flags.
 - The countdown deadline lives in a `StateFlow`/`@Volatile` field, **re-read every tick** — an upstream loop captured the deadline once and live interval changes silently did nothing. Interval changes apply mid-countdown.

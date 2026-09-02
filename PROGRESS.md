@@ -52,7 +52,7 @@ Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 
 - [ ] `DictationEngine` (coroutine state machine): speak1 → 700 ms → speakMeaning → speak2 → interval countdown → next; speakMeaning = CJK single-char compound (always; Phase 5) / EN gloss only with 朗读释义 on; cancel via `Job.cancel()` + generation counter; speak1 failure → no retry; auto-next off holds after speak2; deadline re-read every tick (live interval changes); pause/resume; stop on exit. Defaults: interval 7 s (1–10, step 0.5), rate 0.9 (0.5–1.5), auto-next on.
 - [ ] System `TextToSpeech` wrapper (`en-US`/`zh-CN` by entry kind) + DataStore-backed settings.
-- [ ] Home: paste word list (draft persisted, 500 ms debounce, flushed on dispose) → start dictation; Dictation screen: countdown ring (announces remaining seconds), word hidden by default (tap to reveal), POS/meaning hint, 标记错词.
+- [ ] Home: paste word list (draft persisted, 500 ms debounce, flushed on dispose) + start options (起始序号, 随机顺序 — slice then Fisher–Yates before navigation, not persisted) → start dictation; Dictation screen: countdown ring (announces remaining seconds), word hidden by default (tap to reveal), POS/meaning hint, 标记错词.
 - Accept: full EN dictation (word → word) and 汉字 dictation (bare words) run by voice on device; wrong-word marking visible.
 - Commit: `feat: dictation engine`, `feat: system tts`, `feat: dictation screen`, `feat: home paste import`.
 

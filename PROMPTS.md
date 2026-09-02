@@ -52,7 +52,6 @@
 
 验收：:app:testDebugUnitTest 全绿；测试输出展示从 data/ 高考3500、人教版小学语文 解析出的样例词条。
 提交：feat: word-line parser with pos normalization（实现+测试可分两个 commit），更新 PROGRESS.md。
-```
 
 ## Phase 3 — 内置词库
 
@@ -89,7 +88,8 @@ Playback engine 与 Persistence 契约。
    onInit；UtteranceProgressListener 的 onDone 与 onError 都要 resume 挂起协程（漏 onError 会永久挂起）。
    DataStore 保存设置项。
 3. HomeScreen：粘贴词表输入框（草稿 500ms 防抖持久化，DisposableEffect.onDispose 时 flush 未落盘草稿）、
-   开始听写按钮（含从词库列表一键开听写）。
+   起始序号调整器（词数变少时 clamp 到有效范围）、随机顺序开关（Fisher-Yates，不持久化）、
+   开始听写按钮（含从词库列表一键开听写）；开始时按 起始序号截取 → 随机洗牌 的顺序应用后再传给听写页。
 4. DictationScreen：倒计时环（clearAndSetSemantics 播报剩余秒数）、当前词默认隐藏点按显示、词性与释义提示、
    标记错词按钮（本阶段先内存记录）、上一词/暂停/下一词/停止。
 5. 引擎单元测试（runTest 虚拟时间 + 假 Speaker）：阶段顺序、speak 失败不死循环、cancel 后无残留播报、
