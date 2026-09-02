@@ -53,6 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,6 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -109,6 +111,15 @@ fun DictationScreen(
     var showWord by remember { mutableStateOf(false) }
     var metaExpanded by remember { mutableStateOf(false) }
     var exitDialogVisible by remember { mutableStateOf(false) }
+
+    // A dictation session runs for minutes with nothing to touch — keep the
+    // screen awake while it is up (active, paused or the finish card). Leaving
+    // the screen clears the flag, so the screen timeout applies again.
+    val view = LocalView.current
+    DisposableEffect(view) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
+    }
 
     // The word re-hides on every word change (reveal must not leak across words).
     LaunchedEffect(ui.index) {
