@@ -1,5 +1,6 @@
 package org.yangtse.hearwrite.ui
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -10,6 +11,16 @@ object Routes {
     const val HOME = "home"
     const val DICTATION = "dictation"
     const val SETTINGS = "settings"
+    const val LIBRARY = "library"
+    const val LIBRARY_LIST = "library_list/{category}"
+    const val LIBRARY_PREVIEW = "library_preview/{category}/{label}"
+
+    /** Route to one category's list screen; [category] is URL-encoded (Chinese names). */
+    fun libraryList(category: String) = "library_list/${Uri.encode(category)}"
+
+    /** Route to a list preview; both args URL-encoded (labels contain spaces). */
+    fun libraryPreview(category: String, label: String) =
+        "library_preview/${Uri.encode(category)}/${Uri.encode(label)}"
 }
 
 @Composable
@@ -19,6 +30,7 @@ fun HearWriteApp() {
         composable(Routes.HOME) {
             HomeScreen(
                 onStartDictation = { navController.navigate(Routes.DICTATION) },
+                onOpenLibrary = { navController.navigate(Routes.LIBRARY) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
             )
         }
@@ -27,6 +39,27 @@ fun HearWriteApp() {
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(onClose = { navController.popBackStack() })
+        }
+        composable(Routes.LIBRARY) {
+            LibraryScreen(
+                onOpenCategory = { category -> navController.navigate(Routes.libraryList(category)) },
+                onOpenList = { category, label ->
+                    navController.navigate(Routes.libraryPreview(category, label))
+                },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.LIBRARY_LIST) { entry ->
+            val category = checkNotNull(entry.arguments?.getString("category"))
+            LibraryListsScreen(
+                onOpenList = { label ->
+                    navController.navigate(Routes.libraryPreview(category, label))
+                },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.LIBRARY_PREVIEW) { entry ->
+            LibraryPreviewScreen(onBack = { navController.popBackStack() })
         }
     }
 }

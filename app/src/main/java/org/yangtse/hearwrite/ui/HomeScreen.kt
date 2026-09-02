@@ -15,11 +15,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-/** Placeholder home: paste import and library browsing arrive in Phases 3-4. */
+/** Home: start options land in Phase 4; 词库 opens the built-in library browser. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onStartDictation: () -> Unit,
+    onOpenLibrary: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     Scaffold(topBar = { TopAppBar(title = { Text("首页") }) }) { innerPadding ->
@@ -32,6 +33,9 @@ fun HomeScreen(
         ) {
             Button(onClick = onStartDictation, modifier = Modifier.fillMaxWidth()) {
                 Text("开始听写")
+            }
+            OutlinedButton(onClick = onOpenLibrary, modifier = Modifier.fillMaxWidth()) {
+                Text("词库")
             }
             OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
                 Text("设置")
