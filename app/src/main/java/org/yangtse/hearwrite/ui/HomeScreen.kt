@@ -1,5 +1,8 @@
 package org.yangtse.hearwrite.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,9 +14,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Star
@@ -28,12 +33,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,10 +51,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import org.yangtse.hearwrite.data.OCR_DISCLAIMER
+import org.yangtse.hearwrite.data.OcrLang
 import org.yangtse.hearwrite.domain.parseWords
+import java.io.File
 
 /** 示例 content: English words with gloss columns (朗读释义 demo-able). */
 private const val SAMPLE_EN = "apple | n. | 苹果\nbanana | n. | 香蕉\nschool | n. | 学校\nbook | n. | 书\ncar | n. | 汽车"
@@ -60,6 +71,9 @@ private const val SAMPLE_CJK = "香蕉\n学校\n苹果\n月亮\n生日"
  * flushed on dispose), pick 起始序号 / 随机顺序 (session-local), then start
  * dictation — or open 词库 / 设置 / 历史 / 收藏 (bottom sheets). Starting
  * enriches the list with offline ECDICT meta and records it in history.
+ * 拍照识词 opens the OCR scan sheet: photo picker or camera capture →
+ * OpenAI-compatible vision → parsed lines land back in the draft for manual
+ * correction.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,10 +93,51 @@ fun HomeScreen(
     val history by viewModel.history.collectAsStateWithLifecycle()
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val favoriteItems by viewModel.favoriteItems.collectAsStateWithLifecycle()
+    val ocrBusy by viewModel.ocrBusy.collectAsStateWithLifecycle()
+    val ocrPhase by viewModel.ocrPhase.collectAsStateWithLifecycle()
+    val ocrError by viewModel.ocrError.collectAsStateWithLifecycle()
+    val ocrOutcome by viewModel.ocrOutcome.collectAsStateWithLifecycle()
+    val ocrRetryable by viewModel.ocrRetryable.collectAsStateWithLifecycle()
+    val ocrConfigured by viewModel.ocrConfigured.collectAsStateWithLifecycle()
+    val ocrModel by viewModel.ocrModel.collectAsStateWithLifecycle()
 
     var showHistory by remember { mutableStateOf(false) }
     var showFavorites by remember { mutableStateOf(false) }
     var clearHistoryConfirm by remember { mutableStateOf(false) }
+
+    // ---- 拍照识词 (OCR) state ----------------------------------------------
+    var showOcrSheet by remember { mutableStateOf(false) }
+    var ocrLang by remember { mutableStateOf(OcrLang.ENGLISH) }
+    // Suppresses a second picker/camera launch while one is open (the VM's
+    // Mutex backstop guards the network call itself — AGENTS.md re-entry).
+    var pickerOpen by remember { mutableStateOf(false) }
+
+    // One fixed cache file, overwritten per shot; FileProvider hands the
+    // camera app a writable content Uri (no CAMERA permission needed).
+    val cameraFile = remember { File(context.cacheDir, "ocr/capture.jpg") }
+    val cameraUri = remember {
+        FileProvider.getUriForFile(context, context.packageName + ".fileprovider", cameraFile)
+    }
+    val galleryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        pickerOpen = false
+        if (uri != null) viewModel.recognizeImage(uri, ocrLang)
+    }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture(),
+    ) { ok ->
+        pickerOpen = false
+        if (ok) viewModel.recognizeImage(cameraUri, ocrLang)
+    }
+
+    // One-shot OCR success toast (已识别 N 个…), consumed once shown.
+    LaunchedEffect(ocrOutcome) {
+        ocrOutcome?.let { message ->
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+            viewModel.clearOcrOutcome()
+        }
+    }
 
     // Flush a pending debounced draft when the screen goes away — the
     // upstream bug: the timer was cleared without saving, dropping the last
@@ -169,6 +224,60 @@ fun HomeScreen(
                 TextButton(onClick = { viewModel.fillSample(SAMPLE_EN) }) { Text("英文示例") }
                 TextButton(onClick = { viewModel.fillSample(SAMPLE_CJK) }) { Text("汉字示例") }
                 TextButton(onClick = viewModel::clearDraft) { Text("清空") }
+            }
+
+            // ---- 拍照识词 (OCR import entry; disclaimer at the entry point) ---
+            OutlinedButton(
+                onClick = { showOcrSheet = true },
+                enabled = !ocrBusy && !pickerOpen,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("拍照识词")
+            }
+            Text(
+                OCR_DISCLAIMER,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            if (ocrBusy) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        if (ocrPhase.isEmpty()) "识别中…" else ocrPhase,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+            ocrError?.let { message ->
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 4.dp)) {
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(onClick = { viewModel.clearOcrError() }) { Text("关闭") }
+                            if (ocrRetryable) {
+                                TextButton(onClick = viewModel::retryOcr) { Text("重试") }
+                            }
+                        }
+                    }
+                }
             }
 
             HorizontalDivider()
@@ -262,6 +371,47 @@ fun HomeScreen(
             }
             Spacer(Modifier.height(16.dp))
         }
+    }
+
+    if (showOcrSheet) {
+        OcrScanSheet(
+            lang = ocrLang,
+            onLangChange = { ocrLang = it },
+            configured = ocrConfigured,
+            modelName = ocrModel,
+            busy = ocrBusy || pickerOpen,
+            onCamera = {
+                showOcrSheet = false
+                pickerOpen = true
+                cameraFile.parentFile?.mkdirs()
+                runCatching { cameraLauncher.launch(cameraUri) }
+                    .onFailure {
+                        pickerOpen = false
+                        android.widget.Toast.makeText(
+                            context, "无法启动相机", android.widget.Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+            },
+            onGallery = {
+                showOcrSheet = false
+                pickerOpen = true
+                runCatching {
+                    galleryLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                    )
+                }.onFailure {
+                    pickerOpen = false
+                    android.widget.Toast.makeText(
+                        context, "无法打开相册", android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            },
+            onOpenSettings = {
+                showOcrSheet = false
+                onOpenSettings()
+            },
+            onDismiss = { showOcrSheet = false },
+        )
     }
 
     if (showHistory) {

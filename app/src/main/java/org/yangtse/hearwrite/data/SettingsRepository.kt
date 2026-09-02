@@ -10,6 +10,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.json.Json
 import org.yangtse.hearwrite.domain.DEFAULT_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.DEFAULT_SPEECH_RATE
 import org.yangtse.hearwrite.domain.TtsSource
@@ -53,6 +54,20 @@ class SettingsRepository(private val context: Context) {
     /** 提示音 (countdown tick + completion chime): default on. */
     val soundEnabled: Flow<Boolean> =
         dataStore.data.map { it[KEY_SOUND_ENABLED] ?: true }
+
+    /**
+     * BYOK OCR provider config (拍照识词) stored as one JSON blob — null when
+     * never configured or unparseable (AGENTS.md Persistence).
+     */
+    val ocrProviderConfig: Flow<OcrProviderConfig?> = dataStore.data.map { prefs ->
+        prefs[KEY_OCR_PROVIDER_CONFIG]?.let { raw ->
+            runCatching { ocrJson.decodeFromString<OcrProviderConfig>(raw) }.getOrNull()
+        }
+    }
+
+    suspend fun setOcrProviderConfig(cfg: OcrProviderConfig) {
+        dataStore.edit { it[KEY_OCR_PROVIDER_CONFIG] = ocrJson.encodeToString(cfg) }
+    }
 
     suspend fun setDraft(value: String) {
         dataStore.edit { it[KEY_DRAFT] = value }
@@ -100,6 +115,9 @@ class SettingsRepository(private val context: Context) {
         val KEY_READ_TRANSLATION = booleanPreferencesKey("read_translation")
         val KEY_TTS_SOURCE = stringPreferencesKey("tts_source")
         val KEY_SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
+        val KEY_OCR_PROVIDER_CONFIG = stringPreferencesKey("ocr_provider_config")
+
+        val ocrJson = Json { ignoreUnknownKeys = true }
     }
 }
 

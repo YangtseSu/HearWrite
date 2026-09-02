@@ -9,6 +9,7 @@ import org.yangtse.hearwrite.data.DictionaryRepository
 import org.yangtse.hearwrite.data.FavoritesRepository
 import org.yangtse.hearwrite.data.HearWriteDatabase
 import org.yangtse.hearwrite.data.HistoryRepository
+import org.yangtse.hearwrite.data.OcrService
 import org.yangtse.hearwrite.data.SettingsRepository
 import org.yangtse.hearwrite.data.SoundEffects
 import org.yangtse.hearwrite.data.SystemSpeaker
@@ -45,6 +46,9 @@ class HearWriteApplication : Application() {
 
     /** tick/chime UI sounds (提示音 setting). */
     val soundEffects: SoundEffects by lazy { SoundEffects(this) }
+
+    /** OpenAI-compatible vision OCR (拍照识词) — BYOK config from settings. */
+    val ocrService: OcrService by lazy { OcrService(this, settingsRepository) }
 
     /** 组词 candidate tables (compounds.json); parsed lazily on first lookup. */
     val compoundRepository: CompoundRepository by lazy { CompoundRepository(assets) }
