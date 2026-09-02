@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -28,15 +29,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.yangtse.hearwrite.domain.WordEntry
+import org.yangtse.hearwrite.domain.entryToLine
 
-/** Word preview of one built-in list: headword + pos/pinyin + meaning per row. */
+/**
+ * Word preview of one built-in list: headword + pos/pinyin + meaning per row,
+ * plus a one-tap 听写 action that starts dictation over this list.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryPreviewScreen(
     onBack: () -> Unit,
+    onStartDictation: (List<String>) -> Unit,
     viewModel: LibraryPreviewViewModel = viewModel(),
 ) {
     val entries by viewModel.entries.collectAsState()
+    val current = entries
 
     Scaffold(
         topBar = {
@@ -48,6 +55,20 @@ fun LibraryPreviewScreen(
                     }
                 },
             )
+        },
+        bottomBar = {
+            if (current != null && current.isNotEmpty()) {
+                Button(
+                    onClick = {
+                        onStartDictation(current.map(::entryToLine))
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                ) {
+                    Text("听写本词表（共 ${current.size} 词）")
+                }
+            }
         },
     ) { innerPadding ->
         when (val current = entries) {

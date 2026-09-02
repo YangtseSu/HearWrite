@@ -2,6 +2,7 @@ package org.yangtse.hearwrite.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -27,8 +28,8 @@ class SettingsRepository(private val context: Context) {
     val draft: Flow<String> = dataStore.data.map { it[KEY_DRAFT] ?: "" }
 
     /** 听写间隔秒数: 1–10 s, step 0.5, default 7. */
-    val intervalSec: Flow<Float> =
-        dataStore.data.map { it[KEY_INTERVAL_SEC] ?: DEFAULT_INTERVAL_SEC.toFloat() }
+    val intervalSec: Flow<Double> =
+        dataStore.data.map { it[KEY_INTERVAL_SEC] ?: DEFAULT_INTERVAL_SEC }
 
     /** 语速: 0.5–1.5, default 0.9. */
     val speechRate: Flow<Float> =
@@ -45,7 +46,7 @@ class SettingsRepository(private val context: Context) {
         dataStore.edit { it[KEY_DRAFT] = value }
     }
 
-    suspend fun setIntervalSec(sec: Float) {
+    suspend fun setIntervalSec(sec: Double) {
         dataStore.edit { it[KEY_INTERVAL_SEC] = sec }
     }
 
@@ -71,7 +72,7 @@ class SettingsRepository(private val context: Context) {
 
     private companion object {
         val KEY_DRAFT = stringPreferencesKey("word_input_draft")
-        val KEY_INTERVAL_SEC = floatPreferencesKey("interval_sec")
+        val KEY_INTERVAL_SEC = doublePreferencesKey("interval_sec")
         val KEY_SPEECH_RATE = floatPreferencesKey("speech_rate")
         val KEY_AUTO_NEXT = booleanPreferencesKey("auto_next")
         val KEY_READ_TRANSLATION = booleanPreferencesKey("read_translation")
@@ -80,7 +81,7 @@ class SettingsRepository(private val context: Context) {
 
 /** Immutable copy of the settings at dictation start. */
 data class SettingsSnapshot(
-    val intervalSec: Float,
+    val intervalSec: Double,
     val speechRate: Float,
     val autoNext: Boolean,
     val readTranslation: Boolean,

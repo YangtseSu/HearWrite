@@ -69,7 +69,10 @@ fun HearWriteApp() {
             )
         }
         composable(Routes.LIBRARY_PREVIEW) {
-            LibraryPreviewScreen(onBack = { navController.popBackStack() })
+            LibraryPreviewScreen(
+                onStartDictation = startDictation,
+                onBack = { navController.popBackStack() },
+            )
         }
     }
 }
