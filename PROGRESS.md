@@ -13,7 +13,7 @@ Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 | 4. Dictation engine + system TTS | ✅ 2026-09-02 | Paste list → EN & 汉字 dictation runs end-to-end |
 | 5. 汉字组词朗读 | ✅ 2026-09-02 | 月 → "月亮的月" → 月; 长 cháng/zhǎng read 长期/增长 |
 | 6. Wrong words / history / favorites | ✅ 2026-09-03 | Mark wrong → 错词本 review → clipboard export; history/favorites drawers survive process death |
-| 7. Youdao TTS + sound effects | ⬜ | Words voiced by Youdao, tick/chime audible |
+| 7. Youdao TTS + sound effects | ✅ 2026-09-03 | Words voiced by Youdao, airplane-mode fallback, tick/chime audible |
 | 8. OCR import | ⬜ | Photo of word list → editable text |
 | 9. OpenAI-compatible TTS (optional) | ⬜ | MiMo voice plays; outage falls back to system TTS |
 | 10. Settings, theme, polish, release | ⬜ | Dark/light, signed release APK |
@@ -81,13 +81,15 @@ Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 - Commits: `feat: room persistence for wrong words history favorites`, `feat: finish screen and review flow`, `feat: history favorites drawers`, `docs: mark phase 6 complete`.
   Follow-up: progress counter now reads position while active (1 / 4 … 4 / 4) and total / total at completion instead of parking on the last index (3 / 4) — same numerator drives the progress bar, so count and bar can never disagree.
 
-## Phase 7 — Youdao TTS + sound effects ⬜
+## Phase 7 — Youdao TTS + sound effects ✅ (2026-09-03)
 
-- [ ] Youdao audio fetch (URL forms from AGENTS.md, UA spoof, 256-byte guard), disk cache `cacheDir/tts/`, single-flight, failure → system TTS; TTS source setting (youdao/system).
-- [ ] `tick.wav` (last countdown second, vol 0.5) and `chime.wav` (session end, vol 0.6) via assets, sound on/off setting; haptics on marking (parity with original).
-- Accept: dictation voices switch to Youdao when network available, falls back in airplane mode; tick/chime audible.
-- Commit: `feat: youdao tts with cache and fallback`, `feat: ui sound effects`.
-
+- [x] `data/YoudaoTts.kt`: Youdao dict-voice downloader — CJK `dictvoice?audio=<enc>&le=zh` (the `type=2/1` voices cannot speak Chinese), English tries `&type=2` then `&type=1`; encodeURIComponent-equivalent percent encoding shared by URLs and cache names; mobile Safari UA (alice's `DOWNLOAD_HEADERS`); non-2xx or < 256-byte responses discarded; disk cache `cacheDir/tts/<lowercased-enc-text>.mp3` / `.zh.mp3` (`%`→`_`, `unknown` fallback), validity = size ≥ 256; per-(text+lang) single flight (`putIfAbsent` on an app-scope `async`) so the same voice is never downloaded twice; downloads never block playback and a cancelled waiter never aborts the shared fetch. Pure URL/encoding/naming helpers unit-tested (12 new → 105 total).
+- [x] `data/TtsChainSpeaker.kt`: the word-pass voice chain (engine `speaker` slot) — Youdao source: **ready cached clip only** via `MediaPlayer` (completion listener **+ 10 s watchdog**, release on settle — a stuck clip can never freeze dictation), cache miss or playback failure falls straight to system TTS; an interrupted clip (pause/skip/leave `stop()`) suppresses the fallback so a stopped session never speaks; `TtsSource.SYSTEM` routes everything straight to the system link. `prefetch()` warms the cache from `DictationViewModel` on every word boundary (engine index × state collector): current word, next word and the English gloss (朗读释义 only; 组词 phrases are never prefetched — they stay pinned to the system zh-CN speaker). First-word speak1 of a cold run is expected on system TTS; from the next countdown the Youdao voice is in.
+- [x] Settings: new 语音 section — 发音来源 chips 有道词典 (default) / 系统语音 (`tts_source` DataStore key, `TtsSource` enum in domain) and 提示音 switch (`sound_enabled`, default on); both ride `SettingsSnapshot` into the dictation session. `INTERNET` + `VIBRATE` permissions; okhttp dependency added to `:app`.
+- [x] `data/SoundEffects.kt`: countdown **tick** (last second, vol 0.5) and completion **chime** (vol 0.6) from the packaged `audio/tick.wav` / `chime.wav`; fire-and-forget per-play MediaPlayers, every failure degrades to silence; gated by the 提示音 setting. Tick edge mirrors upstream (`prev > 1000 && remaining ≤ 1000` on the engine `remainingMs` flow), chime rides the run-completion edge with the score capture.
+- [x] `data/Haptics.kt`: 标记错词 fires the warning pulse with expo-haptics' exact Android waveform (timings `0,40,120,60` ms, amplitudes `0,40,0,60` — `notifyWarning` parity); defensive vibrator lookup, never crashes.
+- Accept — device (2A241JEGR02531) logcat evidence: 4-word EN run — apple/banana/school/book MP3s (9.8–11.2 KB) cached from dict.youdao.com; every pass after the cold first speak1 played as clips (`clip end (done) ok=true`), ticks logged on each countdown's final second and chime at the end (vol 0.5/0.6); 汉字 run — `_E9_A6_99_E8_95_89.zh.mp3`-style le=zh clips (13–15 KB) with the `.zh` suffix, zh-CN system TTS only on the cold first pass; **airplane mode** (wifi+data off, VPN stopped, ping unreachable): zero downloads, every pass system TTS, the run completed uninterrupted with tick/chime; 发音来源 = 系统语音 while online: zero YoudaoTts activity; 提示音 off: full run with no SoundEffects logs; 标记错词 mid-run: book grew, no Haptics failure log, warning pulse dispatched (device vibration felt during the demo). Settings rows demoed live on-device.
+- Commits: `feat: youdao tts with cache and fallback`, `feat: ui sound effects and haptics`, `docs: mark phase 7 complete`.
 ## Phase 8 — OCR import ⬜
 
 - [ ] Photo Picker + camera capture; downscale ≤1600 px, JPEG 0.82; OpenAI-compatible vision call; verbatim EN/中文 prompts; reply → word-line parser; config screen: preset Zhipu glm-4v-flash + BYOK fields (baseUrl/apiKey/model), connection test; disclaimer at entry points; Chinese error surfacing with retry.
