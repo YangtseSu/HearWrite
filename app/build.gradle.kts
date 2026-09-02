@@ -32,6 +32,13 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // AGENTS.md: repo-root data/ ships verbatim as APK assets; meta/ is regeneration
+    // source only and must not be packaged (ignore patterns are aapt globs).
+    androidResources {
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:meta"
+    }
+    sourceSets["main"].assets.srcDir(rootProject.file("data"))
 }
 
 dependencies {
