@@ -24,6 +24,7 @@ This is a **from-scratch Kotlin + Jetpack Compose rewrite** of [`YangtseSu/alice
 - Android SDK at `~/Android/Sdk` (write `local.properties` with `sdk.dir`); **only `android-36` platform is installed** — run `sdkmanager "platforms;android-37"` (accept licenses) before the first build.
 - Keep all dependency versions in `gradle/libs.versions.toml` (version catalog). Beyond the pinned four above, pick **latest stable** at scaffold time and record in the catalog. Boring choices: `androidx.core-ktx`, `activity-compose`, `lifecycle-viewmodel-compose`, `navigation-compose`, `datastore-preferences`, `room-runtime/ktx` + KSP, `kotlinx-serialization-json`, `okhttp`, `material3`, `material-icons-extended`.
 - Verify toolchain bumps still satisfy the pinning table; never downgrade below it.
+- **Version fallback**: if the pinned combination fails to resolve or compile, take the versions from the current Android Studio **Empty Activity (Compose)** template `libs.versions.toml`, note the change in the commit message, and tell the user — never fight incompatibilities to keep a version number.
 
 ## Architecture & Data Flow
 
@@ -53,20 +54,35 @@ State: `ViewModel` + `StateFlow` + `collectAsStateWithLifecycle`. **No DI framew
 
 ### Speech-text rules
 
-- **组词朗读** (`cjkWordSpeech`, for single-char entries): speak `"组词的X"` — e.g. `月|yuè|月亮` → `"月亮的月"`. Candidate pool = textbook "learned" compounds first (`compounds.json` `learned`), then common-word fallback (`compounds` map, frequency-ordered). Filter by reading: the candidate's syllable for the head char must match the entry's toned pinyin (tone-digit comparison, `ü→v`; unmarked/neutral tone passes — see `syllableMatches`). A small stoplist of function chars reads the bare char (`dictation.ts` `NO_COMPOUND_HEADS`).
-- **朗读释义** (`speakableMeaning`, English entries with 朗读中文释义 enabled): speak only the first sense; sense split on `；;`, gloss split on `，,、`; strip parentheticals and edge punctuation; cap at visual width 12 (fullwidth = 1, halfwidth = 0.5).
+- **组词朗读** (`cjkWordSpeech`, single-char CJK entries only): speak `"组词的X"` — `月|yuè|月亮` → `"月亮的月"`. Multi-char words/sentences return `""` (spoken as-is). Function chars never compound (`的 地 得 着 了 吗 呢 吧 啊 呀 啦 嘛 么` — `NO_COMPOUND_HEADS`). Candidate tiers, first match wins:
+  1. The entry's own `meaning` column, split on `；;` then `，,、`, parentheticals stripped — keep 2-char words containing the head char. **Not** pinyin-filtered (the textbook gloss is authoritative).
+  2. "Learned" pool: the current list's other 2-char words containing the char (appearance order, not filtered), then `compounds.json` `learned` (filtered); this tier is rank-sorted by the common-word table.
+  3. `compounds.json` `compounds` common-word pool (filtered, frequency-ordered).
+  Pinyin filter: the candidate's syllable for the head char must match the entry's toned pinyin (tone digits, `ü→v`; unmarked/neutral tone on either side passes — `syllableMatches`).
+  ⚠️ **Never dedupe candidates by word**: ~21 words carry two readings (`朝阳` zhao1/chao2, `澄清` cheng2/deng4). `朝|zhāo` must reach `朝阳` by skipping the chao2 rows — a word-level dedupe makes that reading unreachable.
+- **朗读释义** (`speakableMeaning`, English entries): per sense (split `；;`) — strip a leading POS prefix (`n.` `vt.` …, else TTS spells it letter by letter), strip parentheticals and edge punctuation, take the first non-empty sense; if it still exceeds visual width 12 (fullwidth = 1, halfwidth = 0.5), cut at the first `，,、` boundary. Empty result = nothing to speak.
+- **No pinyin library** (`pinyin4j`/`TinyPinyin`/…): textbook rows carry pinyin, compound data carries per-word syllables, and the parser never needs to generate pinyin.
 
 ### Playback engine (`DictationEngine`)
 
-Coroutine-driven state machine; per word: `speak1` → 700 ms gap → `speakMeaning` (only if entry has a meaning **and** 朗读释义 enabled) → `speak2` → `interval` countdown → next word. Settings: interval 1–10 s (default 7, step 0.5), auto-next on/off, speech rate. Pause/resume; changing the interval applies **mid-countdown** (read deadline from state each tick, not captured at schedule time); leaving the screen stops playback. UI: countdown ring, show/hide current word, POS/meaning hints, 标记错词 button; final-second countdown tick sound; chime at session end.
+Coroutine-driven state machine on its own `SupervisorJob` scope; per word: `speak1` → 700 ms gap → `speakMeaning` → `speak2` → `interval` countdown → next word. `speakMeaning` text: CJK **single char** → `cjkWordSpeech` output, **always** (the traditional classroom call — the 朗读释义 toggle only gates English glosses); multi-char CJK → nothing (word spoken as-is, twice); English → `speakableMeaning` only when 朗读释义 is on. Settings: interval 1–10 s (default 7, step 0.5), auto-next on/off, speech rate. Pause/resume; leaving the screen stops playback.
+
+Implementation constraints (each line below mirrors a real upstream bug — do not regress):
+- Cancel via `Job.cancel()` + a **generation counter** bumped on every start/pause/stop/skip/prev; re-check `gen` after every suspension. Never boolean flags.
+- The countdown deadline lives in a `StateFlow`/`@Volatile` field, **re-read every tick** — an upstream loop captured the deadline once and live interval changes silently did nothing. Interval changes apply mid-countdown.
+- `speak1` failure → **no retry**, skip the gap, advance to the next phase (`speak2` is the natural second attempt); retry loops froze the app.
+- Auto-next off: after `speak2` clear the scheduler but keep the session alive; re-enabling resumes from the current word at the `interval` phase.
+- `speak()` never waits for a download — ready-cached audio only, else the next link in the chain; prefetch the current word, the next word, and the English gloss in the background.
+- End of list → completion state + chime; system back during dictation asks for confirmation, never exits silently.
+UI: countdown ring (last-second tick; `clearAndSetSemantics` announcing remaining seconds), current word **hidden by default** — tap to reveal, the core interaction — POS/meaning hints, 标记错词 button, prev/pause/next/stop, progress `n / total`.
 
 ### TTS priority chain
 
-1. **Youdao** (default): `GET https://dict.youdao.com/dictvoice?audio=<urlencoded>&le=zh` for CJK; `&type=2` then `&type=1` for English. Send a mobile-browser `User-Agent`; reject responses < 256 bytes; cache MP3s under `cacheDir/tts/` keyed by text+lang.
-2. **System TTS** (fallback, always available): `android.speech.tts`, locale `en-US`/`zh-CN` by entry kind, speech rate from settings (0.5–1.5, default 0.9).
-3. **Optional OpenAI-compatible TTS** (BYOK, Settings): wire shapes — `speech`: `POST {base}/audio/speech` returning binary audio (default format `mp3`); `chat`: `POST {base}/chat/completions` with an `audio` option returning base64 in `choices[0].message.audio.data` (小米 MiMo free tier). Config: `api`, `baseUrl`, `apiKey`, `model`, `voiceEn`, `voiceZh`, optional `responseFormat`. Clip cache keyed by `provider|model|voice|rate|text` hash in the same TTS dir. **Any failure falls back to the system TTS** — dictation never blocks on a provider outage. Original presets live in `alice/src/lib/ttsConfig.ts`.
+1. **Youdao** (default): `GET https://dict.youdao.com/dictvoice?audio=<urlencoded>&le=zh` for CJK (`type=2`/`type=1` cannot speak Chinese); `&type=2` then `&type=1` for English. Send a mobile-browser `User-Agent`; reject responses < 256 bytes; cache MP3s under `cacheDir/tts/` keyed by text+lang; single-flight per text.
+2. **System TTS** (fallback, always available): `android.speech.tts`, locale `en-US`/`zh-CN` by entry kind, speech rate from settings (0.5–1.5, default 0.9). Wrap async init in `suspendCoroutine` resumed from `onInit`; resume the pending continuation from **both** `onDone` and `onError` of `UtteranceProgressListener` (missing `onError` = permanent hang); play cached MP3 clips with `MediaPlayer` guarded by a completion listener **plus a 10 s timeout** (Media3 only if a concrete need appears).
+3. **Optional OpenAI-compatible TTS** (BYOK, Settings): wire shapes — `speech`: `POST {base}/audio/speech` returning binary audio (default format `mp3`); `chat`: `POST {base}/chat/completions` with an `audio` option returning base64 in `choices[0].message.audio.data` (小米 MiMo free tier). Config: `api`, `baseUrl`, `apiKey`, `model`, `voiceEn`, `voiceZh`, optional `responseFormat`. Clip cache keyed by `provider|model|voice|rate|text` hash in the same TTS dir. Presets live in `alice/src/lib/ttsConfig.ts`.
 
-All audio downloads: single-flight per text, cancellation-friendly, defensive degrade (bare-catch → next link in the chain).
+`Speaker` contract: `suspend fun speak(text, lang): Boolean` + `stop()` — returns `false` on failure, never throws into the caller. The 组词 phrase (`"月亮的月"`) **always** speaks via system zh-CN TTS — Youdao dict voice cannot serve sentences. Any failure falls through to the next link; dictation never blocks on a download or an outage.
 
 ### OCR import (拍照识词)
 
@@ -79,6 +95,16 @@ All audio downloads: single-flight per text, cancellation-friendly, defensive de
 - **Room**: `wrong_words` (word, addedAt), `history` (user lists only — id, text, enriched text, createdAt; **cap 50**, drop oldest), `favorites` (entry ids: `default_*` or history ids). Wrong words and favorites are keyed by the speakable headword / entry id exactly as `alice/src/lib/storage.ts`.
 - **DataStore Preferences**: word-input draft (debounced 500 ms), speech rate, interval sec, auto-next, read-translation, sound effects on/off, TTS source (`youdao|custom`) + provider config JSON, OCR provider config JSON, theme (light/dark/system).
 - Built-in library content is **never** persisted — read from assets each launch (cache in memory).
+
+### Ported pitfalls (upstream fixed these in RN — write them correctly from day one)
+
+- **Debounce flush**: the word-input draft persists debounced (500 ms) — flush pending input in `DisposableEffect.onDispose`; upstream cleared the timer without flushing and lost the last keystrokes on exit.
+- **Re-entry guards before the first suspension**: claim via `Mutex.tryLock()` (or a `@Volatile` flag) **before** the first await; checks placed after a suspension point let double-taps through (upstream double-charged OCR).
+- **Every `launch` catches**: async blocks `try/catch` and surface failures in the UI; a swallowed error made a failed request look successful upstream.
+- **List keys**: stable ids or indices — never content that changes while editing (remounts inputs mid-typing).
+- **Sliders**: native Compose `Slider` only (TalkBack increment/decrement comes free), each with a Chinese `contentDescription` ("听写间隔秒数" etc.) — a bare "滑块" announcement is useless. Never hand-roll Canvas sliders. Icon buttons carry `contentDescription`.
+- **Threading**: DB/file/network off the main thread (`Dispatchers.IO`); no `Thread.sleep`/`Handler.postDelayed`/`Timer` for playback timing — coroutines + `delay()`.
+- No `LiveData`, no `SharedPreferences`, no XML layouts, no `GlobalScope`; business state in `StateFlow` (`mutableStateOf` only for ephemeral UI state like text-field values).
 
 ## Key Directories
 
@@ -118,7 +144,7 @@ No emulator is guaranteed — verify on a connected device or emulator via `adb`
 
 ## Code Conventions
 
-- **Language**: identifiers, comments, docstrings (KDoc), and commit messages in **English**; user-facing UI strings and spoken sample text hardcoded **Chinese**.
+- **Language**: identifiers, comments, docstrings (KDoc), and commit messages in **English**; user-facing UI strings and spoken sample text hardcoded **Chinese**, inline in code — no `strings.xml`, no i18n.
 - **Style**: official Kotlin coding conventions (4-space indent, LF, UTF-8); `ktlint`/`detekt` not configured yet — do not add tooling mid-phase without noting it in PROGRESS.md. No `!!`; use `require`/`check` for programmer errors, and defensive catch-to-fallback only at network/audio boundaries.
 - **Naming**: `*Screen.kt` composables, `*ViewModel.kt`, `*Repository.kt`, `*Dao.kt`; pure functions in `domain/` are top-level and testable.
 - **Errors**: user-facing failures become Chinese message strings; network/audio layers never throw into UI — they degrade (TTS chain, OCR retry).
@@ -126,6 +152,6 @@ No emulator is guaranteed — verify on a connected device or emulator via `adb`
 
 ## Testing & QA
 
-- Unit tests (JUnit4 + `kotlinx-coroutines-test`) cover the `domain/` behavioral contract: line parsing (1/3 columns, fullwidth pipe, `you're = you are`), POS normalization, CJK detection, `cjkWordSpeech` (polyphone filtering, learned-first), `speakableMeaning` (sense split + width cap), `compareLabels` ordering, playback phase transitions.
+- Unit tests (JUnit4 + `kotlinx-coroutines-test`) cover the `domain/` behavioral contract: line parsing (1/3 columns, fullwidth pipe, `you're = you are`), POS normalization, CJK detection, `cjkWordSpeech` (tier order, polyphone filtering with the `朝|zhāo → 朝阳` case, learned-first), `speakableMeaning` (POS strip + sense split + width cap), `compareLabels` ordering, and the `DictationEngine` — tested with a fake `Speaker` and `runTest` virtual time: phase order, no-retry on speak failure, cancel leaves no stray speaks, auto-next hold, generation races, and ★ live interval change verified via `advanceTimeBy`.
 - Assets/dict data are **read-only fixtures** — tests may load from `data/` but never modify it.
-- Verification workflow per phase: `assembleDebug` + `testDebugUnitTest` green → install → exercise the changed surface on device → demo described in PROGRESS.md → commit.
+- Verification workflow per phase: `assembleDebug` + `testDebugUnitTest` green → install → exercise the changed surface on device → demo described in PROGRESS.md → commit. Temporary debug UI built for a demo is removed before the phase's final commit.

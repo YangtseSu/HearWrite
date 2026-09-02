@@ -1,6 +1,6 @@
 # PROMPTS
 
-提供给负责编码的 AI 的阶段提示词。使用方法：一次只发一个阶段的提示词；阶段完成后把该阶段演示结果勾掉 `PROGRESS.md`，再进入下一阶段。所有提示词默认仓库根目录就是 `/home/yangtse/projects/HearWrite`，且编码 AI 已能读取仓库内 `AGENTS.md`、`PROGRESS.md`、`data/`。
+提供给负责编码的 AI 的阶段提示词。使用方法：一次只发一个阶段的提示词，建议每个阶段开一个新的 AI 会话（避免上下文污染），开场先让编码 AI 完整读一遍 `AGENTS.md` 再执行阶段任务；AI 跑偏时不要辩论，直接要求"重读 AGENTS.md 对应小节"。阶段完成后把该阶段演示结果勾掉 `PROGRESS.md`，再进入下一阶段。所有提示词默认仓库根目录就是 `/home/yangtse/projects/HearWrite`，且编码 AI 已能读取仓库内 `AGENTS.md`、`PROGRESS.md`、`data/`。
 
 ## 通用规则（每个阶段提示词已内含，无需单独粘贴）
 
@@ -11,6 +11,7 @@
 5. 每完成一件事就 `git commit`（英文、conventional commits），每个 commit 必须能编译。
 6. 阶段收尾必须：`./gradlew :app:assembleDebug` 和 `:app:testDebugUnitTest` 全绿 → `adb install -r` 装到真机/模拟器 → 实际操作演示验收标准里的场景 → 更新 `PROGRESS.md`（勾掉条目、更新状态表）并在最后一个 commit 里提交。
 7. UI 文案硬编码中文；代码、注释、commit 用英文。不引入 DI 框架、不引入多模块、不写 iOS/Web/桌面端、不实现收费/Credits 相关功能。
+8. 演示用的临时调试界面/日志在验收通过后删除，再打该阶段的收尾 commit。
 
 ---
 
@@ -77,16 +78,26 @@
 Playback engine 与 Persistence 契约。
 
 任务：
-1. DictationEngine：协程状态机，每个词 speak1 → 700ms → speakMeaning（仅有释义且开启朗读释义时）→
-   speak2 → 间隔倒计时 → 下一词；支持暂停/继续；间隔调整在倒计时中即时生效（deadline 从状态读取而非
-   调度时捕获）；离开听写页停止。默认：间隔 7s（1–10，步进 0.5）、语速 0.9（0.5–1.5）、自动播报下一词开。
-2. 系统 TextToSpeech 封装：按词条语言选 en-US / zh-CN，应用语速设置；DataStore 保存设置项。
-3. HomeScreen：粘贴词表输入框（草稿 500ms 防抖持久化）、开始听写按钮（含从词库列表一键开听写）。
-4. DictationScreen：倒计时环、显示/隐藏当前词、词性与释义提示、标记错词按钮（本阶段先内存记录）。
-5. 引擎状态转换写单元测试（coroutines-test）。
+1. DictationEngine：协程状态机（独立 SupervisorJob scope），每个词 speak1 → 700ms → speakMeaning →
+   speak2 → 间隔倒计时 → 下一词。speakMeaning 内容：中文单字必读组词（本阶段先读字本身，Phase 5 接入组词）；
+   英文仅在开启"朗读释义"时读 speakableMeaning。取消用 Job.cancel() + 代际号（start/pause/stop/skip 时 gen++，
+   每个挂起点后校验 gen）；speak1 失败不重试，直接进下一阶段（speak2 是天然第二次机会）；自动播报关闭时
+   speak2 后停在当前词；倒计时 deadline 存 StateFlow/@Volatile、每 tick 重读——间隔调整即时生效
+   （alice 在这里出过真 bug：deadline 被闭包捕获，实时改间隔整版失效）；离开听写页停止，返回键弹确认框。
+   默认：间隔 7s（1–10，步进 0.5）、语速 0.9（0.5–1.5）、自动播报下一词开。
+2. 系统 TextToSpeech 封装：按词条语言选 en-US / zh-CN，应用语速设置；异步初始化用 suspendCoroutine 包
+   onInit；UtteranceProgressListener 的 onDone 与 onError 都要 resume 挂起协程（漏 onError 会永久挂起）。
+   DataStore 保存设置项。
+3. HomeScreen：粘贴词表输入框（草稿 500ms 防抖持久化，DisposableEffect.onDispose 时 flush 未落盘草稿）、
+   开始听写按钮（含从词库列表一键开听写）。
+4. DictationScreen：倒计时环（clearAndSetSemantics 播报剩余秒数）、当前词默认隐藏点按显示、词性与释义提示、
+   标记错词按钮（本阶段先内存记录）、上一词/暂停/下一词/停止。
+5. 引擎单元测试（runTest 虚拟时间 + 假 Speaker）：阶段顺序、speak 失败不死循环、cancel 后无残留播报、
+   自动播报关闭时停住、代际号防竞态（连续两次 start，旧协程不污染新状态）、★ 进入 Interval 后改间隔，
+   用 advanceTimeBy 验证倒计时按新值走完。
 
 验收：真机上完成一次完整英文听写（读两遍、倒计时、翻页）与一次汉字听写（纯词表按 zh-CN 朗读）；
-标记错词有可见反馈。
+标记错词有可见反馈；听写中拖动间隔滑块，倒计时节奏立刻变化（★ 重点验证）。
 提交：feat: dictation engine、feat: system tts、feat: dictation screen、feat: home paste import，更新 PROGRESS.md。
 ```
 
@@ -97,12 +108,20 @@ Playback engine 与 Persistence 契约。
 
 任务：
 1. 加载 assets 的 compounds/compounds.json（{compounds, learned}，音节为数字调、ü=v、轻声无调号）。
-2. 移植 alice/src/lib/dictation.ts 的 cjkWordSpeech：单字听写播报 "组词，X的X"；
-   组词候选先取 learned（课本已学），不足再取 compounds（按频级升序）；
-   多音字按条目带调拼音过滤候选（音节一致才可读；任一方无调放行）；NO_COMPOUND_HEADS 里的虚词直接读单字。
-3. 单元测试用真实数据：月（月亮）、长（cháng→长期 / zhǎng→增长 两组都要断言）、虚词"的"。
+2. 移植 alice/src/lib/dictation.ts 的 cjkWordSpeech，播报文本为 "组词的字"（月|yuè|月亮 → "月亮的月"；
+   听写序列：生字 → "月亮的月" → 生字）。候选三级、取第一个通过过滤的：
+   ① 条目 meaning 列：按 ；; 再 ，,、 拆分、去括注，保留含该字的二字词，不按读音过滤（课本释义权威）；
+   ② 已学词池：当前词表其他含该字的二字词（按出现序，不过滤）+ compounds.json 的 learned（过滤），
+      本级整体按常用词表频级排序；
+   ③ compounds.json 的 compounds 常用词池（过滤，频级升序）。
+   多音字按条目带调拼音过滤候选（音节一致才可读；任一方无调放行）；NO_COMPOUND_HEADS 虚词直接读单字。
+   ⚠️ 禁止按"词"去重候选：朝阳/澄清 等约 21 个词带双读音，去重后 朝|zhāo 永远选不中"朝阳"。
+3. 组词 pass 强制走系统 zh-CN TTS（有道词典音发不出短语）。
+4. 单元测试用真实数据：月（月亮）、长（cháng→长期 / zhǎng→增长）、朝（zhāo→朝阳 / cháo→朝廷，验证双读音不去重）、
+   虚词"的"（返回空）。
 
-验收：真机汉字模式听写单字时播报 "X，组词的X"；"长" 在不同拼音条目下读出对应组词。
+验收：真机汉字模式听写单字时依次播报 生字 → "组词的字" → 生字（月 → "月亮的月" → 月，系统中文 TTS）；
+"长" 在不同拼音条目下读出对应组词。
 提交：feat: cjk compound speech for char dictation + tests，更新 PROGRESS.md。
 ```
 
@@ -131,6 +150,8 @@ Playback engine 与 Persistence 契约。
 1. Youdao 音频获取：CJK 用 dict.youdao.com/dictvoice?audio=<urlencode>&le=zh，
    英文依次尝试 type=2、type=1；带移动端 User-Agent；小于 256 字节的响应视为失败；
    MP3 缓存到 cacheDir/tts/（key=text+lang）；同一文本并发去重（single-flight）；失败自动退回系统 TTS。
+   speak() 只使用已就绪的缓存、绝不阻塞等待下载，未命中立即降级系统 TTS；后台预取当前词、下一词与英文释义；
+   本地片段播放用 MediaPlayer（完成监听 + 10s 超时兜底防音频卡死；Media3 仅在确有需要时引入）。
 2. 设置新增 TTS 来源（有道/系统，默认有道）。
 3. assets 的 audio/tick.wav、chime.wav 接入：倒计时最后一秒播 tick（音量 0.5），整轮结束播 chime（音量 0.6），
    设置可关；标记错词时加震动反馈（对齐 alice 的 haptics）。
@@ -152,7 +173,9 @@ tick/chime 可听到。
 2. OpenAI 兼容 vision 调用：POST {base}/chat/completions；提示词原文照抄 AGENTS.md 指定的
    alice/src/lib/ocr.ts 中英文两套中文 prompt（在扫描面板里选语言）；回复按行用 Phase 2 解析器解析
    （剥掉可能的代码围栏），结果填入首页输入框供人工修正。
-3. 设置：OCR 服务商配置（默认预设 智谱 https://open.bigmodel.cn/api/paas/v4 / glm-4v-flash，
+3. 重入防护：OCR 请求用 Mutex.tryLock() 在首个挂起点之前同步占位，快速连点不会重复发起请求
+   （alice 曾因异步 state 防护失效而双倍扣费；本项目无扣费，但重复请求同样要防）。
+4. 设置：OCR 服务商配置（默认预设 智谱 https://open.bigmodel.cn/api/paas/v4 / glm-4v-flash，
    baseUrl/apiKey/model 可改，用户提供自己的 key，本地 DataStore 存储）；提供"测试连接"按钮；
    所有入口展示 "AI 识图可能存在误差，请核对识别结果"；错误用中文提示并允许重试。
 
