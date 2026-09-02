@@ -10,6 +10,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+
+/** Real 组词 tables (read-only fixture from `data/`, parsed once per class). */
+private val REAL_COMPOUNDS: CompoundTables by lazy {
+    parseCompoundTables(File("../data/compounds/compounds.json").readText())
+}
 
 /** Records every speak attempt (success or failure) on the virtual clock. */
 class FakeSpeaker(
@@ -56,14 +62,19 @@ class DictationEngineTest {
 
     private fun TestScope.engine(
         speaker: FakeSpeaker,
+        phraseSpeaker: FakeSpeaker = speaker,
         intervalSec: Double = 7.0,
         autoNext: Boolean = true,
         readTranslation: Boolean = false,
+        tables: CompoundTables = REAL_COMPOUNDS,
     ): DictationEngine {
-        val engine = DictationEngine(speaker, backgroundScope) { testScheduler.currentTime }
+        val engine = DictationEngine(speaker, phraseSpeaker, backgroundScope) {
+            testScheduler.currentTime
+        }
         engine.setIntervalSec(intervalSec)
         engine.setAutoNext(autoNext)
         engine.setReadTranslation(readTranslation)
+        engine.setCompoundTables(tables)
         return engine
     }
 
@@ -133,21 +144,39 @@ class DictationEngineTest {
     }
 
     @Test
-    fun `cjk single char always gets its meaning pass in zh-CN`() = runTest {
+    fun `cjk single char speaks its compound phrase on the phrase speaker`() = runTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
-        val engine = engine(speaker) // 朗读释义 irrelevant for CJK
+        val phrase = FakeSpeaker(clock = { testScheduler.currentTime })
+        val engine = engine(speaker, phraseSpeaker = phrase) // 朗读释义 irrelevant for CJK
 
-        engine.start(listOf(CJK_CHAR))
+        engine.start(listOf(CJK_CHAR)) // 月 | yuè | 月亮
         advanceTimeBy(2000)
+        // 生字 → 组词 ("月亮的月", zh-CN, phrase speaker) → 生字.
         assertEquals(
             listOf(
                 FakeSpeaker.Utterance("月", "zh-CN", 0, spoken = true),
-                FakeSpeaker.Utterance("月", "zh-CN", 700, spoken = true),
                 FakeSpeaker.Utterance("月", "zh-CN", 1400, spoken = true),
             ),
             utterances(speaker),
         )
-        // Phase 5 replaces the second pass with the 组词 phrase.
+        assertEquals(
+            listOf(FakeSpeaker.Utterance("月亮的月", "zh-CN", 700, spoken = true)),
+            phrase.utterances,
+        )
+    }
+
+    @Test
+    fun `function word without a compound gets no phrase pass`() = runTest {
+        val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
+        val phrase = FakeSpeaker(clock = { testScheduler.currentTime })
+        val engine = engine(speaker, phraseSpeaker = phrase)
+
+        engine.start(listOf("的 | de | 好的"))
+        advanceTimeBy(2000)
+        // NO_COMPOUND_HEADS → cjkWordSpeech "" → the word speaks twice bare.
+        assertEquals(2, speaker.utterances.size)
+        assertTrue(speaker.utterances.all { it.text == "的" })
+        assertEquals(0, phrase.utterances.size)
     }
 
     @Test

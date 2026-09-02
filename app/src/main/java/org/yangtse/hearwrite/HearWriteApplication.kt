@@ -2,6 +2,7 @@ package org.yangtse.hearwrite
 
 import android.app.Application
 import org.yangtse.hearwrite.data.BuiltinLibraryRepository
+import org.yangtse.hearwrite.data.CompoundRepository
 import org.yangtse.hearwrite.data.DictationSessionStore
 import org.yangtse.hearwrite.data.SettingsRepository
 import org.yangtse.hearwrite.data.SystemSpeaker
@@ -18,6 +19,9 @@ class HearWriteApplication : Application() {
 
     /** System TTS engine; created lazily on the first utterance. */
     val systemSpeaker: SystemSpeaker by lazy { SystemSpeaker(this) }
+
+    /** 组词 candidate tables (compounds.json); parsed lazily on first lookup. */
+    val compoundRepository: CompoundRepository by lazy { CompoundRepository(assets) }
 
     /** Word-list handoff for starting a dictation session. */
     val dictationSession: DictationSessionStore by lazy { DictationSessionStore() }

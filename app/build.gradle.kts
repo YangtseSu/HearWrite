@@ -61,4 +61,6 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // compounds.json fixtures parse through the same domain function as the app.
+    testImplementation(libs.kotlinx.serialization.json)
 }

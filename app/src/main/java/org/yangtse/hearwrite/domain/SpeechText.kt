@@ -1,10 +1,11 @@
 package org.yangtse.hearwrite.domain
 
-private val CJK_RE = Regex("[\u4e00-\u9fff]")
-private val SENSE_SPLIT_RE = Regex("[；;]")
-private val GLOSS_SPLIT_RE = Regex("[，,、]")
-private val MEANING_PAREN_RE = Regex("[（(][^（）()]*[）)]")
-private val MEANING_EDGE_PUNCT_RE = Regex("^[\\s，,、。.：:；;]+|[\\s，,、。.：:；;]+$")
+/** Shared by the speech-text rules of this file and [cjkWordSpeech]. */
+internal val CJK_RE = Regex("[\u4e00-\u9fff]")
+internal val SENSE_SPLIT_RE = Regex("[；;]")
+internal val GLOSS_SPLIT_RE = Regex("[，,、]")
+internal val MEANING_PAREN_RE = Regex("[（(][^（）()]*[）)]")
+internal val MEANING_EDGE_PUNCT_RE = Regex("^[\\s，,、。.：:；;]+|[\\s，,、。.：:；;]+$")
 /** 朗读释义的长度上限（视觉宽度，全角 1、半角 0.5），超过则截取首个词条。 */
 private const val SPEAK_MEANING_MAX_WIDTH = 12
 

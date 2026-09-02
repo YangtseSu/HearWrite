@@ -31,10 +31,16 @@ private const val LANG_EN = "en-US"
  * The dictation playback state machine (AGENTS.md "Playback engine").
  *
  * Per word: `speak1` → 700 ms → `speakMeaning` → `speak2` → interval countdown
- * → next word. speakMeaning is the 组词 pass for single CJK chars (Phase 5
- * supplies `cjkWordSpeech`; until then the char itself is spoken — the
- * upstream fallback) and the 中文释义 gloss for English entries only when
- * 朗读释义 is on; multi-char CJK words get no meaning pass.
+ * → next word. speakMeaning is the 组词 phrase pass for single CJK chars —
+ * [cjkWordSpeech] with the session's [CompoundTables] and list — and the
+ * 中文释义 gloss for English entries only when 朗读释义 is on; multi-char CJK
+ * words get no meaning pass. A single char without a matching compound
+ * (虚词, no candidate) simply gets no phrase pass — the upstream behavior.
+ *
+ * Voice routing: word passes and English glosses speak through [speaker]
+ * (the active TTS chain in later phases); the 组词 phrase always speaks via
+ * [phraseSpeaker], pinned to the system zh-CN TTS link — Youdao's dict voice
+ * cannot serve such sentences (AGENTS.md "TTS priority chain").
  *
  * Cancellation contract (each line mirrors a real upstream bug — do not
  * regress, AGENTS.md):
@@ -51,11 +57,12 @@ private const val LANG_EN = "en-US"
  *   changes silently did nothing).
  *
  * The engine runs on its own [SupervisorJob] scope (injected for tests) and
- * speaks through a [Speaker]; it knows nothing about screens or settings
+ * speaks through [Speaker]s; it knows nothing about screens or settings
  * storage.
  */
 class DictationEngine(
     private val speaker: Speaker,
+    private val phraseSpeaker: Speaker,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
     private val now: () -> Long = System::currentTimeMillis,
 ) {
@@ -78,6 +85,11 @@ class DictationEngine(
     /** Lines of the active session (raw list lines, parsed per word). */
     private var words: List<String> = emptyList()
 
+    /** 组词 candidate tables; set before [start] (kept out of the constructor so
+     *  the caller can load them off the main thread first). */
+    @Volatile
+    private var tables: CompoundTables = CompoundTables.EMPTY
+
     @Volatile
     private var gen = 0
     @Volatile
@@ -93,11 +105,20 @@ class DictationEngine(
 
     // ------------------------------------------------------------------ API
 
+    /**
+     * Supply the 组词 candidate tables for the session (AGENTS.md: parsed once,
+     * kept in memory; a load failure degrades to [CompoundTables.EMPTY] and
+     * single chars without a meaning column simply get no phrase pass).
+     */
+    fun setCompoundTables(tables: CompoundTables) {
+        this.tables = tables
+    }
+
     /** Start dictating [lines] from the first word. Stops any active run. */
     fun start(lines: List<String>) {
         gen++
         cancelRun()
-        speaker.stop()
+        stopAudio()
         words = lines
         _finished.value = false
         _index.value = 0
@@ -115,7 +136,7 @@ class DictationEngine(
         if (_state.value == PlayState.IDLE) return
         gen++
         cancelRun()
-        speaker.stop()
+        stopAudio()
         clearCountdown()
         _state.value = PlayState.PAUSED
     }
@@ -132,7 +153,7 @@ class DictationEngine(
     fun stop() {
         gen++
         cancelRun()
-        speaker.stop()
+        stopAudio()
         clearCountdown()
         _finished.value = false
         _state.value = PlayState.IDLE
@@ -143,7 +164,7 @@ class DictationEngine(
         if (_state.value == PlayState.IDLE) return
         gen++
         cancelRun()
-        speaker.stop()
+        stopAudio()
         clearCountdown()
         val next = _index.value + 1
         if (next >= words.size) {
@@ -162,7 +183,7 @@ class DictationEngine(
         if (_state.value == PlayState.IDLE) return
         gen++
         cancelRun()
-        speaker.stop()
+        stopAudio()
         clearCountdown()
         val prev = maxOf(0, _index.value - 1)
         _index.value = prev
@@ -209,11 +230,11 @@ class DictationEngine(
         readTranslation = on
     }
 
-    /** Release the speaker and stop the run. Call when leaving dictation. */
+    /** Release the speakers and stop the run. Call when leaving dictation. */
     fun dispose() {
         gen++
         cancelRun()
-        speaker.stop()
+        stopAudio()
         clearCountdown()
         _state.value = PlayState.IDLE
     }
@@ -226,6 +247,12 @@ class DictationEngine(
     private fun cancelRun() {
         job?.cancel()
         job = null
+    }
+
+    /** Silence both the word chain and the phrase speaker (idempotent). */
+    private fun stopAudio() {
+        speaker.stop()
+        phraseSpeaker.stop()
     }
 
     private fun clearCountdown() {
@@ -247,18 +274,23 @@ class DictationEngine(
         }
     }
 
-    /** speakMeaning content and voice for a line; null when there is no pass. */
-    private fun meaningSpeech(line: String): Pair<String, String>? {
-        if (!isCjkEntry(line)) {
-            if (!readTranslation) return null
-            val gloss = speakableMeaning(parseWordLine(line).meaning)
-            return if (gloss.isEmpty()) null else gloss to LANG_ZH
+    /**
+     * speakMeaning pass for a line: the 组词 phrase of a single CJK char
+     * (through [phraseSpeaker]) or the 朗读释义 gloss of an English entry
+     * (through [speaker]); null when there is no pass. A single char without
+     * any matching compound (虚词 or no candidate) yields null — no phrase,
+     * the word itself is spoken twice.
+     */
+    private fun meaningPass(line: String): Pair<String, Speaker>? {
+        if (isCjkEntry(line)) {
+            val head = speakTextFromEntry(line)
+            if (head.length != 1) return null
+            val phrase = cjkWordSpeech(line, tables, words)
+            return if (phrase.isEmpty()) null else phrase to phraseSpeaker
         }
-        val head = speakTextFromEntry(line)
-        // CJK single char always gets its compound pass (组词, zh-CN). Phase 5
-        // plugs in cjkWordSpeech; speaking the char itself is the upstream
-        // fallback for chars without a matching compound.
-        return if (head.length == 1) head to LANG_ZH else null
+        if (!readTranslation) return null
+        val gloss = speakableMeaning(parseWordLine(line).meaning)
+        return if (gloss.isEmpty()) null else gloss to speaker
     }
 
     private suspend fun runLoop(myGen: Int, fromIndex: Int, fromPhase: WordPhase) {
@@ -288,7 +320,7 @@ class DictationEngine(
                             if (!currentRun(myGen)) return
                         }
                         phase =
-                            if (meaningSpeech(line) != null) WordPhase.MEANING
+                            if (meaningPass(line) != null) WordPhase.MEANING
                             else WordPhase.SPEAK2
                     } else {
                         // speak2 done. Auto-next off parks here (session stays
@@ -299,9 +331,9 @@ class DictationEngine(
                 }
 
                 WordPhase.MEANING -> {
-                    val meaning = meaningSpeech(line)
+                    val meaning = meaningPass(line)
                     if (meaning != null) {
-                        speaker.speak(meaning.first, meaning.second)
+                        meaning.second.speak(meaning.first, LANG_ZH)
                         if (!currentRun(myGen)) return
                     }
                     delay(REPEAT_GAP_MS)

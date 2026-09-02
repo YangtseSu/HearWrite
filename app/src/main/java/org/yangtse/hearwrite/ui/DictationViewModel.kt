@@ -49,7 +49,13 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     /** Lines handed over by the launching screen (slice → shuffle applied). */
     val lines: List<String> = app.dictationSession.lines.ifEmpty { emptyList() }
 
-    val engine = DictationEngine(app.systemSpeaker)
+    /**
+     * Word passes ride the active TTS chain; the 组词 phrase pass is pinned to
+     * the system speaker (Youdao's dict voice cannot serve such sentences —
+     * AGENTS.md "TTS priority chain"; still the same object until a later
+     * phase introduces the chain).
+     */
+    val engine = DictationEngine(app.systemSpeaker, phraseSpeaker = app.systemSpeaker)
 
     private val _intervalSec = MutableStateFlow(MIN_INTERVAL_SEC)
     val intervalSec: StateFlow<Double> = _intervalSec.asStateFlow()
@@ -114,6 +120,9 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
             engine.setReadTranslation(snapshot.readTranslation)
             _intervalSec.value = snapshot.intervalSec
             _autoNext.value = snapshot.autoNext
+            // 组词 tables load off the main thread before the session starts
+            // (first lookup parses compounds.json, then it is cached forever).
+            engine.setCompoundTables(app.compoundRepository.tables())
             _ready.value = true
             engine.start(lines)
         }
