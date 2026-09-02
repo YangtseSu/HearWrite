@@ -8,7 +8,7 @@ Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 | --- | --- | --- |
 | 0. Bootstrap (docs + data) | ✅ 2026-09-02 | — (repo docs, data assets in place) |
 | 1. Project scaffold | ✅ 2026-09-02 | App installs, shows named empty screens |
-| 2. Domain: word-line parsing | ⬜ | Unit tests green |
+| 2. Domain: word-line parsing | ✅ 2026-09-02 | 48 unit tests green incl. `data/` fixtures |
 | 3. Built-in library | ⬜ | 词库 drawer browses/searches all textbook lists |
 | 4. Dictation engine + system TTS | ⬜ | Paste list → EN & 汉字 dictation runs end-to-end |
 | 5. 汉字组词朗读 | ⬜ | `"月" → "月，月亮的月"`, 多音字 reads correctly |
@@ -34,12 +34,13 @@ Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 - Accept: `./gradlew :app:assembleDebug` + `:app:testDebugUnitTest` green; app cold-starts (1.0 s) and 首页 → 听写 → 设置 switching verified on device with screenshots; dark mode follows system night mode.
 - Commits: `chore: bootstrap gradle project`, `feat: compose navigation skeleton`, `docs: mark phase 1 complete`.
 
-## Phase 2 — Domain: word-line parsing ⬜
+## Phase 2 — Domain: word-line parsing ✅ (2026-09-02)
 
-- [ ] Port pure parsing from `alice/src/lib/dictation.ts`: `parseWordLine` (1/3 columns, fullwidth `｜`), POS prefix strip + normalization map, `speakTextFromEntry` (`you're = you are` → left side), CJK detection, `speakableMeaning` (sense split, width cap 12).
-- [ ] JUnit tests for every rule above, including edge cases listed in AGENTS.md.
-- Accept: `:app:testDebugUnitTest` green; a temporary debug screen or unit-test evidence shows parsed samples from `data/` fixtures.
-- Commit: `feat: word-line parser with pos normalization` + `test: parser edge cases` (or one commit).
+- [x] `domain/WordLine.kt`: `WordEntry`, `parseWords` (one per non-empty line, CRLF-safe), `parseWordLine` (1/3 columns, ASCII + fullwidth `｜` pipes, blank columns → null, extra columns ignored), `parseWordEntries`, `entryToLine` (round-trip stable), `POS_PREFIX_RE` (ECDICT ∪ textbook, case-insensitive), `normalizePos` (interj./exclam.→int., na./un./pla./pn.→n., vbl./pp.→v., pref./suf./suff./comb./stuff.→abbr., a.→adj., pl.→n., unknown lowercased).
+- [x] `domain/SpeechText.kt`: `speakTextFromEntry` (pipe suffix strip, `you're = you are` → left side, fullwidth `＝` too), `isCjkEntry` (`[\u4e00-\u9fff]` on the speakable text only — Chinese meaning columns don't make an EN entry CJK), `speakableMeaning` (POS prefix strip → parens → edge punct → first non-empty `；;` sense, width cap 12 fullwidth=1/halfwidth=0.5, cut at first `，,、`).
+- [x] Tests (`WordLineParserTest` 21, `SpeechTextTest` 23, `DataFixtureTest` 4): fullwidth pipe, blank pos/meaning columns, `what's |  | what is 的缩写形式` shape, eq-split edge cases, 12-width boundary, upstream-parity quirks; fixtures parse real rows from `data/` — 人教版小学语文 写字表 (处|chù|到处), bare-word 中考1600/A.txt, 743-row 初中2182/第一册 常见.txt (blank-pos + paren-gloss rows, no empty speakables).
+- Accept: `:app:testDebugUnitTest` 48/48 green; `:app:assembleDebug` green; fixture evidence above.
+- Commits: `feat: word-line parser with pos normalization`, `test: parser edge cases`, `docs: mark phase 2 complete`.
 
 ## Phase 3 — Built-in library ⬜
 
