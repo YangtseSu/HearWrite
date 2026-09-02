@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.yangtse.hearwrite.HearWriteApplication
+import org.yangtse.hearwrite.data.Haptics
 import org.yangtse.hearwrite.domain.DictationEngine
 import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
@@ -102,6 +103,9 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     @Volatile
     private var readTranslation = false
 
+    /** Previous countdown emission, for the final-second tick edge. */
+    private var prevRemainingMs: Long? = null
+
     private data class EngineStateView(
         val state: PlayState,
         val finished: Boolean,
@@ -149,6 +153,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
             val snapshot = settings.snapshot()
             app.systemSpeaker.setSpeechRate(snapshot.speechRate)
             app.ttsChain.setSource(snapshot.ttsSource)
+            app.soundEffects.enabled = snapshot.soundEnabled
             readTranslation = snapshot.readTranslation
             engine.setIntervalSec(snapshot.intervalSec)
             engine.setAutoNext(snapshot.autoNext)
@@ -168,13 +173,25 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
             _ready.value = true
             beginRun(lines)
         }
-        // Score summary: capture the elapsed time once when the run completes
-        // (a review round resets it via beginRun).
+        // Score summary + completion chime: capture the elapsed time once when
+        // the run completes (a review round resets it via beginRun).
         viewModelScope.launch {
             engine.finished.collect { finished ->
                 if (finished && _elapsedSec.value == null) {
                     val wall = System.currentTimeMillis() - runStartedAtMs
                     _elapsedSec.value = maxOf(1L, (wall + 500) / 1000)
+                    app.soundEffects.playChime()
+                }
+            }
+        }
+        // Watch tick on the final second of each countdown (upstream edge:
+        // crossing from > 1000 ms left into ≤ 1000 ms).
+        viewModelScope.launch {
+            engine.remainingMs.collect { remaining ->
+                val prev = prevRemainingMs
+                prevRemainingMs = remaining
+                if (prev != null && remaining != null && prev > 1000L && remaining <= 1000L) {
+                    app.soundEffects.playTick()
                 }
             }
         }
@@ -274,6 +291,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         if (head.isEmpty() || _wrongWords.value.contains(head)) return
         _wrongWords.value = _wrongWords.value + head
         _markedFlash.value = true
+        Haptics.notifyWarning(getApplication()) // alice notifyWarning parity
         viewModelScope.launch {
             try {
                 wrongWordsRepository.add(head)

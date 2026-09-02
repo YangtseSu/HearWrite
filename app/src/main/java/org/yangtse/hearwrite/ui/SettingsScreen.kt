@@ -36,9 +36,10 @@ import org.yangtse.hearwrite.domain.TtsSource
 import java.util.Locale
 
 /**
- * Playback settings: 语速 (system TTS rate, applied live), 朗读释义 and the
- * TTS source (有道词典/系统语音). Interval/auto-next are adjusted on the
- * dictation screen itself; Phase 10 consolidates the remaining settings.
+ * Playback settings: 语速 (system TTS rate, applied live), 朗读释义, the TTS
+ * source (有道词典/系统语音) and 提示音 (countdown tick + completion chime).
+ * Interval/auto-next are adjusted on the dictation screen itself; Phase 10
+ * consolidates the remaining settings.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,6 +50,7 @@ fun SettingsScreen(
     val speechRate by viewModel.speechRate.collectAsStateWithLifecycle()
     val readTranslation by viewModel.readTranslation.collectAsStateWithLifecycle()
     val ttsSource by viewModel.ttsSource.collectAsStateWithLifecycle()
+    val soundEnabled by viewModel.soundEnabled.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -152,6 +154,28 @@ fun SettingsScreen(
                         label = { Text("系统语音") },
                     )
                 }
+            }
+
+            // ---- 提示音 -----------------------------------------------------
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("提示音", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "倒计时最后一秒的滴答声与完成时的提示音",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = soundEnabled,
+                    onCheckedChange = viewModel::onSoundEnabledChange,
+                    modifier = Modifier.semantics { contentDescription = "提示音" },
+                )
             }
 
             Text(

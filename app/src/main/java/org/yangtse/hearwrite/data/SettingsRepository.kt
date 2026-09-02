@@ -50,6 +50,10 @@ class SettingsRepository(private val context: Context) {
         } ?: TtsSource.YOUDAO
     }
 
+    /** 提示音 (countdown tick + completion chime): default on. */
+    val soundEnabled: Flow<Boolean> =
+        dataStore.data.map { it[KEY_SOUND_ENABLED] ?: true }
+
     suspend fun setDraft(value: String) {
         dataStore.edit { it[KEY_DRAFT] = value }
     }
@@ -74,6 +78,10 @@ class SettingsRepository(private val context: Context) {
         dataStore.edit { it[KEY_TTS_SOURCE] = source.name.lowercase() }
     }
 
+    suspend fun setSoundEnabled(on: Boolean) {
+        dataStore.edit { it[KEY_SOUND_ENABLED] = on }
+    }
+
     /** One-shot snapshot used when a dictation session starts. */
     suspend fun snapshot(): SettingsSnapshot = SettingsSnapshot(
         intervalSec = intervalSec.first(),
@@ -81,6 +89,7 @@ class SettingsRepository(private val context: Context) {
         autoNext = autoNext.first(),
         readTranslation = readTranslation.first(),
         ttsSource = ttsSource.first(),
+        soundEnabled = soundEnabled.first(),
     )
 
     private companion object {
@@ -90,6 +99,7 @@ class SettingsRepository(private val context: Context) {
         val KEY_AUTO_NEXT = booleanPreferencesKey("auto_next")
         val KEY_READ_TRANSLATION = booleanPreferencesKey("read_translation")
         val KEY_TTS_SOURCE = stringPreferencesKey("tts_source")
+        val KEY_SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
     }
 }
 
@@ -100,4 +110,5 @@ data class SettingsSnapshot(
     val autoNext: Boolean,
     val readTranslation: Boolean,
     val ttsSource: TtsSource,
+    val soundEnabled: Boolean,
 )

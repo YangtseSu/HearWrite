@@ -10,6 +10,7 @@ import org.yangtse.hearwrite.data.FavoritesRepository
 import org.yangtse.hearwrite.data.HearWriteDatabase
 import org.yangtse.hearwrite.data.HistoryRepository
 import org.yangtse.hearwrite.data.SettingsRepository
+import org.yangtse.hearwrite.data.SoundEffects
 import org.yangtse.hearwrite.data.SystemSpeaker
 import org.yangtse.hearwrite.data.TtsChainSpeaker
 import org.yangtse.hearwrite.data.WrongWordsRepository
@@ -41,6 +42,9 @@ class HearWriteApplication : Application() {
     val ttsChain: TtsChainSpeaker by lazy {
         TtsChainSpeaker(youdaoTts, systemSpeaker)
     }
+
+    /** tick/chime UI sounds (提示音 setting). */
+    val soundEffects: SoundEffects by lazy { SoundEffects(this) }
 
     /** 组词 candidate tables (compounds.json); parsed lazily on first lookup. */
     val compoundRepository: CompoundRepository by lazy { CompoundRepository(assets) }

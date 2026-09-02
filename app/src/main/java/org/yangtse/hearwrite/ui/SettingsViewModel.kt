@@ -35,10 +35,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _ttsSource = MutableStateFlow(TtsSource.YOUDAO)
     val ttsSource: StateFlow<TtsSource> = _ttsSource.asStateFlow()
 
+    private val _soundEnabled = MutableStateFlow(true)
+    val soundEnabled: StateFlow<Boolean> = _soundEnabled.asStateFlow()
+
     init {
         viewModelScope.launch { _speechRate.value = settings.speechRate.first() }
         viewModelScope.launch { _readTranslation.value = settings.readTranslation.first() }
         viewModelScope.launch { _ttsSource.value = settings.ttsSource.first() }
+        viewModelScope.launch { _soundEnabled.value = settings.soundEnabled.first() }
     }
 
     fun onSpeechRateChange(rate: Float) {
@@ -59,4 +63,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { settings.setTtsSource(source) }
     }
 
+    fun onSoundEnabledChange(on: Boolean) {
+        _soundEnabled.value = on
+        viewModelScope.launch { settings.setSoundEnabled(on) }
+    }
 }

@@ -3,6 +3,8 @@
 
     <!-- Youdao dict-voice downloads (TTS priority chain). -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Wrong-word mark vibration (alice haptics parity). -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:name=".HearWriteApplication"
