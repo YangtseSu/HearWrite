@@ -9,7 +9,7 @@ Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 | 0. Bootstrap (docs + data) | ✅ 2026-09-02 | — (repo docs, data assets in place) |
 | 1. Project scaffold | ✅ 2026-09-02 | App installs, shows named empty screens |
 | 2. Domain: word-line parsing | ✅ 2026-09-02 | 48 unit tests green incl. `data/` fixtures |
-| 3. Built-in library | ⬜ | 词库 drawer browses/searches all textbook lists |
+| 3. Built-in library | ✅ 2026-09-02 | Library browser: 10 categories, list previews, search finds lists by name or word |
 | 4. Dictation engine + system TTS | ⬜ | Paste list → EN & 汉字 dictation runs end-to-end |
 | 5. 汉字组词朗读 | ⬜ | `"月" → "月，月亮的月"`, 多音字 reads correctly |
 | 6. Wrong words / history / favorites | ⬜ | 标记错词 → 错词本 review → export to clipboard |
@@ -42,13 +42,15 @@ Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 - Accept: `:app:testDebugUnitTest` 48/48 green; `:app:assembleDebug` green; fixture evidence above.
 - Commits: `feat: word-line parser with pos normalization`, `test: parser edge cases`, `docs: mark phase 2 complete`.
 
-## Phase 3 — Built-in library ⬜
+## Phase 3 — Built-in library ✅ (2026-09-02)
 
-- [ ] Ship `data/` as APK assets (`assets.srcDirs(rootProject.file("data"))`, exclude `meta/`); asset loader with in-memory cache.
-- [ ] Port `compareLabels` (grade/term/第X册 ordering) + category model; ids `default_<category>_<label>`.
-- [ ] 词库 drawer/screen on Home: categories → lists → word preview, with search over labels/words.
-- Accept: browse all 10 categories, open e.g. `人教版小学语文 / 二上 写字表 识字 1`, search finds a list.
-- Commit: `feat: built-in library from bundled assets`, `feat: library browser with search`.
+- [x] `data/` bundled as APK assets (`assets.srcDir(rootProject.file("data"))`); `meta/` excluded via aapt `ignoreAssetsPattern`; verified in the APK: 403 list .txt under 10 category dirs + dict/compounds/audio, no meta.
+- [x] `domain/LabelOrder.kt`: `compareLabels` port (第X册 volume, grade 一→九, term 上/下/全, Unit/Module/识字 numeric compare, letter fallback) + `builtinListId` (`default_<category>_<label>`). CJK runs compare by pinyin → stroke count → code point — the JDK zh Collator orders 同音字 differently from ICU (仁 before 人), so it is only used for Latin runs; the Han table covers the 43 chars present in the 403 list names.
+- [x] Golden test `LabelOrderTest` (12): full upstream generator order over the real data — fixture `library-label-order.json` produced by the alice script (category order + all 403 labels) — plus rank/numeric/pinyin semantics.
+- [x] `data/BuiltinLibraryRepository`: IO asset scan (categories with counts → sorted lists → cached parsed entries) and full-library search (label hits + word hits with ≤3 example words); lazy `HearWriteApplication.libraryRepository` singleton.
+- [x] Library UI on Home (词库): categories → sorted lists → word preview (word + pos/pinyin + meaning); search box (250 ms debounce) groups results into 词表 (name hits) and 词条 (word hits); search state via `LibraryViewModel` StateFlow chain (`flatMapLatest`).
+- Accept: `:app:testDebugUnitTest` 60/60 green (48 previous + 12 ordering), `assembleDebug` green; demoed on device (Pixel 6a): all 10 categories shown in upstream order with counts (403 total), opened `人教版小学语文 / 二上 写字表 识字 1` → 7 entries (处 chù 到处 …), searched "school" → word hits across 初中2182/高考3500/闽教版/人教版 lists, searched "Unit" → name hits sorted per category, hit opens the preview.
+- Commits: `feat: label ordering`, `feat: bundled library asset loader`, `feat: library browser with search`, `docs: mark phase 3 complete`.
 
 ## Phase 4 — Dictation engine + system TTS ⬜
 
