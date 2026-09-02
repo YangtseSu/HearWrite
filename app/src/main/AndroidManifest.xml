@@ -3,6 +3,8 @@
 
     <application
         android:name=".HearWriteApplication"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:label="HearWrite 听写"
         android:supportsRtl="true"
         android:theme="@style/Theme.HearWrite">
