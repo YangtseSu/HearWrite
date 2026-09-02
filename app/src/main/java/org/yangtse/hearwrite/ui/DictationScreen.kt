@@ -227,9 +227,11 @@ private fun DictationContent(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
-        val progress = if (ui.total > 0) {
-            ((ui.index + 1).coerceAtMost(ui.total)).toFloat() / ui.total
-        } else 0f
+        // Position counter: the word being dictated (index + 1) while
+        // active; at completion the engine index parks on the last word, so
+        // the finished run shows total / total (the bar matches the count).
+        val shown = if (ui.finished) ui.total else (ui.index + 1).coerceAtMost(ui.total)
+        val progress = if (ui.total > 0) shown.toFloat() / ui.total else 0f
         LinearProgressIndicator(
             progress = { progress },
             modifier = Modifier
@@ -243,7 +245,7 @@ private fun DictationContent(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "${ui.index.coerceAtMost(ui.total)} / ${ui.total}",
+                "$shown / ${ui.total}",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
