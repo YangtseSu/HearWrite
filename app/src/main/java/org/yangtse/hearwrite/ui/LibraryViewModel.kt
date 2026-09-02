@@ -67,15 +67,35 @@ class LibraryListsViewModel(
     handle: SavedStateHandle,
 ) : AndroidViewModel(application) {
 
-    private val repository = (application as HearWriteApplication).libraryRepository
+    private val app = application as HearWriteApplication
+    private val repository = app.libraryRepository
+    private val favoritesRepository = app.favoritesRepository
     val category: String = checkNotNull(handle["category"])
 
     private val _lists = MutableStateFlow<List<LibraryList>?>(null)
     /** null = still loading. */
     val lists: StateFlow<List<LibraryList>?> = _lists.asStateFlow()
 
+    private val _favoriteIds = MutableStateFlow<Set<String>>(emptySet())
+    /** Favorited entry ids of this screen (stars on list rows). */
+    val favoriteIds: StateFlow<Set<String>> = _favoriteIds.asStateFlow()
+
     init {
         viewModelScope.launch { _lists.value = repository.lists(category) }
+        viewModelScope.launch {
+            favoritesRepository.observeIds().collect { _favoriteIds.value = it }
+        }
+    }
+
+    /** Toggle the favorite state of a built-in list entry. */
+    fun toggleFavorite(id: String) {
+        viewModelScope.launch {
+            try {
+                favoritesRepository.toggle(id)
+            } catch (e: Exception) {
+                // Best effort; the star follows the Room state on change.
+            }
+        }
     }
 }
 
