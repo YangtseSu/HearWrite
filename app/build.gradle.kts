@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     // Compose compiler plugin; its version ref pins Kotlin 2.4.10 (built-in Kotlin: no kotlin-android plugin).
@@ -10,18 +12,39 @@ android {
     namespace = "org.yangtse.hearwrite"
     compileSdk = 37
 
-    defaultConfig {
+defaultConfig {
         applicationId = "org.yangtse.hearwrite"
         minSdk = 36
         targetSdk = 37
+        // Version scheme: versionName = MAJOR.MINOR.PATCH (semver; 0.x.y while
+        // pre-release). versionCode = a monotonic integer, +1 per signed
+        // release artifact, never reused or re-ordered. First signed release:
+        // 1 / "0.1.0" (Phase 10).
         versionCode = 1
         versionName = "0.1.0"
     }
 
-    buildTypes {
+buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Signing comes from the gitignored keystore.properties at the repo
+            // root (template: keystore.properties.example). Without that file
+            // the release build stays unsigned — installs are then impossible,
+            // by design: release artifacts must be signed with the release key.
+            val keystorePropsFile = rootProject.file("keystore.properties")
+            if (keystorePropsFile.exists()) {
+                val keystoreProps = Properties().apply {
+                    keystorePropsFile.inputStream().use { load(it) }
+                }
+                signingConfig = signingConfigs.create("release") {
+                    storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                    storePassword = keystoreProps.getProperty("storePassword")
+                    keyAlias = keystoreProps.getProperty("keyAlias")
+                    keyPassword = keystoreProps.getProperty("keyPassword")
+                }
+            }
         }
     }
 

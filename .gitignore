@@ -19,3 +19,8 @@ captures/
 
 # OS
 .DS_Store
+
+# Release signing (gitignored per AGENTS.md; template committed)
+keystore.properties
+*.jks
+*.keystore
