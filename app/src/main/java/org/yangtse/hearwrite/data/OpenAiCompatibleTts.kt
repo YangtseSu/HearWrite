@@ -61,7 +61,7 @@ class OpenAiCompatibleTts(
         .build()
 
     /** Per-clip generation single flight (hash:text key → shared download). */
-    private val inFlight = ConcurrentHashMap<String, Deferred<Unit>>()
+    private val inFlight = ConcurrentHashMap<String, Deferred<Result<File>>>()
 
     @Volatile
     private var storedConfig: TtsProviderConfig? = null
@@ -102,56 +102,93 @@ class OpenAiCompatibleTts(
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return false
         cachedClip(trimmed)?.let { return true }
-
-        val r = rate
-        val key = ttsProviderFlightKey(trimmed, cfg, r)
-        val existing = inFlight[key]
-        if (existing != null) {
-            try {
-                existing.await()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // The other download failed; fall through to retry once.
-            }
-            return cachedClip(trimmed) != null
+        val result = flightResult(trimmed, cfg, rate)
+        if (result.isFailure) {
+            Log.d(TAG, "provider download failed for \"$trimmed\"", result.exceptionOrNull())
         }
-
-        val job = scope.async { download(trimmed, cfg, r) }
-        val winner = inFlight.putIfAbsent(key, job)
-        if (winner != null) {
-            job.cancel()
-            try {
-                winner.await()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // Failed download; report the cache state below.
-            }
-            return cachedClip(trimmed) != null
-        }
-        try {
-            job.await()
-        } finally {
-            inFlight.remove(key, job)
-        }
-        return cachedClip(trimmed) != null
+        return result.isSuccess
     }
 
     /**
      * Generate [text] with the given (possibly unsaved) [cfg] and cache the
      * clip — the settings 测试并试听 path (alice `downloadProviderAudio`).
-     * Throws [TtsProviderException] with a Chinese message on any failure;
-     * the settings test surfaces it directly.
+     * Joins the same per-clip single flight as playback prefetch, so a
+     * background generation for the same text/config/rate is never
+     * duplicated. Throws [TtsProviderException] with a Chinese message on
+     * any failure; the settings test surfaces it directly.
      */
-    suspend fun generateClip(text: String, cfg: TtsProviderConfig): File =
-        generateClip(text.trim(), cfg, rate)
+    suspend fun generateClip(text: String, cfg: TtsProviderConfig): File {
+        val trimmed = text.trim()
+        val result = flightResult(trimmed, cfg, rate)
+        return result.getOrThrow()
+    }
+
+    /** Await a shared generation, rethrowing the awaiter's cancellation. */
+    private suspend fun awaitFlight(flight: Deferred<Result<File>>): Result<File> = try {
+        flight.await()
+    } catch (e: CancellationException) {
+        throw e
+    }
+
+    /** A clip file that actually holds audio (mirror of [cachedClip]). */
+    private fun isValidClip(file: File): Boolean =
+        file.isFile && file.length() >= MIN_AUDIO_BYTES
+
+    /**
+     * Fetch-and-cache under the per-clip single flight (hash:text key): joins
+     * an in-flight generation instead of duplicating the request (settings
+     * 试听 must not double-charge a background prefetch). A failed shared
+     * winner is retried once with our own flight. Cancellation of the
+     * awaiter rethrows; a raced-away job completes on its own.
+     */
+    private suspend fun flightResult(trimmed: String, cfg: TtsProviderConfig, r: Float): Result<File> {
+        val key = ttsProviderFlightKey(trimmed, cfg, r)
+        val existing = inFlight[key]
+        if (existing != null) {
+            val file = awaitFlight(existing).getOrNull()?.takeIf(::isValidClip)
+            if (file != null) return Result.success(file)
+            // The shared attempt failed; fall through to one retry of our own.
+        }
+        val job = scope.async {
+            try {
+                Result.success(fetchAndWrite(trimmed, cfg, r))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+        val winner = inFlight.putIfAbsent(key, job)
+        if (winner != null) {
+            job.cancel()
+            val file = awaitFlight(winner).getOrNull()?.takeIf(::isValidClip)
+            return if (file != null) {
+                Result.success(file)
+            } else {
+                Result.failure(TtsProviderException("音频生成失败，请检查接口地址、密钥和模型"))
+            }
+        }
+        val result = try {
+            awaitFlight(job)
+        } finally {
+            inFlight.remove(key, job)
+        }
+        val file = result.getOrNull()?.takeIf(::isValidClip)
+        return if (file != null) {
+            Result.success(file)
+        } else {
+            Result.failure(
+                result.exceptionOrNull() ?: TtsProviderException("音频数据无效，请检查接口地址与模型"),
+            )
+        }
+    }
 
     /**
      * One generation at a fixed rate [r]: the same snapshot feeds the
      * request body's speed, the destination file name and the in-flight key.
+     * Throws [TtsProviderException] with a Chinese message on any failure.
      */
-    private suspend fun generateClip(trimmed: String, cfg: TtsProviderConfig, r: Float): File {
+    private suspend fun fetchAndWrite(trimmed: String, cfg: TtsProviderConfig, r: Float): File {
         val bytes = try {
             fetchBytes(trimmed, cfg, r)
         } catch (e: CancellationException) {
@@ -173,17 +210,6 @@ class OpenAiCompatibleTts(
             throw TtsProviderException("音频缓存写入失败")
         }
         return dest
-    }
-
-    /** Playback path: generate into the cache, swallowing every failure. */
-    private suspend fun download(text: String, cfg: TtsProviderConfig, r: Float) {
-        try {
-            generateClip(text, cfg, r)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.d(TAG, "provider download failed for \"$text\"", e)
-        }
     }
 
     /**
