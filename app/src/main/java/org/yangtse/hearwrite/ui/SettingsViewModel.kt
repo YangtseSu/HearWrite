@@ -3,11 +3,13 @@ package org.yangtse.hearwrite.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.io.File
 import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.data.DEFAULT_OCR_PRESET
 import org.yangtse.hearwrite.data.DEFAULT_TTS_PRESET
@@ -134,6 +136,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _ttsTestState = MutableStateFlow<TtsTestState>(TtsTestState.Idle)
     val ttsTestState: StateFlow<TtsTestState> = _ttsTestState.asStateFlow()
 
+    // ---- 发音缓存 (downloaded clips under cacheDir/tts) --------------------
+
+    /** Snapshot of the cached pronunciation files (Youdao + provider clips). */
+    data class TtsCacheInfo(val fileCount: Int, val bytes: Long)
+
+    private val _ttsCacheInfo = MutableStateFlow<TtsCacheInfo?>(null)
+    val ttsCacheInfo: StateFlow<TtsCacheInfo?> = _ttsCacheInfo.asStateFlow()
+
+    /** Bumped after each successful 清空发音缓存 (hub shows a toast). */
+    private val _ttsCacheCleared = MutableStateFlow(0)
+    val ttsCacheCleared: StateFlow<Int> = _ttsCacheCleared.asStateFlow()
+
     init {
         viewModelScope.launch { _speechRate.value = settings.speechRate.first() }
         viewModelScope.launch { _readTranslation.value = settings.readTranslation.first() }
@@ -157,6 +171,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 _ocrModel.value = cfg.model
             }
         }
+        // Cache summary is computed off the main thread; clips only appear
+        // from dictation/preview, so a one-shot scan at open is enough (the
+        // hub re-scans when returning from a sub-page that may have tested
+        // a provider).
+        viewModelScope.launch(Dispatchers.IO) { _ttsCacheInfo.value = scanTtsCache() }
         // The custom-TTS form mirrors the saved config (preset matched by
         // baseUrl+model like alice); a fresh form defaults to the MiMo
         // preset with a blank key.
@@ -397,6 +416,41 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             } catch (e: Exception) {
                 // DataStore failures must never crash the screen (AGENTS.md).
             }
+        }
+    }
+
+    // ------------------------------------------------- 发音缓存 (清空发音缓存)
+
+    private fun ttsCacheDir(): File = File(getApplication<Application>().cacheDir, "tts")
+
+    /** Recursive scan of `cacheDir/tts` (clips are flat; keep it robust). */
+    private fun scanTtsCache(): TtsCacheInfo {
+        var files = 0
+        var bytes = 0L
+        ttsCacheDir().walkTopDown().forEach { f ->
+            if (f.isFile) {
+                files += 1
+                bytes += f.length()
+            }
+        }
+        return TtsCacheInfo(files, bytes)
+    }
+
+    /** Recompute the 清空发音缓存 summary (after page returns / test plays). */
+    fun refreshTtsCacheInfo() {
+        viewModelScope.launch(Dispatchers.IO) { _ttsCacheInfo.value = scanTtsCache() }
+    }
+
+    /**
+     * Delete every cached pronunciation file (Youdao + custom-provider clips,
+     * keyed under cacheDir/tts). Clips re-download on demand afterwards;
+     * writers mkdirs the directory again, so deleting the node itself is safe.
+     */
+    fun clearTtsCache() {
+        viewModelScope.launch(Dispatchers.IO) {
+            ttsCacheDir().deleteRecursively()
+            _ttsCacheInfo.value = scanTtsCache()
+            _ttsCacheCleared.value += 1
         }
     }
 

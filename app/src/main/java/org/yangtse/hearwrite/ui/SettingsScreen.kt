@@ -67,6 +67,8 @@ fun SettingsScreen(
 
     fun goHub() {
         subPage = null
+        // A provider page may have played a test clip → refresh the cache row.
+        viewModel.refreshTtsCacheInfo()
     }
 
     BackHandler(enabled = subPage != null) { goHub() }
@@ -114,8 +116,54 @@ private fun SettingsHub(
     val ttsConfigSaved by viewModel.ttsConfigSaved.collectAsStateWithLifecycle()
     val ttsModel by viewModel.ttsModel.collectAsStateWithLifecycle()
     val soundEnabled by viewModel.soundEnabled.collectAsStateWithLifecycle()
+    val cacheInfo by viewModel.ttsCacheInfo.collectAsStateWithLifecycle()
     val ocrConfigSaved by viewModel.ocrConfigSaved.collectAsStateWithLifecycle()
     val ocrModel by viewModel.ocrModel.collectAsStateWithLifecycle()
+    val cacheCleared by viewModel.ttsCacheCleared.collectAsStateWithLifecycle()
+
+    var showClearCacheDialog by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(cacheCleared) {
+        if (cacheCleared > 0) {
+            Toast.makeText(context, "已清空发音缓存", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    if (showClearCacheDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearCacheDialog = false },
+            title = { Text("清空发音缓存？") },
+            text = {
+                val info = cacheInfo
+                when {
+                    info == null -> Text("将删除全部已下载的发音文件；之后如需在线发音会自动重新下载。")
+                    info.fileCount == 0 -> Text("当前没有缓存的发音文件。")
+                    else -> Text(
+                        "将删除 ${info.fileCount} 个已下载的发音文件（约 " +
+                            "${formatBytes(info.bytes)}）。删除后如需在线发音会自动重新下载。",
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showClearCacheDialog = false
+                        viewModel.clearTtsCache()
+                    },
+                ) {
+                    Text(
+                        "清空",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearCacheDialog = false }) {
+                    Text("取消")
+                }
+            },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -229,6 +277,25 @@ private fun SettingsHub(
                         )
                     },
                     onClick = { viewModel.onSoundEnabledChange(!soundEnabled) },
+                )
+                SettingsRow(
+                    title = "清空发音缓存",
+                    supporting = "删除已下载的发音文件，之后按需重新下载",
+                    leading = { Icon(Icons.Outlined.DeleteSweep, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    trailing = {
+                        val info = cacheInfo
+                        Text(
+                            when {
+                                info == null -> "计算中…"
+                                info.bytes > 0L -> formatBytes(info.bytes)
+                                else -> "无缓存"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    divider = false,
+                    onClick = { showClearCacheDialog = true },
                 )
             }
 
