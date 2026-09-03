@@ -477,4 +477,342 @@ class DictationEngineTest {
         assertAt(2400, speaker.utterances[3].atMs)
         assertTrue(engine.finished.value)
     }
+
+    // ---------------------------------- mid-utterance ops (gap list, rows 1-10)
+
+    @Test
+    fun `pause mid utterance holds speech and resume replays the word once`() = runTest {
+        val speaker = FakeSpeaker(clock = { testScheduler.currentTime }, durationMs = 500)
+        val phrase = FakeSpeaker(clock = { testScheduler.currentTime })
+        val engine = engine(speaker, phraseSpeaker = phrase)
+
+        engine.start(listOf("a", "b"))
+        advanceTimeBy(250) // speak1 of "a" in flight (0 → 500)
+        engine.pause()
+        assertEquals(PlayState.PAUSED, engine.state.value)
+        assertEquals(null, engine.remainingMs.value)
+        // start() silenced stale audio once; pause() must add exactly one more.
+        assertEquals(2, speaker.stopCalls)
+        assertEquals(2, phrase.stopCalls)
+
+        // Nothing new starts while paused — not even the interrupted tail.
+        advanceTimeBy(100_000)
+        assertEquals(
+            listOf(FakeSpeaker.Utterance("a", "en-US", 0, spoken = true)),
+            utterances(speaker),
+        )
+
+        // Resume replays the current word from speak1 exactly once; the
+        // interrupted utterance never continues from where it was cut.
+        val resumedAt = testScheduler.currentTime
+        engine.resume()
+        advanceTimeBy(100_000)
+        assertEquals(
+            listOf(
+                FakeSpeaker.Utterance("a", "en-US", 0, spoken = true),
+                FakeSpeaker.Utterance("a", "en-US", resumedAt, spoken = true),
+                FakeSpeaker.Utterance("a", "en-US", resumedAt + 1200, spoken = true), // 500 + 700 gap
+                FakeSpeaker.Utterance("b", "en-US", resumedAt + 8700, spoken = true), // + 7 s interval
+                FakeSpeaker.Utterance("b", "en-US", resumedAt + 9900, spoken = true),
+            ),
+            utterances(speaker),
+        )
+        assertTrue(engine.finished.value)
+    }
+
+    @Test
+    fun `skip and previous mid utterance stop the audio and jump to the target word`() = runTest {
+        val speaker = FakeSpeaker(clock = { testScheduler.currentTime }, durationMs = 500)
+        val phrase = FakeSpeaker(clock = { testScheduler.currentTime })
+        val engine = engine(speaker, phraseSpeaker = phrase)
+
+        engine.start(listOf("a", "b", "c"))
+        advanceTimeBy(1400) // "a" speak2 in flight (1200 → 1700)
+        engine.skipToNext()
+        assertEquals(1, engine.index.value)
+        advanceTimeBy(50)
+        assertEquals("b", speaker.utterances.last().text)
+        assertAt(1400, speaker.utterances.last().atMs)
+
+        advanceTimeBy(1200) // "b" speak2 in flight (2600 → 3100)
+        engine.goToPrevious()
+        assertEquals(0, engine.index.value)
+        advanceTimeBy(50)
+        assertEquals("a", speaker.utterances.last().text)
+        assertAt(2650, speaker.utterances.last().atMs)
+
+        // start() silenced once; skip and prev each add exactly one more.
+        assertEquals(3, speaker.stopCalls)
+        assertEquals(3, phrase.stopCalls)
+        advanceTimeBy(100_000)
+        assertEquals(
+            listOf(
+                FakeSpeaker.Utterance("a", "en-US", 0, spoken = true),
+                FakeSpeaker.Utterance("a", "en-US", 1200, spoken = true), // cut at 1400
+                FakeSpeaker.Utterance("b", "en-US", 1400, spoken = true),
+                FakeSpeaker.Utterance("b", "en-US", 2600, spoken = true), // cut at 2650
+                FakeSpeaker.Utterance("a", "en-US", 2650, spoken = true),
+                FakeSpeaker.Utterance("a", "en-US", 3850, spoken = true), // 2650 + 500 + 700
+                FakeSpeaker.Utterance("b", "en-US", 11350, spoken = true), // + 7 s interval
+                FakeSpeaker.Utterance("b", "en-US", 12550, spoken = true),
+                FakeSpeaker.Utterance("c", "en-US", 20050, spoken = true),
+                FakeSpeaker.Utterance("c", "en-US", 21250, spoken = true),
+            ),
+            utterances(speaker),
+        )
+        assertTrue(engine.finished.value)
+    }
+
+    @Test
+    fun `stop mid utterance abandons the session and the next start is clean`() = runTest {
+        val speaker = FakeSpeaker(clock = { testScheduler.currentTime }, durationMs = 500)
+        val phrase = FakeSpeaker(clock = { testScheduler.currentTime })
+        val engine = engine(speaker, phraseSpeaker = phrase)
+
+        engine.start(listOf("a", "b"))
+        advanceTimeBy(300) // speak1 of "a" in flight (0 → 500)
+        engine.stop()
+        assertEquals(PlayState.IDLE, engine.state.value)
+        assertFalse(engine.finished.value)
+        assertEquals(null, engine.remainingMs.value)
+        assertEquals(2, speaker.stopCalls) // start() + stop()
+
+        // The interrupted utterance never resumes and nothing follows it.
+        advanceTimeBy(100_000)
+        assertEquals(1, speaker.utterances.size)
+
+        // A fresh start speaks its own list from scratch.
+        val restartedAt = testScheduler.currentTime
+        engine.start(listOf("x", "y"))
+        advanceTimeBy(100_000)
+        assertEquals(3, speaker.stopCalls) // the fresh start() silences again
+        assertEquals(
+            listOf(
+                FakeSpeaker.Utterance("a", "en-US", 0, spoken = true),
+                FakeSpeaker.Utterance("x", "en-US", restartedAt, spoken = true),
+                FakeSpeaker.Utterance("x", "en-US", restartedAt + 1200, spoken = true),
+                FakeSpeaker.Utterance("y", "en-US", restartedAt + 8700, spoken = true),
+                FakeSpeaker.Utterance("y", "en-US", restartedAt + 9900, spoken = true),
+            ),
+            utterances(speaker),
+        )
+        assertTrue(engine.finished.value)
+    }
+
+    @Test
+    fun `dispose while playing cancels the run with no stray speech`() = runTest {
+        val speaker = FakeSpeaker(clock = { testScheduler.currentTime }, durationMs = 500)
+        val phrase = FakeSpeaker(clock = { testScheduler.currentTime })
+        val engine = engine(speaker, phraseSpeaker = phrase)
+
+        engine.start(listOf("a", "b"))
+        advanceTimeBy(300) // speak1 of "a" in flight (0 → 500)
+        engine.dispose() // leaving the screen mid-utterance
+        assertEquals(PlayState.IDLE, engine.state.value)
+        assertFalse(engine.finished.value)
+        assertEquals(2, speaker.stopCalls) // start() + dispose()
+        assertEquals(2, phrase.stopCalls)
+
+        advanceTimeBy(100_000)
+        assertEquals(1, speaker.utterances.size)
+
+        // Boundary controls after dispose are all safe no-ops.
+        engine.pause()
+        engine.skipToNext()
+        engine.goToPrevious()
+        engine.stop()
+        assertEquals(PlayState.IDLE, engine.state.value)
+        assertFalse(engine.finished.value)
+        assertEquals(2, speaker.stopCalls) // none of the no-ops silenced again
+        advanceTimeBy(100_000)
+        assertEquals(1, speaker.utterances.size)
+
+        // The engine stays usable for a fresh run.
+        val restartedAt = testScheduler.currentTime
+        engine.start(listOf("z"))
+        advanceTimeBy(100_000)
+        assertEquals(
+            listOf(
+                FakeSpeaker.Utterance("a", "en-US", 0, spoken = true),
+                FakeSpeaker.Utterance("z", "en-US", restartedAt, spoken = true),
+                FakeSpeaker.Utterance("z", "en-US", restartedAt + 1200, spoken = true),
+            ),
+            utterances(speaker),
+        )
+        assertTrue(engine.finished.value)
+    }
+
+    @Test
+    fun `restart mid utterance speaks the new first word once with no tail`() = runTest {
+        val speaker = FakeSpeaker(clock = { testScheduler.currentTime }, durationMs = 500)
+        val engine = engine(speaker)
+
+        engine.start(listOf("a", "b"))
+        advanceTimeBy(300) // speak1 of "a" in flight (0 → 500)
+        engine.start(listOf("c", "d")) // immediate restart cancels the old run
+        advanceTimeBy(100_000)
+        // The cancelled "a" is recorded once and never resumes; the old list's
+        // "b" never speaks; the new first word starts exactly at the restart.
+        assertEquals(
+            listOf(
+                FakeSpeaker.Utterance("a", "en-US", 0, spoken = true),
+                FakeSpeaker.Utterance("c", "en-US", 300, spoken = true),
+                FakeSpeaker.Utterance("c", "en-US", 1500, spoken = true), // 300 + 500 + 700
+                FakeSpeaker.Utterance("d", "en-US", 9000, spoken = true), // + 7 s interval
+                FakeSpeaker.Utterance("d", "en-US", 10200, spoken = true),
+            ),
+            utterances(speaker),
+        )
+        assertTrue(engine.finished.value)
+    }
+
+    @Test
+    fun `speak2 failure does not retry and drops straight into the interval`() = runTest {
+        // Fail exactly the second "a" attempt (speak2 of the first word).
+        var aAttempts = 0
+        val speaker = FakeSpeaker(
+            clock = { testScheduler.currentTime },
+            failWhen = {
+                if (it == "a") {
+                    aAttempts++
+                    aAttempts == 2
+                } else false
+            },
+        )
+        val engine = engine(speaker)
+
+        engine.start(listOf("a", "b"))
+        advanceTimeBy(100_000)
+        assertEquals(
+            listOf(
+                FakeSpeaker.Utterance("a", "en-US", 0, spoken = true),
+                FakeSpeaker.Utterance("a", "en-US", 700, spoken = false),
+                FakeSpeaker.Utterance("b", "en-US", 7700, spoken = true), // interval from 700, no retry
+                FakeSpeaker.Utterance("b", "en-US", 8400, spoken = true),
+            ),
+            utterances(speaker),
+        )
+        assertTrue(engine.finished.value)
+    }
+
+    @Test
+    fun `controls after a natural finish are safe no-ops at the idle boundary`() = runTest {
+        val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
+        val phrase = FakeSpeaker(clock = { testScheduler.currentTime })
+        val engine = engine(speaker, phraseSpeaker = phrase)
+
+        engine.start(listOf("a"))
+        advanceTimeBy(100_000) // natural end
+        assertTrue(engine.finished.value)
+        assertEquals(PlayState.IDLE, engine.state.value)
+        assertEquals(2, speaker.utterances.size)
+
+        engine.skipToNext()
+        engine.goToPrevious()
+        engine.stop()
+        // None of them disturb the finished session; only start()'s own
+        // silence (one call per speaker) is on record.
+        assertTrue(engine.finished.value)
+        assertEquals(PlayState.IDLE, engine.state.value)
+        assertEquals(1, speaker.stopCalls)
+        assertEquals(1, phrase.stopCalls)
+        advanceTimeBy(100_000)
+        assertEquals(2, speaker.utterances.size)
+    }
+
+    @Test
+    fun `goToPrevious on the first word clamps to index zero`() = runTest {
+        val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
+        val engine = engine(speaker)
+
+        engine.start(listOf("a", "b"))
+        advanceTimeBy(1000) // "a" done (0, 700); countdown running, index 0
+        engine.goToPrevious()
+        assertEquals(0, engine.index.value) // maxOf(0, -1) — never below the head
+
+        advanceTimeBy(50)
+        assertEquals("a", speaker.utterances.last().text)
+        assertAt(1000, speaker.utterances.last().atMs)
+        advanceTimeBy(100_000)
+        assertEquals(
+            listOf(
+                FakeSpeaker.Utterance("a", "en-US", 0, spoken = true),
+                FakeSpeaker.Utterance("a", "en-US", 700, spoken = true),
+                FakeSpeaker.Utterance("a", "en-US", 1000, spoken = true),
+                FakeSpeaker.Utterance("a", "en-US", 1700, spoken = true),
+                FakeSpeaker.Utterance("b", "en-US", 8700, spoken = true),
+                FakeSpeaker.Utterance("b", "en-US", 9400, spoken = true),
+            ),
+            utterances(speaker),
+        )
+        assertTrue(engine.finished.value)
+    }
+
+    @Test
+    fun `turning auto-next off mid speech never parks before speak2 completes`() = runTest {
+        val speaker = FakeSpeaker(clock = { testScheduler.currentTime }, durationMs = 500)
+        val phrase = FakeSpeaker(clock = { testScheduler.currentTime })
+        val engine = engine(speaker, phraseSpeaker = phrase) // autoNext on
+
+        engine.start(listOf("a", "b"))
+        advanceTimeBy(200) // speak1 of "a" in flight (0 → 500)
+        engine.setAutoNext(false) // mid-utterance: must not cut anything
+        // Only start()'s own silence; the toggle cancels nothing mid-speech.
+        assertEquals(1, speaker.stopCalls)
+        assertEquals(1, phrase.stopCalls)
+        assertEquals(null, engine.remainingMs.value)
+
+        advanceTimeBy(100_000)
+        // The full pass still runs — speak1, gap, speak2 — then it parks.
+        assertEquals(
+            listOf(
+                FakeSpeaker.Utterance("a", "en-US", 0, spoken = true),
+                FakeSpeaker.Utterance("a", "en-US", 1200, spoken = true), // 500 + 700 gap
+            ),
+            utterances(speaker),
+        )
+        assertEquals(PlayState.PLAYING, engine.state.value) // parked, still live
+        assertEquals(0, engine.index.value)
+        assertEquals(null, engine.remainingMs.value)
+        assertEquals(1, speaker.stopCalls)
+        assertEquals(1, phrase.stopCalls)
+    }
+
+    @Test
+    fun `interval change while parked or paused applies to the next countdown`() = runTest {
+        val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
+        val engine = engine(speaker, autoNext = false, intervalSec = 7.0)
+
+        engine.start(listOf("a", "b"))
+        advanceTimeBy(1000) // a@0, a@700 → parked after speak2
+        assertEquals(null, engine.remainingMs.value)
+        engine.setIntervalSec(1.0) // parked: applies to the next countdown
+        engine.setAutoNext(true)
+        // The parked resume honors the new 1 s interval (b at +1000, not +7000).
+        // Advance past the 2000 deadline: tasks scheduled exactly at the end
+        // of an advanceTimeBy window do not run inside it.
+        advanceTimeBy(1010)
+        assertEquals("b", speaker.utterances[2].text)
+        assertEquals(2000, speaker.utterances[2].atMs)
+
+        advanceTimeBy(1000) // b@2000, speak2 @2700; countdown 2700 → 3700
+        engine.pause()
+        engine.setIntervalSec(3.0) // paused: applies on resume
+        assertEquals(null, engine.remainingMs.value)
+        val resumedAt = testScheduler.currentTime
+        engine.resume()
+        advanceTimeBy(100_000)
+        assertEquals(
+            listOf(
+                FakeSpeaker.Utterance("a", "en-US", 0, spoken = true),
+                FakeSpeaker.Utterance("a", "en-US", 700, spoken = true),
+                FakeSpeaker.Utterance("b", "en-US", 2000, spoken = true),
+                FakeSpeaker.Utterance("b", "en-US", 2700, spoken = true),
+                FakeSpeaker.Utterance("b", "en-US", resumedAt, spoken = true),
+                FakeSpeaker.Utterance("b", "en-US", resumedAt + 700, spoken = true),
+            ),
+            utterances(speaker),
+        )
+        assertTrue(engine.finished.value) // resumed countdown: 3 s ends the list
+    }
 }

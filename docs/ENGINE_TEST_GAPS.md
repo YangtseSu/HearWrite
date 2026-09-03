@@ -1,6 +1,12 @@
-# Engine 测试缺口清单（待补）
+# Engine 测试缺口清单（已补齐）
 
-来源：2026-09-04 全项目 review（domain 层评审）。`DictationEngine` 的状态机实现经逐行核对无 P0/P1 缺陷，但以下 AGENTS.md 声明的不变量**没有测试钉住**——任何一处回归都会静默通过现有套件。下一步修复时按此清单逐项补测试。
+来源：2026-09-04 全项目 review（domain 层评审）。`DictationEngine` 的状态机实现经逐行核对无 P0/P1 缺陷，但以下 AGENTS.md 声明的不变量**没有测试钉住**——任何一处回归都会静默通过现有套件。
+
+2026-09-04：1–10 已全部补进 `DictationEngineTest.kt`（FakeSpeaker `durationMs > 0`、虚拟时间、
+stop 调用计数、utterance 序列断言），`./gradlew :app:testDebugUnitTest` 全绿。期间做了一处引擎
+边界修正：第 7 条要求自然结束后 `stop()` 亦为安全 no-op，而原实现会清掉 `finished` 标志并多停一次
+音频——`DictationEngine.stop()` 现与 pause/skip/prev 一致，在 IDLE 早退（UI 中 stop 仅在
+PLAYING/PAUSED 下可达，无行为变化）。以下行号保留作契约索引。
 
 ## 现状与原因
 

@@ -149,8 +149,12 @@ class DictationEngine(
         startRun(_index.value, WordPhase.SPEAK1)
     }
 
-    /** Stop playback without finishing; the session is abandoned. */
+    /**
+     * Stop playback without finishing; the session is abandoned. A no-op at
+     * [PlayState.IDLE] — a naturally finished run keeps its completion state.
+     */
     fun stop() {
+        if (_state.value == PlayState.IDLE) return
         gen++
         cancelRun()
         stopAudio()
