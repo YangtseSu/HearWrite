@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlin.math.roundToInt
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -25,7 +26,10 @@ import org.yangtse.hearwrite.data.OCR_PROGRESS_RECOGNIZING
 import org.yangtse.hearwrite.data.OcrLang
 import org.yangtse.hearwrite.data.OcrOutcome
 import org.yangtse.hearwrite.domain.CJK_RE
+import org.yangtse.hearwrite.domain.DEFAULT_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.entryToLine
+import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
+import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.parseWordEntries
 import org.yangtse.hearwrite.domain.parseWords
 
@@ -70,6 +74,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _shuffle = MutableStateFlow(false)
     val shuffle: StateFlow<Boolean> = _shuffle.asStateFlow()
+
+    /** 展示态 (完成) vs 编辑态 — session-local; OCR/history/library applies
+     *  land back in 展示态 like alice's isDisplayMode. */
+    private val _displayMode = MutableStateFlow(true)
+    val displayMode: StateFlow<Boolean> = _displayMode.asStateFlow()
+
+    /** 听写间隔秒数 — persisted DataStore key shared with 设置 / 听写页. */
+    private val _intervalSec = MutableStateFlow(DEFAULT_INTERVAL_SEC)
+    val intervalSec: StateFlow<Double> = _intervalSec.asStateFlow()
+
+    /** 自动播放下一词 — persisted DataStore key shared with 设置 / 听写页. */
+    private val _autoNext = MutableStateFlow(true)
+    val autoNext: StateFlow<Boolean> = _autoNext.asStateFlow()
 
     /** Live parsed count of the draft. */
     val wordCount: StateFlow<Int> = _draft.map { parseWords(it).size }
@@ -136,6 +153,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _draft.value = settings.draft.first()
         }
+        // Seed the playback settings for the bottom panel (设置页 writes the
+        // same keys; the dictation session reads them at start).
+        viewModelScope.launch {
+            _intervalSec.value = settings.intervalSec.first()
+            _autoNext.value = settings.autoNext.first()
+        }
         // Persist debounced; flushDraft() covers the pending tail on dispose.
         @OptIn(ExperimentalCoroutinesApi::class)
         viewModelScope.launch {
@@ -193,6 +216,66 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _startIndex.value = (_startIndex.value + delta).coerceIn(0, count - 1)
     }
 
+    /** Display-list row tap: the tapped row becomes the 起始词. */
+    fun setStartIndex(index: Int) {
+        val count = wordCount.value
+        if (count == 0) return
+        _startIndex.value = index.coerceIn(0, count - 1)
+    }
+
+    /**
+     * 编辑/完成 toggle. Entering 展示态 ("完成") enriches the draft with the
+     * offline ECDICT meta (alice behavior) so the list shows 词性/释义; a
+     * stale result (user switched back and typed meanwhile) is dropped.
+     */
+    fun setDisplayMode(value: Boolean) {
+        _displayMode.value = value
+        if (value) enrichDraft()
+    }
+
+    private fun enrichDraft() {
+        viewModelScope.launch {
+            val original = _draft.value
+            if (parseWords(original).isEmpty()) return@launch
+            val enriched = enrich(original)
+            if (enriched != original && _draft.value == original) {
+                _draft.value = enriched
+                settings.setDraft(enriched)
+            }
+        }
+    }
+
+    /**
+     * Delete display-list row [index]: rewrite the draft from the remaining
+     * entries with alice shift semantics — deleting before the cursor keeps
+     * the cursor word selected; deleting the cursor word clamps to the new
+     * last. (The wordCount collector only backstops shrink-below-cursor.)
+     */
+    fun deleteWord(index: Int) {
+        val entries = parseWordEntries(_draft.value).toMutableList()
+        if (index !in entries.indices) return
+        entries.removeAt(index)
+        onDraftChange(entries.joinToString("\n") { entryToLine(it) })
+        val count = entries.size
+        _startIndex.value = when {
+            index < _startIndex.value -> (_startIndex.value - 1).coerceIn(0, (count - 1).coerceAtLeast(0))
+            index == _startIndex.value -> _startIndex.value.coerceIn(0, (count - 1).coerceAtLeast(0))
+            else -> _startIndex.value
+        }
+    }
+
+    /** 0.5 s snapped interval, persisted (设置页 slider shares the key). */
+    fun onIntervalChange(sec: Double) {
+        val snapped = (sec.coerceIn(MIN_INTERVAL_SEC, MAX_INTERVAL_SEC) * 2).roundToInt() / 2.0
+        _intervalSec.value = snapped
+        viewModelScope.launch { settings.setIntervalSec(snapped) }
+    }
+
+    fun onAutoNextChange(on: Boolean) {
+        _autoNext.value = on
+        viewModelScope.launch { settings.setAutoNext(on) }
+    }
+
     fun onShuffleChange(on: Boolean) {
         _shuffle.value = on
     }
@@ -209,6 +292,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun applyEntry(linesText: String) {
         _draft.value = linesText
         _startIndex.value = 0
+        _displayMode.value = true
         viewModelScope.launch { settings.setDraft(linesText) }
     }
 
@@ -299,13 +383,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         if (all.isEmpty()) return null
         _starting.value = true
         try {
-            // Enrichment failure (asset missing, parse error) degrades to the
-            // plain text — dictation never blocks on the dictionary.
-            val enriched = try {
-                dictionaryRepository.enrichText(text)
-            } catch (e: Exception) {
-                text
-            }
+            val enriched = enrich(text)
             historyRepository.add(text, enriched)
             val entries = parseWords(enriched)
             val clamped = _startIndex.value.coerceIn(0, entries.size - 1)
@@ -315,6 +393,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         } finally {
             _starting.value = false
         }
+    }
+
+    /**
+     * Offline ECDICT enrichment; any failure (asset missing, parse error)
+     * degrades to the plain text — never blocks the UI or dictation.
+     */
+    private suspend fun enrich(text: String): String = try {
+        dictionaryRepository.enrichText(text)
+    } catch (e: Exception) {
+        text
     }
 
     // ------------------------------------------------------- 拍照识词 (OCR)
@@ -370,6 +458,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     is OcrOutcome.Success -> {
                         _draft.value = outcome.linesText
                         _startIndex.value = 0
+                        _displayMode.value = true
                         settings.setDraft(outcome.linesText)
                         _ocrOutcome.value = ocrSuccessMessage(outcome.linesText, lang)
                     }

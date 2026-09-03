@@ -1,42 +1,48 @@
 package org.yangtse.hearwrite.ui
 
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.automirrored.filled.NavigateNext
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -47,35 +53,27 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.yangtse.hearwrite.data.OcrLang
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
-import org.yangtse.hearwrite.data.OCR_DISCLAIMER
-import org.yangtse.hearwrite.data.OcrLang
-import org.yangtse.hearwrite.domain.parseWords
-import org.yangtse.hearwrite.ui.theme.StarGold
 import java.io.File
 
-/** 示例 content: English words with gloss columns (朗读释义 demo-able). */
-private const val SAMPLE_EN = "apple | n. | 苹果\nbanana | n. | 香蕉\nschool | n. | 学校\nbook | n. | 书\ncar | n. | 汽车"
-
-/** 示例 content: bare 汉字词语 (zh-CN dictation). */
-private const val SAMPLE_CJK = "香蕉\n学校\n苹果\n月亮\n生日"
-
 /**
- * Home: paste/type the word list (draft persisted with a 500 ms debounce and
- * flushed on dispose), pick 起始序号 / 随机顺序 (session-local), then start
- * dictation — or open 词库 / 设置 / 历史 / 收藏 (bottom sheets). Starting
- * enriches the list with offline ECDICT meta and records it in history.
- * 拍照识词 opens the OCR scan sheet: photo picker or camera capture →
- * OpenAI-compatible vision → parsed lines land back in the draft for manual
- * correction.
+ * Home (alice layout, Material 3 tokens): a brand header with the OCR
+ * progress pill and a 更多 menu sheet (收藏 / 历史记录 / 词库 / 设置), the
+ * 单词列表 section ([WordListSection] — 编辑/展示 two-state word list where
+ * tapping a display row selects the 起始词), a floating 拍照识词 FAB and the
+ * bottom playback panel ([HomePlaybackPanel] — 间隔 / 自动播放 / 随机顺序 /
+ * 开始听写). The draft persists with a 500 ms debounce flushed on dispose;
+ * the FAB and bottom panel hide while the keyboard is up.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun HomeScreen(
     onStartDictation: (List<String>) -> Unit,
@@ -83,12 +81,16 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     viewModel: HomeViewModel = viewModel(),
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val colors = MaterialTheme.colorScheme
     val draft by viewModel.draft.collectAsStateWithLifecycle()
     val wordCount by viewModel.wordCount.collectAsStateWithLifecycle()
     val startIndex by viewModel.startIndex.collectAsStateWithLifecycle()
+    val displayMode by viewModel.displayMode.collectAsStateWithLifecycle()
     val shuffle by viewModel.shuffle.collectAsStateWithLifecycle()
+    val intervalSec by viewModel.intervalSec.collectAsStateWithLifecycle()
+    val autoNext by viewModel.autoNext.collectAsStateWithLifecycle()
     val starting by viewModel.starting.collectAsStateWithLifecycle()
     val history by viewModel.history.collectAsStateWithLifecycle()
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
@@ -101,6 +103,7 @@ fun HomeScreen(
     val ocrConfigured by viewModel.ocrConfigured.collectAsStateWithLifecycle()
     val ocrModel by viewModel.ocrModel.collectAsStateWithLifecycle()
 
+    var showMenu by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
     var showFavorites by remember { mutableStateOf(false) }
     var clearHistoryConfirm by remember { mutableStateOf(false) }
@@ -146,230 +149,171 @@ fun HomeScreen(
         onDispose { viewModel.flushDraft() }
     }
 
-    if (clearHistoryConfirm) {
-        AlertDialog(
-            onDismissRequest = { clearHistoryConfirm = false },
-            title = { Text("清空历史记录？") },
-            text = { Text("将删除全部 ${history.size} 条历史记录，收藏的条目不受影响。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    clearHistoryConfirm = false
-                    viewModel.clearHistory()
-                    android.widget.Toast.makeText(context, "已清空历史记录", android.widget.Toast.LENGTH_SHORT).show()
-                }) { Text("清空", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { clearHistoryConfirm = false }) { Text("取消") }
-            },
-        )
-    }
+    // alice parity: the FAB and the bottom panel step aside while typing.
+    val imeVisible = WindowInsets.isImeVisible
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("HearWrite 听写") },
-                actions = {
-                    IconButton(onClick = { showFavorites = true }) {
-                        Icon(
-                            Icons.Filled.Star,
-                            contentDescription = "收藏",
-                            tint = if (favorites.isEmpty()) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                StarGold
-                            },
-                        )
-                    }
-                    IconButton(onClick = { showHistory = true }) {
-                        Icon(
-                            Icons.Filled.History,
-                            contentDescription = "历史记录",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-            )
-        },
-    ) { innerPadding ->
-        Column(
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.background)
+            .statusBarsPadding()
+            .imePadding(),
+    ) {
+        // ---- Header: brand · OCR progress pill · menu ----------------------
+        Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            OutlinedTextField(
-                value = draft,
-                onValueChange = viewModel::onDraftChange,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp)
-                    .height(180.dp),
-                placeholder = {
-                    Text("在此粘贴或输入词表，每行一个词\n支持：词 | 词性 | 释义")
-                },
+            Icon(
+                Icons.Filled.RecordVoiceOver,
+                contentDescription = null,
+                tint = colors.primary,
+                modifier = Modifier.size(24.dp),
             )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "共 $wordCount 词",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = { viewModel.fillSample(SAMPLE_EN) }) { Text("英文示例") }
-                TextButton(onClick = { viewModel.fillSample(SAMPLE_CJK) }) { Text("汉字示例") }
-                TextButton(onClick = viewModel::clearDraft) { Text("清空") }
-            }
-
-            // ---- 拍照识词 (OCR import entry; disclaimer at the entry point) ---
-            OutlinedButton(
-                onClick = { showOcrSheet = true },
-                enabled = !ocrBusy && !pickerOpen,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("拍照识词")
-            }
-            Text(
-                OCR_DISCLAIMER,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            if (ocrBusy) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        strokeWidth = 2.dp,
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Text(
-                        if (ocrPhase.isEmpty()) "识别中…" else ocrPhase,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
-            ocrError?.let { message ->
-                Surface(
-                    color = MaterialTheme.colorScheme.errorContainer,
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 4.dp)) {
-                        Text(
-                            message,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                        )
+            Spacer(Modifier.width(8.dp))
+            Text("HearWrite", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.width(6.dp))
+            Text("听写", style = MaterialTheme.typography.titleLarge, color = colors.primary)
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                if (ocrBusy) {
+                    Surface(
+                        shape = CircleShape,
+                        color = colors.primaryContainer,
+                        contentColor = colors.onPrimaryContainer,
+                    ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            TextButton(onClick = { viewModel.clearOcrError() }) { Text("关闭") }
-                            if (ocrRetryable) {
-                                TextButton(onClick = viewModel::retryOcr) { Text("重试") }
-                            }
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = if (ocrPhase.isEmpty()) "识别中…" else ocrPhase,
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                 }
             }
+            IconButton(onClick = { showMenu = true }) {
+                Icon(Icons.Filled.Menu, contentDescription = "菜单")
+            }
+        }
 
-            HorizontalDivider()
-
-            // ---- 起始序号 (clamped when the list shrinks) ----------------
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("起始序号", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                IconButton(
-                    onClick = { viewModel.adjustStartIndex(-1) },
-                    enabled = wordCount > 0 && startIndex > 0,
-                ) {
-                    Icon(Icons.Filled.Remove, contentDescription = "起始序号减一")
+        // ---- Main: OCR error card + word-list section, FAB overlay ---------
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 20.dp),
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                ocrError?.let { message ->
+                    OcrErrorCard(
+                        message = message,
+                        retryable = ocrRetryable,
+                        onClose = viewModel::clearOcrError,
+                        onRetry = viewModel::retryOcr,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
                 }
-                Text(
-                    if (wordCount == 0) "—" else "${startIndex + 1}",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.semantics { contentDescription = "起始序号" },
+                WordListSection(
+                    draft = draft,
+                    displayMode = displayMode,
+                    wordCount = wordCount,
+                    startIndex = startIndex,
+                    onDraftChange = viewModel::onDraftChange,
+                    onToggleDisplayMode = { viewModel.setDisplayMode(!displayMode) },
+                    onStartIndexChange = viewModel::setStartIndex,
+                    onDeleteWord = viewModel::deleteWord,
+                    onFillSample = viewModel::fillSample,
+                    onClear = viewModel::clearDraft,
+                    modifier = Modifier.weight(1f),
                 )
-                IconButton(
-                    onClick = { viewModel.adjustStartIndex(1) },
-                    enabled = wordCount > 0 && startIndex < wordCount - 1,
+            }
+            if (!imeVisible) {
+                FloatingActionButton(
+                    onClick = { showOcrSheet = true },
+                    shape = CircleShape,
+                    containerColor = colors.primary,
+                    contentColor = colors.onPrimary,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(
+                            end = 4.dp,
+                            // Lift above the edit-mode footer row.
+                            bottom = if (displayMode && wordCount > 0) 12.dp else 60.dp,
+                        ),
                 ) {
-                    Icon(Icons.Filled.Add, contentDescription = "起始序号加一")
+                    Icon(Icons.Filled.PhotoCamera, contentDescription = "拍照识词")
                 }
             }
-            if (wordCount > 0) {
-                val firstWord = parseWords(draft)[startIndex]
-                Text(
-                    "从第 ${startIndex + 1} 个词开始：$firstWord",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        }
 
-            // ---- 随机顺序 (session-local, not persisted) -------------------
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("随机顺序", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                Switch(
-                    checked = shuffle,
-                    onCheckedChange = viewModel::onShuffleChange,
-                    modifier = Modifier.semantics { contentDescription = "随机打乱词序" },
-                )
-            }
-
-            // Start: enrich (first run parses the ECDICT map on IO), record
-            // the list in history, then hand the prepared lines over.
-            Button(
-                onClick = {
-                    scope.launch {
-                        viewModel.prepareAndRecord()?.let(onStartDictation)
+        // ---- Bottom playback panel (hidden with the keyboard) --------------
+        if (!imeVisible) {
+            HomePlaybackPanel(
+                intervalSec = intervalSec,
+                autoNext = autoNext,
+                shuffle = shuffle,
+                wordCount = wordCount,
+                starting = starting,
+                onIntervalChange = viewModel::onIntervalChange,
+                onAutoNextChange = viewModel::onAutoNextChange,
+                onShuffleChange = viewModel::onShuffleChange,
+                onStart = {
+                    if (wordCount == 0) {
+                        // Kept pressable so the app can explain why (alice).
+                        android.widget.Toast.makeText(
+                            context, "请先输入单词列表", android.widget.Toast.LENGTH_SHORT,
+                        ).show()
+                    } else {
+                        scope.launch {
+                            viewModel.prepareAndRecord()?.let(onStartDictation)
+                        }
                     }
                 },
-                enabled = wordCount > 0 && !starting,
+                modifier = Modifier.navigationBarsPadding(),
+            )
+        }
+    }
+
+    // ---- 更多 menu sheet -----------------------------------------------------
+    if (showMenu) {
+        ModalBottomSheet(onDismissRequest = { showMenu = false }) {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
-                    .padding(top = 2.dp),
+                    .padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
             ) {
-                if (starting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Text("整理词表…")
-                } else {
-                    Text("开始听写" + if (wordCount > 0) "（$wordCount 词）" else "")
+                Text(
+                    "更多",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+                MenuRow(Icons.Outlined.StarBorder, "收藏") {
+                    showMenu = false
+                    showFavorites = true
+                }
+                MenuRow(Icons.Outlined.History, "历史记录") {
+                    showMenu = false
+                    showHistory = true
+                }
+                MenuRow(Icons.AutoMirrored.Filled.MenuBook, "词库") {
+                    showMenu = false
+                    onOpenLibrary()
+                }
+                MenuRow(Icons.Outlined.Settings, "设置") {
+                    showMenu = false
+                    onOpenSettings()
                 }
             }
-            if (wordCount == 0) {
-                Text(
-                    "输入词表或从词库选择后开始",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onOpenLibrary, modifier = Modifier.fillMaxWidth()) {
-                Text("词库")
-            }
-            OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
-                Text("设置")
-            }
-            Spacer(Modifier.height(16.dp))
         }
     }
 
@@ -436,5 +380,94 @@ fun HomeScreen(
             onToggleFavorite = viewModel::toggleFavorite,
             onDismiss = { showFavorites = false },
         )
+    }
+
+    if (clearHistoryConfirm) {
+        AlertDialog(
+            onDismissRequest = { clearHistoryConfirm = false },
+            title = { Text("清空历史记录？") },
+            text = { Text("将删除全部 ${history.size} 条历史记录，收藏的条目不受影响。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    clearHistoryConfirm = false
+                    viewModel.clearHistory()
+                    android.widget.Toast.makeText(context, "已清空历史记录", android.widget.Toast.LENGTH_SHORT).show()
+                }) { Text("清空", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { clearHistoryConfirm = false }) { Text("取消") }
+            },
+        )
+    }
+}
+
+/** One styled row of the 更多 menu sheet: icon · label · chevron. */
+@Composable
+private fun MenuRow(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(14.dp))
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.weight(1f))
+            Icon(
+                Icons.AutoMirrored.Filled.NavigateNext,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+}
+
+/** Terminal OCR failure surfaced inline above the word-list section. */
+@Composable
+private fun OcrErrorCard(
+    message: String,
+    retryable: Boolean,
+    onClose: () -> Unit,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        shape = MaterialTheme.shapes.medium,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 4.dp)) {
+            Text(
+                message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onClose) { Text("关闭") }
+                if (retryable) {
+                    TextButton(onClick = onRetry) { Text("重试") }
+                }
+            }
+        }
     }
 }
