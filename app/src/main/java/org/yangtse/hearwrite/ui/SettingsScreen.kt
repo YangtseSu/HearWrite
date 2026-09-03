@@ -48,6 +48,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import org.yangtse.hearwrite.data.OCR_PROVIDER_PRESETS
 import org.yangtse.hearwrite.domain.MAX_SPEECH_RATE
 import org.yangtse.hearwrite.domain.MIN_SPEECH_RATE
 import org.yangtse.hearwrite.domain.ThemeMode
@@ -112,6 +113,11 @@ private fun SettingsHub(
     val cacheInfo by viewModel.ttsCacheInfo.collectAsStateWithLifecycle()
     val ocrConfigSaved by viewModel.ocrConfigSaved.collectAsStateWithLifecycle()
     val ocrModel by viewModel.ocrModel.collectAsStateWithLifecycle()
+    val ocrBaseUrl by viewModel.ocrBaseUrl.collectAsStateWithLifecycle()
+    val ocrPresetLabel = OCR_PROVIDER_PRESETS
+        .firstOrNull {
+            it.id != "custom" && it.baseUrl == ocrBaseUrl.trim() && it.model == ocrModel.trim()
+        }?.label ?: "自定义"
     val cacheCleared by viewModel.ttsCacheCleared.collectAsStateWithLifecycle()
 
     var showClearCacheDialog by rememberSaveable { mutableStateOf(false) }
@@ -261,9 +267,9 @@ private fun SettingsHub(
                         TtsSource.YOUDAO -> "有道真人词典发音，需要网络；失败时自动改用系统语音"
                         TtsSource.SYSTEM -> "系统内置语音，完全离线"
                         TtsSource.CUSTOM -> if (ttsConfigSaved) {
-                            "自定义音源已启用：${ttsModel.trim()}"
+                            "当前使用：${ttsModel.trim()}"
                         } else {
-                            "已选自定义音源，尚未保存配置"
+                            "自备 API Key；选好服务商、填完配置后点「保存并启用」"
                         }
                     },
                     leading = { Icon(Icons.Outlined.RecordVoiceOver, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
@@ -272,7 +278,7 @@ private fun SettingsHub(
                             when (ttsSource) {
                                 TtsSource.YOUDAO -> "有道词典"
                                 TtsSource.SYSTEM -> "系统语音"
-                                TtsSource.CUSTOM -> "自定义音源"
+                                TtsSource.CUSTOM -> "TTS API"
                             },
                         )
                     },
@@ -320,7 +326,7 @@ private fun SettingsHub(
                         "用 AI 视觉识别课本照片中的词表（需自备 API Key）"
                     },
                     leading = { Icon(Icons.Outlined.DocumentScanner, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    trailing = { SettingsChevronTrailing() },
+                    trailing = { SettingsValueTrailing(ocrPresetLabel) },
                     divider = false,
                     onClick = { onOpen(SettingsSubPage.OCR_PROVIDER) },
                 )
@@ -330,7 +336,6 @@ private fun SettingsHub(
             SettingsCard {
                 SettingsRow(
                     title = "关于听写",
-                    supporting = "简介、版本号与开源许可",
                     leading = { Icon(Icons.Outlined.Info, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailing = { SettingsChevronTrailing() },
                     divider = false,

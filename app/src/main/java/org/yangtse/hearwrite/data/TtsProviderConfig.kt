@@ -59,7 +59,6 @@ data class TtsProviderPreset(
     val voiceEn: String = "",
     val voiceZh: String = "",
     val responseFormat: String? = null,
-    val hint: String = "",
 )
 
 /**
@@ -76,7 +75,6 @@ val TTS_PROVIDER_PRESETS: List<TtsProviderPreset> = listOf(
         model = "mimo-v2.5-tts",
         voiceEn = "Chloe",
         voiceZh = "冰糖",
-        hint = "限时免费 · mimo.mi.com",
     ),
     TtsProviderPreset(
         id = "zhipu",
@@ -87,7 +85,6 @@ val TTS_PROVIDER_PRESETS: List<TtsProviderPreset> = listOf(
         voiceEn = "tongtong",
         voiceZh = "tongtong",
         responseFormat = "wav",
-        hint = "open.bigmodel.cn",
     ),
     TtsProviderPreset(
         id = "siliconflow",
@@ -97,7 +94,6 @@ val TTS_PROVIDER_PRESETS: List<TtsProviderPreset> = listOf(
         model = "FunAudioLLM/CosyVoice2-0.5B",
         voiceEn = "FunAudioLLM/CosyVoice2-0.5B:alex",
         voiceZh = "FunAudioLLM/CosyVoice2-0.5B:anna",
-        hint = "siliconflow.cn",
     ),
     TtsProviderPreset(
         id = "openai",
@@ -107,7 +103,6 @@ val TTS_PROVIDER_PRESETS: List<TtsProviderPreset> = listOf(
         model = "gpt-4o-mini-tts",
         voiceEn = "alloy",
         voiceZh = "alloy",
-        hint = "需可访问 OpenAI 的网络",
     ),
     TtsProviderPreset(id = "custom", label = "自定义", api = TtsApiKind.SPEECH, baseUrl = "", model = ""),
 )

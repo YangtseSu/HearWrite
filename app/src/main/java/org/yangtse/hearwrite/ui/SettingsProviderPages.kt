@@ -3,6 +3,8 @@ package org.yangtse.hearwrite.ui
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +17,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -41,12 +44,13 @@ import org.yangtse.hearwrite.data.TtsApiKind
 import org.yangtse.hearwrite.domain.TtsSource
 
 /**
- * 设置 → 发音来源. Top: the source radio list (有道词典 / 系统语音 /
- * 自定义音源). When 自定义音源 is active the page grows the provider
+ * 设置 → 发音来源. Top: the source chip row (有道词典 / TTS API /
+ * 系统语音). When TTS API is active the page grows the provider
  * configuration form (kelivo-style API-provider setup): preset picker,
  * optional wire-shape choice, base URL / key / model / voices / format,
  * 测试并试听 and 保存并启用.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VoiceSourceSettingsPage(
     viewModel: SettingsViewModel,
@@ -69,45 +73,87 @@ fun VoiceSourceSettingsPage(
         ttsBaseUrl.isNotBlank() && ttsApiKey.isNotBlank() && ttsModel.isNotBlank()
 
     SettingsSubPage(title = "发音来源", onBack = onBack) {
-        SettingsSectionHeader("发音方式")
         SettingsCard {
-            SettingsRadioRow(
-                title = "有道词典",
-                supporting = "真人词典发音，需要网络；断网或失败时自动改用系统语音",
-                selected = ttsSource == TtsSource.YOUDAO,
-                divider = true,
-                onClick = { viewModel.onTtsSourceChange(TtsSource.YOUDAO) },
-            )
-            SettingsRadioRow(
-                title = "系统语音",
-                supporting = "全部使用系统内置语音，无需网络",
-                selected = ttsSource == TtsSource.SYSTEM,
-                divider = true,
-                onClick = { viewModel.onTtsSourceChange(TtsSource.SYSTEM) },
-            )
-            SettingsRadioRow(
-                title = "自定义音源",
-                supporting = if (ttsConfigSaved) {
-                    "当前使用：${ttsModel.trim()}"
-                } else {
-                    "自备 API Key；选好服务商、填完配置后点「保存并启用」"
-                },
-                selected = ttsSource == TtsSource.CUSTOM,
-                divider = false,
-                onClick = { viewModel.onTtsSourceChange(TtsSource.CUSTOM) },
-            )
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                FilterChip(
+                    selected = ttsSource == TtsSource.YOUDAO,
+                    onClick = { viewModel.onTtsSourceChange(TtsSource.YOUDAO) },
+                    label = { Text("有道词典", style = MaterialTheme.typography.bodyLarge) },
+                )
+                FilterChip(
+                    selected = ttsSource == TtsSource.CUSTOM,
+                    onClick = { viewModel.onTtsSourceChange(TtsSource.CUSTOM) },
+                    label = { Text("TTS API", style = MaterialTheme.typography.bodyLarge) },
+                )
+                FilterChip(
+                    selected = ttsSource == TtsSource.SYSTEM,
+                    onClick = { viewModel.onTtsSourceChange(TtsSource.SYSTEM) },
+                    label = { Text("系统语音", style = MaterialTheme.typography.bodyLarge) },
+                )
+            }
+            when (ttsSource) {
+                TtsSource.YOUDAO -> Text(
+                    "真人词典发音，需要网络；断网或失败时自动改用系统语音",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                )
+                TtsSource.SYSTEM -> Text(
+                    "全部使用系统内置语音，无需网络",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                )
+                TtsSource.CUSTOM -> Text(
+                    if (ttsConfigSaved) {
+                        "当前使用：${ttsModel.trim()}"
+                    } else {
+                        "自备 API Key；选好服务商、填完配置后点「保存并启用」"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                )
+            }
         }
 
         if (ttsSource == TtsSource.CUSTOM) {
             SettingsSectionHeader("服务商预设")
             SettingsCard {
-                TTS_PROVIDER_PRESETS.forEachIndexed { index, preset ->
-                    SettingsRadioRow(
-                        title = preset.label,
-                        supporting = preset.hint.ifEmpty { null },
-                        selected = ttsPresetId == preset.id,
-                        divider = index < TTS_PROVIDER_PRESETS.size - 1,
-                        onClick = { viewModel.onTtsPresetChange(preset) },
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = 12.dp,
+                            bottom = if (ttsPresetId == "mimo") 0.dp else 12.dp,
+                        ),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    TTS_PROVIDER_PRESETS.forEach { preset ->
+                        FilterChip(
+                            selected = ttsPresetId == preset.id,
+                            onClick = { viewModel.onTtsPresetChange(preset) },
+                            label = {
+                                Text(preset.label, style = MaterialTheme.typography.bodyLarge)
+                            },
+                        )
+                    }
+                }
+                if (ttsPresetId == "mimo") {
+                    Text(
+                        "限时免费",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
                     )
                 }
             }
@@ -293,6 +339,7 @@ fun VoiceSourceSettingsPage(
  * 设置 → 拍照识词: the BYOK OpenAI-compatible vision provider form (preset
  * picker + base URL / key / model), 测试连接 and 保存并启用.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun OcrProviderSettingsPage(
     viewModel: SettingsViewModel,
@@ -313,14 +360,20 @@ fun OcrProviderSettingsPage(
     SettingsSubPage(title = "拍照识词", onBack = onBack) {
         SettingsSectionHeader("服务商")
         SettingsCard {
-            OCR_PROVIDER_PRESETS.forEachIndexed { index, preset ->
-                SettingsRadioRow(
-                    title = preset.label,
-                    supporting = preset.hint.ifEmpty { null },
-                    selected = activePresetId == preset.id,
-                    divider = index < OCR_PROVIDER_PRESETS.size - 1,
-                    onClick = { viewModel.onOcrPresetChange(preset) },
-                )
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                OCR_PROVIDER_PRESETS.forEach { preset ->
+                    FilterChip(
+                        selected = activePresetId == preset.id,
+                        onClick = { viewModel.onOcrPresetChange(preset) },
+                        label = { Text(preset.label, style = MaterialTheme.typography.bodyLarge) },
+                    )
+                }
             }
         }
 

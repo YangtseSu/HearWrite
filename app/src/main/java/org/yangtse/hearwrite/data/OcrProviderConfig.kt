@@ -24,7 +24,6 @@ data class OcrProviderPreset(
     val label: String,
     val baseUrl: String,
     val model: String,
-    val hint: String = "",
 )
 
 /**
@@ -38,49 +37,42 @@ val OCR_PROVIDER_PRESETS: List<OcrProviderPreset> = listOf(
         label = "智谱 GLM",
         baseUrl = "https://open.bigmodel.cn/api/paas/v4",
         model = "glm-4v-flash",
-        hint = "open.bigmodel.cn",
     ),
     OcrProviderPreset(
         id = "openai",
         label = "OpenAI",
         baseUrl = "https://api.openai.com/v1",
         model = "gpt-4o-mini",
-        hint = "platform.openai.com",
     ),
     OcrProviderPreset(
         id = "qwen",
         label = "通义千问 VL",
         baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1",
         model = "qwen-vl-plus",
-        hint = "dashscope.aliyuncs.com",
     ),
     OcrProviderPreset(
         id = "moonshot",
         label = "Kimi (Moonshot)",
         baseUrl = "https://api.moonshot.cn/v1",
         model = "moonshot-v1-8k-vision-preview",
-        hint = "platform.moonshot.cn",
     ),
     OcrProviderPreset(
         id = "siliconflow",
         label = "硅基流动",
         baseUrl = "https://api.siliconflow.cn/v1",
         model = "Qwen/Qwen2-VL-7B-Instruct",
-        hint = "siliconflow.cn",
     ),
     OcrProviderPreset(
         id = "openrouter",
         label = "OpenRouter",
         baseUrl = "https://openrouter.ai/api/v1",
         model = "google/gemini-flash-1.5",
-        hint = "openrouter.ai",
     ),
     OcrProviderPreset(
         id = "ollama",
         label = "Ollama (本地)",
         baseUrl = "http://localhost:11434/v1",
         model = "llama3.2-vision",
-        hint = "无需 KEY，需开启本地服务",
     ),
     OcrProviderPreset(id = "custom", label = "自定义", baseUrl = "", model = ""),
 )

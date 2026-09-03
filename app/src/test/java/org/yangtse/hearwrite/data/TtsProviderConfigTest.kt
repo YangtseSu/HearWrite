@@ -50,7 +50,6 @@ class TtsProviderConfigTest {
         val zhipu = TTS_PROVIDER_PRESETS[1]
         assertEquals(TtsApiKind.SPEECH, zhipu.api)
         assertEquals("wav", zhipu.responseFormat)
-        assertEquals("", TTS_PROVIDER_PRESETS[4].hint)
         assertEquals("mimo", DEFAULT_TTS_PRESET.id)
     }
 
