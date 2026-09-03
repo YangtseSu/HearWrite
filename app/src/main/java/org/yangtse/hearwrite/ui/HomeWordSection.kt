@@ -78,7 +78,11 @@ fun WordListSection(
                 .padding(bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("单词列表", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "单词列表",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
             if (wordCount > 0) {
                 Spacer(Modifier.width(8.dp))
                 CountBadge(wordCount)
@@ -96,7 +100,6 @@ fun WordListSection(
                 }
             }
         }
-
         if (displayMode && wordCount > 0) {
             WordDisplayList(
                 draft = draft,

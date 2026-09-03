@@ -1,6 +1,5 @@
 package org.yangtse.hearwrite.ui
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -81,8 +80,9 @@ fun HomePlaybackPanel(
             }
 
             Row(
-                modifier = Modifier.padding(top = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -99,6 +99,7 @@ fun HomePlaybackPanel(
                             .semantics { contentDescription = "自动播放下一个词" },
                     )
                 }
+                Spacer(Modifier.weight(1f))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         "随机顺序",

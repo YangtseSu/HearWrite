@@ -173,7 +173,7 @@ fun HomeScreen(
                 modifier = Modifier.size(24.dp),
             )
             Spacer(Modifier.width(8.dp))
-            Text("HearWrite", style = MaterialTheme.typography.titleLarge)
+            Text("HearWrite", style = MaterialTheme.typography.titleLarge, color = colors.onBackground)
             Spacer(Modifier.width(6.dp))
             Text("听写", style = MaterialTheme.typography.titleLarge, color = colors.primary)
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
