@@ -179,28 +179,36 @@ private fun SettingsHub(
         ) {
             SettingsSectionHeader("外观")
             SettingsCard {
-                Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp)) {
-                    Text("主题", style = MaterialTheme.typography.bodyLarge)
-                    Row(
-                        modifier = Modifier.padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        FilterChip(
-                            selected = theme == ThemeMode.SYSTEM,
-                            onClick = { viewModel.onThemeChange(ThemeMode.SYSTEM) },
-                            label = { Text("跟随系统") },
-                        )
-                        FilterChip(
-                            selected = theme == ThemeMode.LIGHT,
-                            onClick = { viewModel.onThemeChange(ThemeMode.LIGHT) },
-                            label = { Text("浅色") },
-                        )
-                        FilterChip(
-                            selected = theme == ThemeMode.DARK,
-                            onClick = { viewModel.onThemeChange(ThemeMode.DARK) },
-                            label = { Text("深色") },
-                        )
-                    }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(
+                        selected = theme == ThemeMode.LIGHT,
+                        onClick = { viewModel.onThemeChange(ThemeMode.LIGHT) },
+                        label = { Text("浅色", style = MaterialTheme.typography.bodyLarge) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                    )
+                    FilterChip(
+                        selected = theme == ThemeMode.DARK,
+                        onClick = { viewModel.onThemeChange(ThemeMode.DARK) },
+                        label = { Text("深色", style = MaterialTheme.typography.bodyLarge) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                    )
+                    FilterChip(
+                        selected = theme == ThemeMode.SYSTEM,
+                        onClick = { viewModel.onThemeChange(ThemeMode.SYSTEM) },
+                        label = { Text("跟随系统", style = MaterialTheme.typography.bodyLarge) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                    )
                 }
             }
 
@@ -231,8 +239,7 @@ private fun SettingsHub(
                 }
                 HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
                 SettingsRow(
-                    title = "朗读释义",
-                    supporting = "英文词朗读后跟读中文释义",
+                    title = "英文词朗读后跟读中文释义",
                     leading = { Icon(Icons.Outlined.Translate, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailing = {
                         Switch(
@@ -273,7 +280,6 @@ private fun SettingsHub(
                 )
                 SettingsRow(
                     title = "提示音",
-                    supporting = "倒计时最后一秒的滴答声与完成时的提示音",
                     leading = { Icon(Icons.Outlined.VolumeUp, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailing = {
                         Switch(
@@ -286,7 +292,6 @@ private fun SettingsHub(
                 )
                 SettingsRow(
                     title = "清空发音缓存",
-                    supporting = "删除已下载的发音文件，之后按需重新下载",
                     leading = { Icon(Icons.Outlined.DeleteSweep, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailing = {
                         val info = cacheInfo
