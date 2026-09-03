@@ -18,19 +18,24 @@ import org.yangtse.hearwrite.domain.Speaker
 import org.yangtse.hearwrite.domain.TtsSource
 
 /**
- * The word-pass TTS chain (AGENTS.md "TTS priority chain", phase 7): when the
- * source is [TtsSource.YOUDAO], a **ready cached clip only** plays through
- * [MediaPlayer]; a cache miss or playback failure falls straight through to
- * the system [Speaker] — [speak] never waits for a download. The 组词 phrase
- * pass stays pinned to the system speaker (engine `phraseSpeaker`), and
- * [TtsSource.SYSTEM] routes everything straight to it.
+ * The word-pass TTS chain (AGENTS.md "TTS priority chain"): **ready cached
+ * clips only** play through [MediaPlayer] — [speak] never waits for a
+ * download. Link order by source:
+ * - [TtsSource.YOUDAO]: Youdao ready clip → system voice.
+ * - [TtsSource.CUSTOM]: provider ready clip → Youdao ready clip → system
+ *   voice (the OpenAI-compatible provider from Settings; unconfigured or
+ *   failing links fall straight through).
+ * - [TtsSource.SYSTEM]: everything straight to the system voice.
  *
- * Clip playback contract (AGENTS.md): `MediaPlayer` guarded by a completion
- * listener **plus a 10 s watchdog** so a stuck clip can never freeze
- * dictation; [stop] interrupts the current clip and the system utterance.
+ * The 组词 phrase pass stays pinned to the system speaker (engine
+ * `phraseSpeaker`). Clip playback contract (AGENTS.md): `MediaPlayer`
+ * guarded by a completion listener **plus a 10 s watchdog** so a stuck clip
+ * can never freeze dictation; [stop] interrupts the current clip, the
+ * system utterance and the fallback (a stopped session never speaks).
  */
 class TtsChainSpeaker(
     private val youdaoTts: YoudaoTts,
+    private val provider: OpenAiCompatibleTts,
     private val system: SystemSpeaker,
 ) : Speaker {
 
@@ -48,10 +53,13 @@ class TtsChainSpeaker(
         source = value
     }
 
-    /** Background-warm [text]/[lang]; no-op unless Youdao is the active source. */
+    /** Background-warm [text]/[lang] on the active source's cache. */
     suspend fun prefetch(text: String, lang: String) {
-        if (source == TtsSource.YOUDAO && text.isNotBlank()) {
-            youdaoTts.prefetch(text, lang)
+        if (text.isBlank()) return
+        when (source) {
+            TtsSource.YOUDAO -> youdaoTts.prefetch(text, lang)
+            TtsSource.CUSTOM -> provider.prefetch(text)
+            TtsSource.SYSTEM -> Unit
         }
     }
 
@@ -65,17 +73,14 @@ class TtsChainSpeaker(
         }
 
         // Ready-cached audio only — a miss degrades instantly, never blocks.
-        val clip = youdaoTts.cachedClip(trimmed, lang)
-        if (clip == null) {
-            return system.speak(trimmed, lang)
+        for (clip in cachedClips(trimmed, lang)) {
+            val ok = playClip(clip)
+            if (ok || interrupted) {
+                // Heard, or stopped by pause/skip/leave: no second attempt.
+                return ok
+            }
+            Log.w(TAG, "clip playback failed, trying the next link: ${clip.name}")
         }
-
-        val ok = playClip(clip)
-        if (ok || interrupted) {
-            // Heard, or stopped by pause/skip/leave: no second attempt.
-            return ok
-        }
-        Log.w(TAG, "clip playback failed, falling back to system TTS: \"$trimmed\"")
         system.speak(trimmed, lang)
     } catch (e: CancellationException) {
         // The playback run was cancelled (pause/skip/stop/leave); propagate.
@@ -92,6 +97,24 @@ class TtsChainSpeaker(
         activeClip?.finish(false, "stop")
         system.stop()
     }
+
+    /**
+     * Ready cached clips for [trimmed] in link order (see the class KDoc).
+     * The provider link only exists when its config is set — an
+     * unconfigured custom source degrades to youdao → system.
+     */
+    private fun cachedClips(trimmed: String, lang: String): List<File> = when (source) {
+        TtsSource.SYSTEM -> emptyList()
+        TtsSource.CUSTOM ->
+            listOfNotNull(provider.cachedClip(trimmed), youdaoTts.cachedClip(trimmed, lang))
+        TtsSource.YOUDAO -> listOfNotNull(youdaoTts.cachedClip(trimmed, lang))
+    }
+
+    /**
+     * Play one clip file outside a dictation session — the settings
+     * 测试并试听 path. Same watchdog/cancellation contract as session clips.
+     */
+    suspend fun playTestClip(file: File): Boolean = playClip(file)
 
     /**
      * Play one cached clip, suspending until it completes or fails. A 10 s

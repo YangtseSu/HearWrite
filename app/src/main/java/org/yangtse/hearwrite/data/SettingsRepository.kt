@@ -73,6 +73,22 @@ class SettingsRepository(private val context: Context) {
         dataStore.edit { it[KEY_OCR_PROVIDER_CONFIG] = encodeOcrConfig(cfg) }
     }
 
+    /** Custom OpenAI-compatible TTS provider config (自定义音源) — null when unset/unparseable. */
+    val ttsProviderConfig: Flow<TtsProviderConfig?> = dataStore.data.map { prefs ->
+        prefs[KEY_TTS_PROVIDER_CONFIG]?.let(::decodeTtsProviderConfig)
+    }
+
+    /** Persist (or clear, with null) the custom TTS provider config. */
+    suspend fun setTtsProviderConfig(cfg: TtsProviderConfig?) {
+        dataStore.edit {
+            if (cfg == null) {
+                it.remove(KEY_TTS_PROVIDER_CONFIG)
+            } else {
+                it[KEY_TTS_PROVIDER_CONFIG] = encodeTtsProviderConfig(cfg)
+            }
+        }
+    }
+
     suspend fun setDraft(value: String) {
         dataStore.edit { it[KEY_DRAFT] = value }
     }
@@ -138,6 +154,7 @@ class SettingsRepository(private val context: Context) {
         val KEY_TTS_SOURCE = stringPreferencesKey("tts_source")
         val KEY_SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         val KEY_OCR_PROVIDER_CONFIG = stringPreferencesKey("ocr_provider_config")
+        val KEY_TTS_PROVIDER_CONFIG = stringPreferencesKey("tts_provider_config")
 
         val ocrJson = Json { ignoreUnknownKeys = true }
     }

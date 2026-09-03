@@ -10,6 +10,7 @@ import org.yangtse.hearwrite.data.FavoritesRepository
 import org.yangtse.hearwrite.data.HearWriteDatabase
 import org.yangtse.hearwrite.data.HistoryRepository
 import org.yangtse.hearwrite.data.OcrService
+import org.yangtse.hearwrite.data.OpenAiCompatibleTts
 import org.yangtse.hearwrite.data.SettingsRepository
 import org.yangtse.hearwrite.data.SoundEffects
 import org.yangtse.hearwrite.data.SystemSpeaker
@@ -37,11 +38,21 @@ class HearWriteApplication : Application() {
     val youdaoTts: YoudaoTts by lazy { YoudaoTts(this) }
 
     /**
-     * The word-pass voice chain: Youdao ready-cache → system TTS, chosen by
-     * the persisted source (AGENTS.md "TTS priority chain").
+     * Optional OpenAI-compatible TTS (自定义音源): config + rate follow the
+     * DataStore settings; downloads are disk-cached with a per-clip single
+     * flight. Never touched on the startup path.
+     */
+    val openAiCompatibleTts: OpenAiCompatibleTts by lazy {
+        OpenAiCompatibleTts(this, settingsRepository)
+    }
+
+    /**
+     * The word-pass voice chain: (custom provider ready-cache →) Youdao
+     * ready-cache → system TTS, chosen by the persisted source (AGENTS.md
+     * "TTS priority chain").
      */
     val ttsChain: TtsChainSpeaker by lazy {
-        TtsChainSpeaker(youdaoTts, systemSpeaker)
+        TtsChainSpeaker(youdaoTts, openAiCompatibleTts, systemSpeaker)
     }
 
     /** tick/chime UI sounds (提示音 setting). */
