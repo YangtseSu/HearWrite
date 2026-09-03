@@ -203,7 +203,11 @@ fun HomeScreen(
                 }
             }
             IconButton(onClick = { showMenu = true }) {
-                Icon(Icons.Filled.Menu, contentDescription = "菜单")
+                Icon(
+                    Icons.Filled.Menu,
+                    contentDescription = "菜单",
+                    tint = colors.onBackground,
+                )
             }
         }
 
