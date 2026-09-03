@@ -17,10 +17,15 @@ gh repo clone YangtseSu/HearWrite && cd HearWrite
 
 ### 1.2 JDK 21
 
-`gradle.properties` 将 Gradle 守护进程固定到 `org.gradle.java.home=/usr/lib/jvm/java-21-openjdk`。
+守护进程 JDK 的选择**不入库**（仓库的 `gradle.properties` 不提交 `org.gradle.java.home`），在用户级 `~/.gradle/gradle.properties` 固定——每台机器各自的设置：
+
+```bash
+# ~/.gradle/gradle.properties（本机已配置）
+org.gradle.java.home=/usr/lib/jvm/java-21-openjdk
+```
 
 - Arch 系 Linux：`sudo pacman -S jdk21-openjdk`——路径一致，无需改动。
-- 其他操作系统/发行版：路径不同（如 Debian/Ubuntu 上是 `java-21-openjdk-amd64`）。把那一行改成本地 JDK 21 路径，并**保持该改动不入库**（这是每台机器各自的设置）。
+- 其他操作系统/发行版：路径不同（如 Debian/Ubuntu 上是 `java-21-openjdk-amd64`），改用户级配置里的路径即可；也可以用环境变量 `JAVA_HOME` 指向 JDK 21。
 
 任何 JVM ≥ 21 都能运行守护进程；编译目标在 `app/build.gradle.kts` 中固定为 Java 21。
 

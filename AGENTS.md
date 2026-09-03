@@ -15,7 +15,7 @@ This is a **from-scratch Kotlin + Jetpack Compose rewrite** of [`YangtseSu/alice
 
 | Tool | Version | Notes |
 | --- | --- | --- |
-| JDK | 21+ (JDK 26 installed; Gradle daemon runs on 21) | toolchain language level 21 |
+| JDK | 21+ (JDK 26 installed; daemon pinned to 21 via user-level `~/.gradle/gradle.properties`, never committed) | toolchain language level 21 |
 | Gradle | 9.7.1 (wrapper) | machine has Gradle 9.7.1 installed |
 | AGP | 9.3.0 | max API 37, needs Gradle ≥ 9.5.0 |
 | Kotlin | 2.4.10 | Compose compiler via `org.jetbrains.kotlin.plugin.compose` |
