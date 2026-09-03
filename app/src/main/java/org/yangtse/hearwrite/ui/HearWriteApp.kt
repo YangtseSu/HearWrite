@@ -45,7 +45,12 @@ fun HearWriteApp() {
             )
         }
         composable(Routes.DICTATION) {
-            DictationScreen(onClose = { navController.popBackStack() })
+            // Every exit funnels through onClose (finish card, stop dialog,
+            // back confirmation) — always land Home, whatever page launched
+            // the session; the pop clears any library stack left behind.
+            DictationScreen(onClose = {
+                navController.popBackStack(Routes.HOME, false)
+            })
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(onClose = { navController.popBackStack() })
