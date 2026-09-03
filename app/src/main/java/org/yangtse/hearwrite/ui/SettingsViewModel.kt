@@ -20,6 +20,10 @@ import org.yangtse.hearwrite.data.TtsProviderException
 import org.yangtse.hearwrite.data.TtsProviderPreset
 import org.yangtse.hearwrite.domain.MAX_SPEECH_RATE
 import org.yangtse.hearwrite.domain.MIN_SPEECH_RATE
+import org.yangtse.hearwrite.domain.DEFAULT_INTERVAL_SEC
+import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
+import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
+import org.yangtse.hearwrite.domain.ThemeMode
 import org.yangtse.hearwrite.domain.TtsSource
 import kotlin.math.roundToInt
 
@@ -40,13 +44,15 @@ sealed interface TtsTestState {
 }
 
 /**
- * Settings screen state: 语速 and 朗读释义 persist through the DataStore
- * settings repository; the rate applies live to the shared system speaker.
- * TTS 来源 (youdao/system) and 提示音 toggle ride the same repository and take
- * effect from the next dictation session. The OCR 识别 section edits the BYOK
- * vision-provider config (default preset 智谱 GLM-4V-Flash), with a 测试连接
- * button against the entered fields; 保存 writes it to DataStore. Interval/
- * auto-next live on the dictation screen; Phase 10 consolidates the screen.
+ * Settings screen state: 听写 (语速, 默认间隔, 自动播报, 朗读释义), 语音
+ * (发音来源 incl. the OpenAI-compatible custom provider form, 提示音),
+ * OCR 识别 (BYOK vision provider) and 外观 (主题 system/light/dark) all
+ * persist through the DataStore settings repository; the rate applies live
+ * to the shared system speaker. Interval/auto-next are also adjustable live
+ * on the dictation screen — both write the same keys. The OCR 识别 section
+ * edits the BYOK vision-provider config (default preset 智谱 GLM-4V-Flash),
+ * with a 测试连接 button against the entered fields; 保存 writes it to
+ * DataStore.
  */
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -67,6 +73,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private val _soundEnabled = MutableStateFlow(true)
     val soundEnabled: StateFlow<Boolean> = _soundEnabled.asStateFlow()
+
+    private val _intervalSec = MutableStateFlow(DEFAULT_INTERVAL_SEC)
+    val intervalSec: StateFlow<Double> = _intervalSec.asStateFlow()
+
+    private val _autoNext = MutableStateFlow(true)
+    val autoNext: StateFlow<Boolean> = _autoNext.asStateFlow()
+
+    private val _theme = MutableStateFlow(ThemeMode.SYSTEM)
+    val theme: StateFlow<ThemeMode> = _theme.asStateFlow()
 
     // ---- OCR 识别 (拍照识词) BYOK config fields ----------------------------
 
@@ -120,6 +135,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { _readTranslation.value = settings.readTranslation.first() }
         viewModelScope.launch { _ttsSource.value = settings.ttsSource.first() }
         viewModelScope.launch { _soundEnabled.value = settings.soundEnabled.first() }
+        viewModelScope.launch { _intervalSec.value = settings.intervalSec.first() }
+        viewModelScope.launch { _autoNext.value = settings.autoNext.first() }
+        viewModelScope.launch { _theme.value = settings.theme.first() }
         // Prefill with the stored config; the default preset 智谱 GLM-4V-Flash
         // when none is saved yet (the apiKey stays blank until the user
         // pastes their own — BYOK only).
@@ -178,6 +196,24 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun onSoundEnabledChange(on: Boolean) {
         _soundEnabled.value = on
         viewModelScope.launch { settings.setSoundEnabled(on) }
+    }
+
+    fun onIntervalChange(sec: Float) {
+        // Slider drags emit float noise; snap to the 0.5 s storage step.
+        val snapped = (sec.coerceIn(MIN_INTERVAL_SEC.toFloat(), MAX_INTERVAL_SEC.toFloat()) * 2)
+            .roundToInt() / 2.0
+        _intervalSec.value = snapped
+        viewModelScope.launch { settings.setIntervalSec(snapped) }
+    }
+
+    fun onAutoNextChange(on: Boolean) {
+        _autoNext.value = on
+        viewModelScope.launch { settings.setAutoNext(on) }
+    }
+
+    fun onThemeChange(mode: ThemeMode) {
+        _theme.value = mode
+        viewModelScope.launch { settings.setTheme(mode) }
     }
 
     // --------------------------------- 自定义音源 (OpenAI-compatible TTS)

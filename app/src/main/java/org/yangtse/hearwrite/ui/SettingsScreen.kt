@@ -52,19 +52,22 @@ import org.yangtse.hearwrite.data.OCR_DISCLAIMER
 import org.yangtse.hearwrite.data.OCR_PROVIDER_PRESETS
 import org.yangtse.hearwrite.data.TTS_PROVIDER_PRESETS
 import org.yangtse.hearwrite.data.TtsApiKind
+import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MAX_SPEECH_RATE
+import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_SPEECH_RATE
+import org.yangtse.hearwrite.domain.ThemeMode
 import org.yangtse.hearwrite.domain.TtsSource
 import java.util.Locale
 
 /**
- * Playback settings: 语速 (system TTS rate, applied live), 朗读释义, the TTS
- * source (有道词典/自定义音源/系统语音 — the custom one expands into the
- * OpenAI-compatible provider form: presets incl. 小米 MiMo, api wire shape,
- * baseUrl/apiKey/model/voices/format fields, 测试并试听 and 保存) and 提示音.
- * The OCR 识别 section configures the BYOK vision provider (拍照识词).
- * Interval/auto-next are adjusted on the dictation screen itself; Phase 10
- * consolidates the remaining settings.
+ * Consolidated settings: 外观 (主题 跟随系统/浅色/深色), 听写 (语速,
+ * 默认间隔, 自动播报, 朗读释义), 语音 (发音来源 有道词典/自定义音源/系统语音
+ * — the custom one expands into the OpenAI-compatible provider form: presets
+ * incl. 小米 MiMo, api wire shape, baseUrl/apiKey/model/voices/format fields,
+ * 测试并试听 and 保存 — plus 提示音) and the OCR 识别 section (BYOK vision
+ * provider for 拍照识词). 默认间隔/自动播报 are additionally adjustable live
+ * on the dictation screen; both write the same DataStore keys.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,6 +80,9 @@ fun SettingsScreen(
     val readTranslation by viewModel.readTranslation.collectAsStateWithLifecycle()
     val ttsSource by viewModel.ttsSource.collectAsStateWithLifecycle()
     val soundEnabled by viewModel.soundEnabled.collectAsStateWithLifecycle()
+    val intervalSec by viewModel.intervalSec.collectAsStateWithLifecycle()
+    val autoNext by viewModel.autoNext.collectAsStateWithLifecycle()
+    val theme by viewModel.theme.collectAsStateWithLifecycle()
     val ocrBaseUrl by viewModel.ocrBaseUrl.collectAsStateWithLifecycle()
     val ocrApiKey by viewModel.ocrApiKey.collectAsStateWithLifecycle()
     val ocrModel by viewModel.ocrModel.collectAsStateWithLifecycle()
@@ -122,6 +128,39 @@ fun SettingsScreen(
                 .padding(horizontal = 20.dp),
         ) {
             Text(
+                "外观",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(top = 20.dp, bottom = 4.dp),
+            )
+            HorizontalDivider()
+
+            // ---- 主题 --------------------------------------------------------
+            Column(modifier = Modifier.padding(top = 12.dp)) {
+                Text("主题", style = MaterialTheme.typography.bodyLarge)
+                Row(
+                    modifier = Modifier.padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(
+                        selected = theme == ThemeMode.SYSTEM,
+                        onClick = { viewModel.onThemeChange(ThemeMode.SYSTEM) },
+                        label = { Text("跟随系统") },
+                    )
+                    FilterChip(
+                        selected = theme == ThemeMode.LIGHT,
+                        onClick = { viewModel.onThemeChange(ThemeMode.LIGHT) },
+                        label = { Text("浅色") },
+                    )
+                    FilterChip(
+                        selected = theme == ThemeMode.DARK,
+                        onClick = { viewModel.onThemeChange(ThemeMode.DARK) },
+                        label = { Text("深色") },
+                    )
+                }
+            }
+
+            Text(
                 "听写",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary,
@@ -147,6 +186,49 @@ fun SettingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .semantics { contentDescription = "听写语速" },
+                )
+            }
+
+            // ---- 默认间隔 ---------------------------------------------------
+            Column(modifier = Modifier.padding(top = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("默认间隔", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Text(
+                        String.format(Locale.ROOT, "%.1f 秒", intervalSec),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Slider(
+                    value = intervalSec.toFloat(),
+                    onValueChange = viewModel::onIntervalChange,
+                    valueRange = MIN_INTERVAL_SEC.toFloat()..MAX_INTERVAL_SEC.toFloat(),
+                    steps = 17, // 0.5 s steps
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { contentDescription = "默认听写间隔秒数" },
+                )
+            }
+
+            // ---- 自动播报 ---------------------------------------------------
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("自动播报", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "当前词听写完毕后自动播放下一个词",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = autoNext,
+                    onCheckedChange = viewModel::onAutoNextChange,
+                    modifier = Modifier.semantics { contentDescription = "自动播放下一个词" },
                 )
             }
 

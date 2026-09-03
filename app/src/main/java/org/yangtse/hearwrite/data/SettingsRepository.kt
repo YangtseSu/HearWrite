@@ -18,6 +18,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.yangtse.hearwrite.domain.DEFAULT_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.DEFAULT_SPEECH_RATE
+import org.yangtse.hearwrite.domain.ThemeMode
 import org.yangtse.hearwrite.domain.TtsSource
 
 private val Context.settingsDataStore by preferencesDataStore(name = "settings")
@@ -59,6 +60,11 @@ class SettingsRepository(private val context: Context) {
     /** 提示音 (countdown tick + completion chime): default on. */
     val soundEnabled: Flow<Boolean> =
         dataStore.data.map { it[KEY_SOUND_ENABLED] ?: true }
+
+    /** App theme: system/light/dark (default system). */
+    val theme: Flow<ThemeMode> = dataStore.data.map { prefs ->
+        ThemeMode.fromStored(prefs[KEY_THEME])
+    }
 
     /**
      * BYOK OCR provider config (拍照识词) stored as one JSON blob — null when
@@ -109,6 +115,10 @@ class SettingsRepository(private val context: Context) {
         dataStore.edit { it[KEY_READ_TRANSLATION] = on }
     }
 
+    suspend fun setTheme(mode: ThemeMode) {
+        dataStore.edit { it[KEY_THEME] = mode.name.lowercase() }
+    }
+
     suspend fun setTtsSource(source: TtsSource) {
         dataStore.edit { it[KEY_TTS_SOURCE] = source.name.lowercase() }
     }
@@ -153,6 +163,7 @@ class SettingsRepository(private val context: Context) {
         val KEY_READ_TRANSLATION = booleanPreferencesKey("read_translation")
         val KEY_TTS_SOURCE = stringPreferencesKey("tts_source")
         val KEY_SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
+        val KEY_THEME = stringPreferencesKey("theme")
         val KEY_OCR_PROVIDER_CONFIG = stringPreferencesKey("ocr_provider_config")
         val KEY_TTS_PROVIDER_CONFIG = stringPreferencesKey("tts_provider_config")
 
