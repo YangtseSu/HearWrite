@@ -30,10 +30,8 @@ android {
             keyPassword = keystoreProps.getProperty("keyPassword")
         }
     }
-    namespace = "org.yangtse.hearwrite"
-    compileSdk = 37
 
-defaultConfig {
+    defaultConfig {
         applicationId = "org.yangtse.hearwrite"
         minSdk = 36
         targetSdk = 37
@@ -104,6 +102,9 @@ dependencies {
 
     // Youdao dict-voice downloads (TTS priority chain).
     implementation(libs.okhttp)
+
+    // EXIF orientation for the OCR crop decode (androidx exifinterface).
+    implementation(libs.androidx.exifinterface)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
