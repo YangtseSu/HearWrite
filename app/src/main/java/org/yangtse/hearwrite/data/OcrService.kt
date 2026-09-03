@@ -30,8 +30,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import org.yangtse.hearwrite.domain.entryToLine
-import org.yangtse.hearwrite.domain.parseWordEntries
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -120,9 +118,13 @@ private sealed interface PostResult {
  * OpenAI-compatible vision OCR (拍照识词): image compression to a ≤1600 px
  * JPEG 0.82 data URL and the `/chat/completions` call with an `image_url`
  * content part. BYOK only — the provider config comes from the DataStore
- * settings (user's own key, never embedded). The reply is parsed line by
- * line with the domain word-line parser (code fences stripped). Every failure
- * degrades to a Chinese error message; the caller surfaces it with a retry.
+ * settings (user's own key, never embedded). The reply is filtered by the
+ * language-specific OCR extractor (alice `extractWordsFromOcrText` /
+ * `extractChineseWordsFromOcrText`) before the standard line parse: English
+ * keeps only ASCII word lines — 音标 and Chinese text never survive; Chinese
+ * keeps only 汉字 runs — pinyin, English and digits are dropped. Every
+ * failure degrades to a Chinese error message; the caller surfaces it with a
+ * retry.
  */
 class OcrService(
     private val context: Context,
@@ -281,9 +283,9 @@ class OcrService(
     }
 
     /**
-     * POST the image to `/chat/completions` and parse the reply into word
-     * lines with the standard parser (fences stripped). Errors are Chinese
-     * messages ready for the UI.
+     * POST the image to `/chat/completions`; the reply passes the
+     * language-specific extractor ([extractOcrLines]) into word lines.
+     * Errors are Chinese messages ready for the UI.
      */
     suspend fun recognize(dataUrl: String, lang: OcrLang): OcrOutcome {
         val cfg = config()
@@ -320,11 +322,14 @@ class OcrService(
                         if (detail.isEmpty()) "视觉识别服务异常" else "视觉识别失败: $detail"
                     )
                 } else {
-                    val lines = ocrReplyLines(parseReplyContent(result.body))
+                    val rawText = parseReplyContent(result.body)
+                    val lines = extractOcrLines(rawText, lang)
                     if (lines.isEmpty()) {
-                        OcrOutcome.Error(ocrEmptyMessage(lang))
+                        // Alice distinguishes "the model said nothing" from
+                        // "the model answered but nothing usable survived".
+                        OcrOutcome.Error(ocrEmptyMessage(lang, unparsed = rawText.isNotBlank()))
                     } else {
-                        OcrOutcome.Success(lines)
+                        OcrOutcome.Success(lines.joinToString("\n"))
                     }
                 }
             }
@@ -417,25 +422,6 @@ class OcrService(
 }
 
 /**
- * Strip a surrounding markdown code fence (vision models sometimes wrap the
- * whole reply in ``` ```) and normalize line breaks. Only an outer fence
- * around the reply is removed; inner content is untouched.
- */
-internal fun stripOuterFence(text: String): String {
-    var t = text.trim()
-    if (t.startsWith("```")) {
-        val firstNl = t.indexOf('\n')
-        if (firstNl != -1) {
-            t = t.substring(firstNl + 1)
-            val lastFence = t.lastIndexOf("```")
-            if (lastFence != -1) t = t.substring(0, lastFence)
-            t = t.trim()
-        }
-    }
-    return t
-}
-
-/**
  * Extract `choices[0].message.content` from a chat/completions reply, trimmed
  * ("" when absent/unparseable).
  */
@@ -460,18 +446,183 @@ internal fun errorDetail(body: String): String = try {
 }
 
 /**
- * Parse vision-model reply lines with the standard word-line parser (1/3
- * columns, fullwidth pipe) into canonical lines; fences stripped first.
- * Empty input yields "".
+ * Route a vision reply through the extractor of the recognition language
+ * (alice picks `extractChineseWordsFromOcrText` vs `extractWordsFromOcrText`
+ * the same way). English keeps only English word lines — 音标 and Chinese
+ * never reach the list; Chinese keeps only 汉字 runs — pinyin, English and
+ * digits are dropped.
  */
-internal fun ocrReplyLines(content: String): String {
-    val entries = parseWordEntries(stripOuterFence(content))
-    if (entries.isEmpty()) return ""
-    return entries.joinToString("\n", transform = ::entryToLine)
+internal fun extractOcrLines(rawText: String, lang: OcrLang): List<String> = when (lang) {
+    OcrLang.ENGLISH -> extractEnglishOcrLines(rawText)
+    OcrLang.CHINESE -> extractChineseOcrLines(rawText)
 }
 
-/** Chinese empty-result message per recognition language (alice copy). */
-internal fun ocrEmptyMessage(lang: OcrLang): String = when (lang) {
-    OcrLang.ENGLISH -> "未识别到英文单词，请换一张更清晰的图片再试"
-    OcrLang.CHINESE -> "未识别到中文生字或词语，请换一张更清晰的图片再试"
+/** Fenced ``` ``` block wherever it sits in the reply (alice `normalizeOcrLines`). */
+private val FENCED_BLOCK_RE = Regex("```[\\s\\S]*?```")
+private val FENCE_HEAD_RE = Regex("^```\\w*\\n?")
+private val FENCE_TAIL_RE = Regex("\\n?```$")
+private val CRLF_RE = Regex("\\r\\n?")
+
+/**
+ * Strip markdown fences, normalize newlines, and split into non-empty
+ * trimmed lines (alice `normalizeOcrLines`). Fence markers are removed from
+ * every fenced block; the block content itself survives.
+ */
+internal fun normalizeOcrLines(rawText: String): List<String> =
+    FENCED_BLOCK_RE.replace(rawText) { block ->
+        block.value.replace(FENCE_HEAD_RE, "").replace(FENCE_TAIL_RE, "")
+    }
+        .replace(CRLF_RE, "\n")
+        .split('\n')
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+
+/**
+ * Real dictation phrases are almost never longer than this many
+ * space-separated tokens ("ice cream", "look forward to", "actor / actress");
+ * longer runs are treated as a failed one-line dump from the vision model
+ * (alice `MAX_PHRASE_TOKENS`).
+ */
+private const val MAX_PHRASE_TOKENS = 4
+
+/** Strip list markers, wrapping quotes, and trailing punctuation (alice `cleanToken`). */
+private val LIST_MARKER_PREFIX_RE = Regex("^[\\d.)\\-•*、]+\\s*")
+private val WRAPPING_QUOTES_RE = Regex("^[\"'`“”‘’]+|[\"'`“”‘’]+\$")
+private val TRAILING_SENTENCE_PUNCT_RE = Regex("[.。:：]+\$")
+private val COMMA_SEP_RE = Regex("[,，;；、]+")
+private val WHITESPACE_RE = Regex("\\s+")
+
+/**
+ * English word/phrase shape: ASCII letters only, with `'` `/` `-` and spaces
+ * (alice `WORD_RE`). IPA symbols and Chinese characters fail it, which is
+ * how 音标/中文 are kept out of English scans.
+ */
+private val WORD_RE = Regex("^[a-zA-Z][a-zA-Z'/\\-\\s]*$")
+
+private fun cleanToken(s: String): String = s
+    .replace(LIST_MARKER_PREFIX_RE, "")
+    .replace(WRAPPING_QUOTES_RE, "")
+    .replace(TRAILING_SENTENCE_PUNCT_RE, "")
+    .trim()
+
+/**
+ * English tokens that start a cleaned token run — the headword phrase.
+ * Null when the run does not start with English, so a row that begins with
+ * Chinese (or pure 音标) is not an English entry at all.
+ */
+private fun englishPhrase(tokenRun: String): String? {
+    val phrase = tokenRun
+        .split(WHITESPACE_RE)
+        .filter { it.isNotEmpty() }
+        .takeWhile { WORD_RE.matches(it) }
+        .take(MAX_PHRASE_TOKENS)
+    return phrase.takeIf { it.isNotEmpty() }?.joinToString(" ")
+}
+
+/**
+ * Candidate words from one cleaned comma-part. Pure-English runs keep
+ * alice's behavior: the whole phrase up to [MAX_PHRASE_TOKENS] tokens,
+ * longer dumps flattened into single tokens. Mixed runs — the word followed
+ * by 音标/词性/中文 (the vision model echoing a textbook row instead of the
+ * `word | pos | meaning` format) — yield the leading English phrase; the
+ * trailing annotations are noise and never become entries.
+ */
+private fun englishCandidates(candidate: String): List<String> {
+    val tokens = candidate.split(WHITESPACE_RE).filter { it.isNotEmpty() }
+    val leading = tokens.takeWhile { WORD_RE.matches(it) }
+    if (leading.isEmpty()) return emptyList()
+    if (leading.size == tokens.size) {
+        return if (leading.size <= MAX_PHRASE_TOKENS) listOf(candidate) else tokens
+    }
+    return if (leading.size <= MAX_PHRASE_TOKENS) listOf(leading.joinToString(" ")) else leading
+}
+
+/**
+ * English-mode extraction (alice `extractWordsFromOcrText` + headword
+ * salvage): per non-empty line, a `|`-enriched entry is kept with its meta
+ * columns; a 音标 run trailing the headword in the word column is dropped.
+ * Plain lines are comma/semicolon-split; each part yields English only —
+ * either the whole phrase (≤ [MAX_PHRASE_TOKENS] tokens), individual tokens
+ * of an over-long dump, or the leading English phrase of a row that also
+ * carries 音标/词性/中文. Chinese text never becomes an entry. Dedupe is
+ * case-insensitive, first occurrence wins.
+ */
+internal fun extractEnglishOcrLines(rawText: String): List<String> {
+    val seen = mutableSetOf<String>()
+    val lines = mutableListOf<String>()
+    for (line in normalizeOcrLines(rawText)) {
+        val pipeIdx = line.indexOf('|')
+        if (pipeIdx != -1) {
+            // Enriched entry: clean & validate the word part, preserve meta.
+            val wordPart = englishPhrase(cleanToken(line.substring(0, pipeIdx)))
+            if (wordPart == null || !seen.add(wordPart.lowercase())) continue
+            val metaParts = line.substring(pipeIdx + 1)
+                .split('|')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            lines += (listOf(wordPart) + metaParts).joinToString(" | ")
+        } else {
+            // Plain line: split by commas/semicolons (the vision model may
+            // ignore one-per-line).
+            for (candidate in line.split(COMMA_SEP_RE).map(::cleanToken).filter { it.isNotEmpty() }) {
+                for (word in englishCandidates(candidate)) {
+                    if (!seen.add(word.lowercase())) continue
+                    lines += word
+                }
+            }
+        }
+    }
+    return lines
+}
+
+/** Continuous 汉字 run: pinyin/English/digits/punctuation split runs apart. */
+private val CJK_RUN_RE = Regex("[\\u4e00-\\u9fff]+")
+private val CJK_CHAR_RE = Regex("[\\u4e00-\\u9fff]")
+/** Fullwidth and ASCII pipes delimit annotation columns on one line. */
+private val OCR_PIPE_RE = Regex("[|｜]")
+
+/** Textbook-page column names/section headers the model emits as entries. */
+private val CJK_STOPWORDS = setOf(
+    "生字", "词语", "拼音", "识字", "生字表", "词语表", "识字表", "写字表",
+    "我会认", "我会写", "读一读", "写一写", "认一认", "练一练", "语文园地", "日积月累",
+)
+
+/**
+ * Chinese-mode extraction (alice `extractChineseWordsFromOcrText`): keeps
+ * only runs of 汉字 — latin (拼音/English), digits and punctuation are
+ * dropped. For `|`-delimited meta lines only the first segment that holds a
+ * 汉字 and is not a column label is taken (later columns are annotations,
+ * not entries). Lines ignoring "one per line" split naturally into separate
+ * runs. 生字/词语 headers are skipped; dedupe, first occurrence wins.
+ */
+internal fun extractChineseOcrLines(rawText: String): List<String> {
+    val seen = mutableSetOf<String>()
+    val words = mutableListOf<String>()
+    for (line in normalizeOcrLines(rawText)) {
+        // Headword segment: first pipe segment holding a 汉字 that is not a
+        // column label (e.g. `词语 | 月亮` → 月亮).
+        val head = line
+            .split(OCR_PIPE_RE)
+            .firstOrNull { seg -> CJK_CHAR_RE.containsMatchIn(seg) && seg.trim() !in CJK_STOPWORDS }
+            ?: continue
+        for (run in CJK_RUN_RE.findAll(head)) {
+            val word = run.value
+            if (word in CJK_STOPWORDS || !seen.add(word)) continue
+            words += word
+        }
+    }
+    return words
+}
+
+/**
+ * OCR empty-result messages per recognition language (alice
+ * `OCR_OUTCOME_MESSAGES`): with `unparsed` = the model answered but nothing
+ * usable survived the language filter (e.g. an English page full of 音标-only
+ * rows); without it = no recognizable reply at all.
+ */
+internal fun ocrEmptyMessage(lang: OcrLang, unparsed: Boolean): String = when {
+    lang == OcrLang.ENGLISH && unparsed -> "未能从识别结果中提取英文单词，请换一张更清晰的单词列表再试"
+    lang == OcrLang.ENGLISH -> "未识别到英文单词，请换一张更清晰的图片再试"
+    lang == OcrLang.CHINESE && unparsed -> "未能从识别结果中提取中文生字或词语，请换一张更清晰的生字/词语表再试"
+    else -> "未识别到中文生字或词语，请换一张更清晰的图片再试"
 }

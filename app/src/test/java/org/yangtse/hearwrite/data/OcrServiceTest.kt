@@ -6,9 +6,10 @@ import org.junit.Test
 
 /**
  * Pure OCR helpers: verbatim upstream prompts (AGENTS.md: keep verbatim from
- * `alice/src/lib/ocr.ts`, sentences joined with no separator), fence
- * stripping, reply content/error extraction and the standard word-line
- * parser round-trip.
+ * `alice/src/lib/ocr.ts`, sentences joined with no separator), reply
+ * content/error extraction, and the language-specific OCR extractors
+ * (English keeps ASCII word lines only — 音标/Chinese never survive; Chinese
+ * keeps 汉字 runs only — pinyin/English/digits dropped).
  */
 class OcrServiceTest {
 
@@ -43,34 +44,204 @@ class OcrServiceTest {
     }
 
     @Test
-    fun stripOuterFence_plainContent_isUntouched() {
-        assertEquals("apple\nbanana", stripOuterFence("apple\nbanana"))
-    }
-
-    @Test
-    fun stripOuterFence_wrappedFence_isRemoved() {
+    fun normalizeOcrLines_plainLines_trimmedNonEmpty() {
         assertEquals(
-            "apple\nbanana",
-            stripOuterFence("```\napple\nbanana\n```"),
+            listOf("apple", "banana"),
+            normalizeOcrLines(" apple \n\n banana "),
         )
     }
 
     @Test
-    fun stripOuterFence_languageTaggedFence_isRemoved() {
+    fun normalizeOcrLines_crlfAndCr_normalized() {
+        assertEquals(listOf("apple", "banana"), normalizeOcrLines("apple\r\nbanana\r"))
+    }
+
+    @Test
+    fun normalizeOcrLines_fencedReply_contentSurvives() {
         assertEquals(
-            "apple | n. | 苹果",
-            stripOuterFence("```text\napple | n. | 苹果\n```\n"),
+            listOf("apple", "banana"),
+            normalizeOcrLines("```\napple\nbanana\n```"),
+        )
+        assertEquals(
+            listOf("apple"),
+            normalizeOcrLines("```text\napple\n```\n"),
         )
     }
 
     @Test
-    fun stripOuterFence_bareFenceNoBody_unchanged() {
-        assertEquals("```", stripOuterFence("```"))
+    fun extractEnglishOcrLines_enrichedAndBareLines_keptInOrder() {
+        assertEquals(
+            listOf("apple | n. | 苹果", "banana", "car | adj. | 汽车"),
+            extractEnglishOcrLines("apple | n. | 苹果\nbanana\ncar | adj. | 汽车\n"),
+        )
     }
 
     @Test
-    fun stripOuterFence_whitespaceTrimmed() {
-        assertEquals("a\nb", stripOuterFence("  \na\nb\n  "))
+    fun extractEnglishOcrLines_mixedRows_headwordSalvaged() {
+        // Model echoed textbook rows (word + 音标 + pos + 中文) instead of
+        // the pipe format: the leading English phrase survives, the
+        // annotations are noise.
+        assertEquals(
+            listOf("apple", "banana"),
+            extractEnglishOcrLines("apple /ˈæpl/ n. 苹果\nbanana"),
+        )
+        assertEquals(
+            listOf("actor", "apple"),
+            extractEnglishOcrLines("actor /ˈæktə(r)/ n. 演员\napple /ˈæpl/ 苹果"),
+        )
+        // Multi-word headword stays one phrase, 音标 run after it dropped.
+        assertEquals(
+            listOf("look forward to"),
+            extractEnglishOcrLines("look forward to /lʊk ˈfɔːwəd tuː/ v. 盼望"),
+        )
+    }
+
+    @Test
+    fun extractEnglishOcrLines_rowNotStartingWithEnglish_dropped() {
+        // Chinese (or pure 音标) leading a row means it is no English entry.
+        assertEquals(emptyList<String>(), extractEnglishOcrLines("苹果 apple"))
+        assertEquals(
+            listOf("banana"),
+            extractEnglishOcrLines("演员 actor\nbanana"),
+        )
+    }
+
+    @Test
+    fun extractEnglishOcrLines_commaDump_splitIntoCandidates() {
+        assertEquals(
+            listOf("apple", "banana", "orange", "pear"),
+            extractEnglishOcrLines("apple, banana; orange、pear"),
+        )
+    }
+
+    @Test
+    fun extractEnglishOcrLines_phraseAndLongRun_handled() {
+        // ≤ MAX_PHRASE_TOKENS stays whole (phrases like "ice cream" survive).
+        assertEquals(listOf("ice cream"), extractEnglishOcrLines("ice cream"))
+        // A longer run is a failed dump → flattened into single tokens.
+        assertEquals(
+            listOf("apple", "banana", "orange", "pear", "grape"),
+            extractEnglishOcrLines("apple banana orange pear grape"),
+        )
+    }
+
+    @Test
+    fun extractEnglishOcrLines_markersQuotesPunctuation_cleaned() {
+        assertEquals(
+            listOf("apple", "banana", "orange"),
+            extractEnglishOcrLines("1. apple\n- banana\n\"orange\""),
+        )
+    }
+
+    @Test
+    fun extractEnglishOcrLines_dedupeCaseInsensitive_firstWins() {
+        assertEquals(
+            listOf("Apple", "banana"),
+            extractEnglishOcrLines("Apple\napple\nbanana"),
+        )
+        // Enriched and bare duplicates share the same seen set.
+        assertEquals(
+            listOf("Apple | n. | 苹果"),
+            extractEnglishOcrLines("Apple | n. | 苹果\napple"),
+        )
+    }
+
+    @Test
+    fun extractEnglishOcrLines_phoneticTrailingHeadwordWithMeta_salvaged() {
+        // 音标 run after the headword in the word column is dropped; meta
+        // columns are preserved.
+        assertEquals(
+            listOf("apple | n. | 苹果", "pear"),
+            extractEnglishOcrLines("apple /ˈæpl/ | n. | 苹果\npear"),
+        )
+    }
+
+    @Test
+    fun extractEnglishOcrLines_fullwidthPipeLine_degradesToBareWord() {
+        // Alice splits on the ASCII pipe only; a fullwidth-pipe line goes
+        // through the plain path, tokens flatten, meta fails WORD_RE.
+        assertEquals(listOf("apple"), extractEnglishOcrLines("apple ｜ n. ｜ 苹果"))
+    }
+
+    @Test
+    fun extractEnglishOcrLines_empty_isEmpty() {
+        assertEquals(emptyList<String>(), extractEnglishOcrLines(""))
+        assertEquals(emptyList<String>(), extractEnglishOcrLines("   \n\n "))
+        assertEquals(emptyList<String>(), extractEnglishOcrLines("```\n```"))
+    }
+
+    @Test
+    fun extractChineseOcrLines_enrichedLine_headwordOnly() {
+        // Later pipe columns are annotations (pinyin 组词), not entries.
+        assertEquals(
+            listOf("月", "学校"),
+            extractChineseOcrLines("月 | yuè | 月亮\n学校 | xuéxiào"),
+        )
+    }
+
+    @Test
+    fun extractChineseOcrLines_pinyinAndLatin_stripped() {
+        assertEquals(
+            listOf("月亮", "月", "学校"),
+            extractChineseOcrLines("月亮 yuèliang\n月(yuè)\napple 123 学校"),
+        )
+    }
+
+    @Test
+    fun extractChineseOcrLines_multiWordLine_splitIntoRuns() {
+        assertEquals(
+            listOf("月", "月亮", "明月"),
+            extractChineseOcrLines("月、月亮 明月"),
+        )
+    }
+
+    @Test
+    fun extractChineseOcrLines_stopwordRuns_skipped() {
+        assertEquals(
+            listOf("月", "月亮", "太阳"),
+            extractChineseOcrLines("生字：月\n词语：月亮\n读一读：太阳"),
+        )
+    }
+
+    @Test
+    fun extractChineseOcrLines_labelSegment_skipped() {
+        assertEquals(
+            listOf("月亮", "星星"),
+            extractChineseOcrLines("词语 | 月亮\n生字表 | 星星"),
+        )
+    }
+
+    @Test
+    fun extractChineseOcrLines_fullwidthPipes_parsed() {
+        assertEquals(
+            listOf("月"),
+            extractChineseOcrLines("月｜yuè｜月亮"),
+        )
+    }
+
+    @Test
+    fun extractChineseOcrLines_dedupe_firstWins() {
+        assertEquals(
+            listOf("月", "月亮"),
+            extractChineseOcrLines("月\n月\n月亮"),
+        )
+    }
+
+    @Test
+    fun extractChineseOcrLines_empty_isEmpty() {
+        assertEquals(emptyList<String>(), extractChineseOcrLines(""))
+        assertEquals(emptyList<String>(), extractChineseOcrLines("yuè pinyin only"))
+        assertEquals(emptyList<String>(), extractChineseOcrLines("拼音 | yuè"))
+    }
+
+    @Test
+    fun extractOcrLines_routesByLanguage() {
+        // Same mixed reply: English mode keeps ASCII words only — the 音标/
+        // Chinese trailing a word is dropped and the headword survives;
+        // Chinese mode keeps only 汉字 runs. The per-language expectation.
+        val mixed = "apple /ˈæpl/ 苹果\n月 yuè\nbanana"
+        assertEquals(listOf("apple", "banana"), extractOcrLines(mixed, OcrLang.ENGLISH))
+        assertEquals(listOf("苹果", "月"), extractOcrLines(mixed, OcrLang.CHINESE))
     }
 
     @Test
@@ -97,40 +268,18 @@ class OcrServiceTest {
     }
 
     @Test
-    fun ocrReplyLines_enrichedLines_roundTripThroughParser() {
-        val content = "apple | n. | 苹果\nbanana\ncar | adj. | 汽车\n"
+    fun emptyMessages_distinguishUnparsedFromEmpty() {
+        // Model said nothing.
+        assertEquals("未识别到英文单词，请换一张更清晰的图片再试", ocrEmptyMessage(OcrLang.ENGLISH, unparsed = false))
+        assertEquals("未识别到中文生字或词语，请换一张更清晰的图片再试", ocrEmptyMessage(OcrLang.CHINESE, unparsed = false))
+        // Model answered but nothing survived the language filter.
         assertEquals(
-            "apple | n. | 苹果\nbanana\ncar | adj. | 汽车",
-            ocrReplyLines(content),
+            "未能从识别结果中提取英文单词，请换一张更清晰的单词列表再试",
+            ocrEmptyMessage(OcrLang.ENGLISH, unparsed = true),
         )
-    }
-
-    @Test
-    fun ocrReplyLines_fencedReply_parsed() {
         assertEquals(
-            "月\n学校",
-            ocrReplyLines("```\n月\n学校\n```"),
+            "未能从识别结果中提取中文生字或词语，请换一张更清晰的生字/词语表再试",
+            ocrEmptyMessage(OcrLang.CHINESE, unparsed = true),
         )
-    }
-
-    @Test
-    fun ocrReplyLines_fullwidthPipes_parsed() {
-        assertEquals(
-            "apple | n. | 苹果",
-            ocrReplyLines("apple ｜ n. ｜ 苹果"),
-        )
-    }
-
-    @Test
-    fun ocrReplyLines_empty_isEmpty() {
-        assertEquals("", ocrReplyLines(""))
-        assertEquals("", ocrReplyLines("   \n\n "))
-        assertEquals("", ocrReplyLines("```\n```"))
-    }
-
-    @Test
-    fun emptyMessages_areChinesePerLang() {
-        assertTrue(ocrEmptyMessage(OcrLang.ENGLISH).contains("英文单词"))
-        assertTrue(ocrEmptyMessage(OcrLang.CHINESE).contains("生字"))
     }
 }
