@@ -94,6 +94,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _ocrModel = MutableStateFlow("")
     val ocrModel: StateFlow<String> = _ocrModel.asStateFlow()
 
+    /** A provider config has been saved (hub row shows the model then). */
+    private val _ocrConfigSaved = MutableStateFlow(false)
+    val ocrConfigSaved: StateFlow<Boolean> = _ocrConfigSaved.asStateFlow()
+
     private val _ocrTestState = MutableStateFlow<OcrTestState>(OcrTestState.Idle)
     val ocrTestState: StateFlow<OcrTestState> = _ocrTestState.asStateFlow()
 
@@ -143,6 +147,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         // pastes their own — BYOK only).
         viewModelScope.launch {
             val cfg = settings.ocrProviderConfig.first()
+            _ocrConfigSaved.value = cfg != null
             if (cfg == null) {
                 _ocrBaseUrl.value = DEFAULT_OCR_PRESET.baseUrl
                 _ocrModel.value = DEFAULT_OCR_PRESET.model
@@ -388,6 +393,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             try {
                 settings.setOcrProviderConfig(cfg)
+                _ocrConfigSaved.value = true
             } catch (e: Exception) {
                 // DataStore failures must never crash the screen (AGENTS.md).
             }
