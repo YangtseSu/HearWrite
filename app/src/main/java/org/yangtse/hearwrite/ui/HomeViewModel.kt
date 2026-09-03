@@ -32,6 +32,7 @@ import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.parseWordEntries
 import org.yangtse.hearwrite.domain.parseWords
+import org.yangtse.hearwrite.domain.prepareStartLines
 
 /** Debounce for draft persistence; the flush on dispose covers the tail. */
 private const val DRAFT_DEBOUNCE_MS = 500L
@@ -385,11 +386,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         try {
             val enriched = enrich(text)
             historyRepository.add(text, enriched)
-            val entries = parseWords(enriched)
-            val clamped = _startIndex.value.coerceIn(0, entries.size - 1)
-            var lines = entries.subList(clamped, entries.size)
-            if (_shuffle.value) lines = lines.shuffled()
-            return lines
+            return prepareStartLines(parseWords(enriched), _startIndex.value, _shuffle.value)
         } finally {
             _starting.value = false
         }

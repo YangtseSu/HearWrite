@@ -20,6 +20,8 @@ import org.yangtse.hearwrite.data.LibraryCategory
 import org.yangtse.hearwrite.data.LibraryList
 import org.yangtse.hearwrite.data.LibrarySearchResult
 import org.yangtse.hearwrite.domain.WordEntry
+import org.yangtse.hearwrite.domain.entryToLine
+import org.yangtse.hearwrite.domain.prepareStartLines
 
 /** Search UI state: idle (no query), loading, or the finished result. */
 sealed interface LibrarySearchState {
@@ -112,6 +114,33 @@ class LibraryPreviewViewModel(
     private val _entries = MutableStateFlow<List<WordEntry>?>(null)
     /** null = still loading. */
     val entries: StateFlow<List<WordEntry>?> = _entries.asStateFlow()
+
+    private val _shuffle = MutableStateFlow(false)
+    /** 随机顺序 — session-local, defaults off (never persisted). */
+    val shuffle: StateFlow<Boolean> = _shuffle.asStateFlow()
+
+    private val _startIndex = MutableStateFlow(0)
+    /** 起始序号: 0-based index of the tapped start word; 0 = whole list. */
+    val startIndex: StateFlow<Int> = _startIndex.asStateFlow()
+
+    fun onShuffleChange(value: Boolean) {
+        _shuffle.value = value
+    }
+
+    fun selectStart(index: Int) {
+        _startIndex.value = index
+    }
+
+    fun resetStart() {
+        _startIndex.value = 0
+    }
+
+    /** Final lines for one start: slice from 起始序号, then 随机顺序 — the same
+     *  ordering Home applies (AGENTS.md playback engine stays dumb). */
+    fun startLines(): List<String> {
+        val current = _entries.value ?: return emptyList()
+        return prepareStartLines(current.map(::entryToLine), _startIndex.value, _shuffle.value)
+    }
 
     init {
         viewModelScope.launch {
