@@ -51,6 +51,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -117,8 +118,10 @@ fun HomeScreen(
 
     // ---- 拍照识词 (OCR) state ----------------------------------------------
     var showOcrSheet by remember { mutableStateOf(false) }
-    var showOcrCrop by remember { mutableStateOf(false) }
-    var ocrLang by remember { mutableStateOf(OcrLang.ENGLISH) }
+    // Saved across configuration changes: the crop step must survive a
+    // rotation mid-selection (the overlay comes back from the VM's bitmap).
+    var showOcrCrop by rememberSaveable { mutableStateOf(false) }
+    var ocrLang by rememberSaveable { mutableStateOf(OcrLang.ENGLISH) }
     // Suppresses a second picker/camera launch while one is open (the VM's
     // Mutex backstop guards the network call itself — AGENTS.md re-entry).
     var pickerOpen by remember { mutableStateOf(false) }

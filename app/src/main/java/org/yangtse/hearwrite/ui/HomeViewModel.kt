@@ -3,10 +3,12 @@ package org.yangtse.hearwrite.ui
 import android.app.Application
 import android.graphics.Bitmap
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlin.math.roundToInt
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -40,6 +42,8 @@ import org.yangtse.hearwrite.domain.prepareStartLines
 
 /** Debounce for draft persistence; the flush on dispose covers the tail. */
 private const val DRAFT_DEBOUNCE_MS = 500L
+
+private const val TAG = "HomeViewModel"
 
 /** One resolvable favorite row for the 收藏 sheet. */
 data class FavoriteUiItem(
@@ -160,6 +164,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     // ---- 选定识别区域 (crop step) ------------------------------------------
 
+    /** Reclaim the decode bitmap whenever the ViewModel goes away. */
+    override fun onCleared() {
+        cropDecodeJob?.cancel()
+        cropDecodeJob = null
+        _cropBitmap.value?.recycle()
+        _cropBitmap.value = null
+        super.onCleared()
+    }
+
     private var cropDecodeJob: Job? = null
 
     /** Crop session id: bumped on start/cancel so stale decode results die. */
@@ -175,21 +188,45 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         // Seed the draft from the persisted value, then watch for changes.
+        // Every seed degrades to its default — a DataStore read failure must
+        // never crash the Home screen (AGENTS.md: every launch catches).
         viewModelScope.launch {
-            _draft.value = settings.draft.first()
+            _draft.value = try {
+                settings.draft.first()
+            } catch (e: Exception) {
+                Log.w(TAG, "draft seed failed", e)
+                ""
+            }
         }
         // Seed the playback settings for the bottom panel (设置页 writes the
         // same keys; the dictation session reads them at start).
         viewModelScope.launch {
-            _intervalSec.value = settings.intervalSec.first()
-            _autoNext.value = settings.autoNext.first()
+            _intervalSec.value = try {
+                settings.intervalSec.first()
+            } catch (e: Exception) {
+                Log.w(TAG, "interval seed failed", e)
+                DEFAULT_INTERVAL_SEC
+            }
+            _autoNext.value = try {
+                settings.autoNext.first()
+            } catch (e: Exception) {
+                Log.w(TAG, "auto-next seed failed", e)
+                true
+            }
         }
         // Persist debounced; flushDraft() covers the pending tail on dispose.
-        @OptIn(ExperimentalCoroutinesApi::class)
+        // One failed write must not kill the collector for the whole process.
+        @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
         viewModelScope.launch {
             _draft.debounce(DRAFT_DEBOUNCE_MS)
                 .distinctUntilChanged()
-                .collect { settings.setDraft(it) }
+                .collect { value ->
+                    try {
+                        settings.setDraft(value)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "draft persist failed", e)
+                    }
+                }
         }
         // Clamp the start index whenever the list shrinks below it.
         viewModelScope.launch {
