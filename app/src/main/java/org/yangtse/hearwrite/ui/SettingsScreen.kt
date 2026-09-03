@@ -2,9 +2,12 @@ package org.yangtse.hearwrite.ui
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -15,13 +18,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.DocumentScanner
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.RecordVoiceOver
-import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
@@ -43,15 +48,18 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import org.yangtse.hearwrite.domain.MAX_SPEECH_RATE
+import org.yangtse.hearwrite.domain.MIN_SPEECH_RATE
+import org.yangtse.hearwrite.domain.ThemeMode
 import org.yangtse.hearwrite.domain.TtsSource
 
 /** One sub-page reachable from the settings hub (each draws its own top bar). */
-private enum class SettingsSubPage { THEME, SPEECH_RATE, VOICE_SOURCE, OCR_PROVIDER, ABOUT }
+private enum class SettingsSubPage { VOICE_SOURCE, OCR_PROVIDER, ABOUT }
 
 /**
  * 设置 — an Android-settings-style hub. Grouped cards list every setting;
- * tappable rows open sub-pages (主题 / 语速 / 发音来源 / 拍照识词 /
- * 关于). System back pops the sub-page first, then leaves 设置 entirely.
+ * tappable rows open sub-pages (发音来源 / 拍照识词 /
+ * 关于); 外观 is an inline FilterChip row and 语速 an inline slider. System back pops the sub-page first, then leaves 设置 entirely.
  * All state lives in the single [SettingsViewModel] shared by hub and
  * sub-pages, so edits made deep in a page show up on the hub immediately.
  */
@@ -73,14 +81,6 @@ fun SettingsScreen(
 
     when (subPage) {
         null -> SettingsHub(onClose = onClose, viewModel = viewModel, onOpen = { subPage = it })
-        SettingsSubPage.THEME -> ThemeSettingsPage(
-            viewModel = viewModel,
-            onBack = { goHub() },
-        )
-        SettingsSubPage.SPEECH_RATE -> SpeechRateSettingsPage(
-            viewModel = viewModel,
-            onBack = { goHub() },
-        )
         SettingsSubPage.VOICE_SOURCE -> VoiceSourceSettingsPage(
             viewModel = viewModel,
             onBack = { goHub() },
@@ -179,25 +179,57 @@ private fun SettingsHub(
         ) {
             SettingsSectionHeader("外观")
             SettingsCard {
-                SettingsRow(
-                    title = "主题",
-                    supporting = "跟随系统或固定浅色 / 深色外观",
-                    leading = { Icon(Icons.Outlined.Palette, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    trailing = { SettingsValueTrailing(themeLabel(theme)) },
-                    divider = false,
-                    onClick = { onOpen(SettingsSubPage.THEME) },
-                )
+                Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp)) {
+                    Text("主题", style = MaterialTheme.typography.bodyLarge)
+                    Row(
+                        modifier = Modifier.padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        FilterChip(
+                            selected = theme == ThemeMode.SYSTEM,
+                            onClick = { viewModel.onThemeChange(ThemeMode.SYSTEM) },
+                            label = { Text("跟随系统") },
+                        )
+                        FilterChip(
+                            selected = theme == ThemeMode.LIGHT,
+                            onClick = { viewModel.onThemeChange(ThemeMode.LIGHT) },
+                            label = { Text("浅色") },
+                        )
+                        FilterChip(
+                            selected = theme == ThemeMode.DARK,
+                            onClick = { viewModel.onThemeChange(ThemeMode.DARK) },
+                            label = { Text("深色") },
+                        )
+                    }
+                }
             }
 
             SettingsSectionHeader("听写")
             SettingsCard {
-                SettingsRow(
-                    title = "语速",
-                    supporting = "朗读速度，0.5–1.5 倍",
-                    leading = { Icon(Icons.Outlined.Speed, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    trailing = { SettingsValueTrailing(formatRate(speechRate)) },
-                    onClick = { onOpen(SettingsSubPage.SPEECH_RATE) },
-                )
+                Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "语速",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            formatRate(speechRate),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    Slider(
+                        value = speechRate,
+                        onValueChange = viewModel::onSpeechRateChange,
+                        valueRange = MIN_SPEECH_RATE..MAX_SPEECH_RATE,
+                        steps = 9, // 0.1 steps → 11 stops incl. endpoints
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { contentDescription = "听写语速" },
+                    )
+                }
+                HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
                 SettingsRow(
                     title = "朗读释义",
                     supporting = "英文词朗读后跟读中文释义",
@@ -209,6 +241,7 @@ private fun SettingsHub(
                             modifier = Modifier.semantics { contentDescription = "朗读释义" },
                         )
                     },
+                    divider = false,
                     onClick = { viewModel.onReadTranslationChange(!readTranslation) },
                 )
             }

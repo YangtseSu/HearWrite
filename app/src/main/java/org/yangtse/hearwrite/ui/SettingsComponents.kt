@@ -241,10 +241,3 @@ internal fun formatBytes(bytes: Long): String = when {
     bytes >= 1L shl 10 -> String.format(Locale.ROOT, "%.0f KB", bytes / 1024.0)
     else -> "$bytes B"
 }
-
-/** Theme option label (设置 hub value + 主题 page rows). */
-internal fun themeLabel(mode: org.yangtse.hearwrite.domain.ThemeMode): String = when (mode) {
-    org.yangtse.hearwrite.domain.ThemeMode.SYSTEM -> "跟随系统"
-    org.yangtse.hearwrite.domain.ThemeMode.LIGHT -> "浅色"
-    org.yangtse.hearwrite.domain.ThemeMode.DARK -> "深色"
-}
