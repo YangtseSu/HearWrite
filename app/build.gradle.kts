@@ -12,6 +12,27 @@ android {
     namespace = "org.yangtse.hearwrite"
     compileSdk = 37
 
+    // Release-certificate signing (gitignored keystore.properties at the repo
+    // root). Applied to the release buildType and — when the file exists — to
+    // debug builds too: one signature across local debug installs and signed
+    // releases lets `adb install -r` upgrade either direction without an
+    // uninstall (which would wipe Room/DataStore data). Missing file → debug
+    // falls back to the default debug key, release stays unsigned (by design).
+    val keystorePropsFile = rootProject.file("keystore.properties")
+    if (keystorePropsFile.exists()) {
+        val keystoreProps = Properties().apply {
+            keystorePropsFile.inputStream().use { load(it) }
+        }
+        signingConfigs.create("release") {
+            storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+            storePassword = keystoreProps.getProperty("storePassword")
+            keyAlias = keystoreProps.getProperty("keyAlias")
+            keyPassword = keystoreProps.getProperty("keyPassword")
+        }
+    }
+    namespace = "org.yangtse.hearwrite"
+    compileSdk = 37
+
 defaultConfig {
         applicationId = "org.yangtse.hearwrite"
         minSdk = 36
@@ -24,26 +45,18 @@ defaultConfig {
         versionName = "0.1.0"
     }
 
-buildTypes {
+    buildTypes {
+        debug {
+            if (signingConfigs.any { it.name == "release" }) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Signing comes from the gitignored keystore.properties at the repo
-            // root (template: keystore.properties.example). Without that file
-            // the release build stays unsigned — installs are then impossible,
-            // by design: release artifacts must be signed with the release key.
-            val keystorePropsFile = rootProject.file("keystore.properties")
-            if (keystorePropsFile.exists()) {
-                val keystoreProps = Properties().apply {
-                    keystorePropsFile.inputStream().use { load(it) }
-                }
-                signingConfig = signingConfigs.create("release") {
-                    storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
-                    storePassword = keystoreProps.getProperty("storePassword")
-                    keyAlias = keystoreProps.getProperty("keyAlias")
-                    keyPassword = keystoreProps.getProperty("keyPassword")
-                }
+            if (signingConfigs.any { it.name == "release" }) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
     }

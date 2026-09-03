@@ -102,7 +102,7 @@ keyAlias=hearwrite
 keyPassword=…
 ```
 
-`app/build.gradle.kts` 的行为：文件存在 → `assembleRelease` 产出签名包；文件不存在 → Release 构建保持未签名（有意设计：发布包必须用发布密钥签名）。
+`app/build.gradle.kts` 的行为：文件存在 → 创建 `release` 签名配置，同时应用于 **release 与 debug 构建类型**（本地 debug 包与正式发布包同证书，`adb install -r` 可互相覆盖升级，不会因签名不一致被迫卸载丢数据）；文件不存在 → Release 构建保持未签名（有意设计：发布包必须用发布密钥签名），debug 退回默认 debug 密钥。
 
 ### 4.3 打包
 
@@ -122,7 +122,7 @@ keyPassword=…
 adb install -r app/build/outputs/apk/release/app-release.apk
 ```
 
-注意：设备上若装有 debug 包（不同签名），先 `adb uninstall org.yangtse.hearwrite` 再装 Release 包。
+注意：debug 与 release 包同证书（见 4.2），`adb install -r` 可直接互相覆盖；仅当设备上的旧包由**别的证书**签出（如换过 keystore）时才需要 `adb uninstall org.yangtse.hearwrite`——卸载会清空 Room/DataStore 数据（错词本、历史、草稿）。
 
 ### 4.5 版本号规则
 
