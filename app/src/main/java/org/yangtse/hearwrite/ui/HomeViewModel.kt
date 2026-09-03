@@ -25,6 +25,7 @@ import org.yangtse.hearwrite.data.OCR_PROGRESS_COMPRESSING
 import org.yangtse.hearwrite.data.OCR_PROGRESS_RECOGNIZING
 import org.yangtse.hearwrite.data.OcrLang
 import org.yangtse.hearwrite.data.OcrOutcome
+import org.yangtse.hearwrite.data.WrongWordMark
 import org.yangtse.hearwrite.domain.CJK_RE
 import org.yangtse.hearwrite.domain.DEFAULT_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.entryToLine
@@ -65,6 +66,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val libraryRepository = app.libraryRepository
     private val dictionaryRepository = app.dictionaryRepository
     private val ocrService = app.ocrService
+    private val wrongWordsRepository = app.wrongWordsRepository
 
     private val _draft = MutableStateFlow("")
     val draft: StateFlow<String> = _draft.asStateFlow()
@@ -104,6 +106,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     /** History/library entries whose id is favorited, in favorite order. */
     private val _favoriteItems = MutableStateFlow<List<FavoriteUiItem>>(emptyList())
     val favoriteItems: StateFlow<List<FavoriteUiItem>> = _favoriteItems.asStateFlow()
+
+    private val _wrongWords = MutableStateFlow<List<WrongWordMark>>(emptyList())
+    /** 错词本 rows (word + mark time) for the 更多 drawer. */
+    val wrongWords: StateFlow<List<WrongWordMark>> = _wrongWords.asStateFlow()
 
     private val _starting = MutableStateFlow(false)
     /** True while the start action enriches/records the list (button spin). */
@@ -187,6 +193,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 _favorites.value = f
                 _favoriteItems.value = resolveFavorites(h, f)
             }
+        }
+        // 错词本 rows for the 更多 drawer (Room observe; oldest mark first).
+        viewModelScope.launch {
+            wrongWordsRepository.observeMarks().collect { _wrongWords.value = it }
         }
         // OCR provider config feeds the scan sheet's service row.
         viewModelScope.launch {
@@ -313,6 +323,28 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 historyRepository.clear()
+            } catch (e: Exception) {
+                // Best effort.
+            }
+        }
+    }
+
+    /** Remove one wrong word (错词本 drawer row 移除). */
+    fun removeWrongWord(word: String) {
+        viewModelScope.launch {
+            try {
+                wrongWordsRepository.remove(word)
+            } catch (e: Exception) {
+                // Best effort.
+            }
+        }
+    }
+
+    /** Empty the whole 错词本 (confirm dialog owned by the screen). */
+    fun clearWrongWords() {
+        viewModelScope.launch {
+            try {
+                wrongWordsRepository.clear()
             } catch (e: Exception) {
                 // Best effort.
             }

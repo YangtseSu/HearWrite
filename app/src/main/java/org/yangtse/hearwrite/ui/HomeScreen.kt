@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -96,6 +97,7 @@ fun HomeScreen(
     val history by viewModel.history.collectAsStateWithLifecycle()
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val favoriteItems by viewModel.favoriteItems.collectAsStateWithLifecycle()
+    val wrongWords by viewModel.wrongWords.collectAsStateWithLifecycle()
     val ocrBusy by viewModel.ocrBusy.collectAsStateWithLifecycle()
     val ocrPhase by viewModel.ocrPhase.collectAsStateWithLifecycle()
     val ocrError by viewModel.ocrError.collectAsStateWithLifecycle()
@@ -108,6 +110,8 @@ fun HomeScreen(
     var showHistory by remember { mutableStateOf(false) }
     var showFavorites by remember { mutableStateOf(false) }
     var clearHistoryConfirm by remember { mutableStateOf(false) }
+    var showWrongWords by remember { mutableStateOf(false) }
+    var clearWrongConfirm by remember { mutableStateOf(false) }
 
     // ---- 拍照识词 (OCR) state ----------------------------------------------
     var showOcrSheet by remember { mutableStateOf(false) }
@@ -324,6 +328,10 @@ fun HomeScreen(
                     showMenu = false
                     showHistory = true
                 }
+                MenuRow(Icons.Outlined.Cancel, "错词本") {
+                    showMenu = false
+                    showWrongWords = true
+                }
                 MenuRow(Icons.AutoMirrored.Filled.MenuBook, "词库") {
                     showMenu = false
                     onOpenLibrary()
@@ -398,6 +406,44 @@ fun HomeScreen(
             onApply = viewModel::applyEntry,
             onToggleFavorite = viewModel::toggleFavorite,
             onDismiss = { showFavorites = false },
+        )
+    }
+    if (showWrongWords) {
+        WrongWordsSheet(
+            entries = wrongWords,
+            onDictate = {
+                showWrongWords = false
+                onStartDictation(wrongWords.map { it.word })
+            },
+            onDelete = { word ->
+                viewModel.removeWrongWord(word)
+                android.widget.Toast.makeText(
+                    context, "已移除", android.widget.Toast.LENGTH_SHORT,
+                ).show()
+            },
+            onClear = { clearWrongConfirm = true },
+            onDismiss = { showWrongWords = false },
+        )
+    }
+
+
+    if (clearWrongConfirm) {
+        AlertDialog(
+            onDismissRequest = { clearWrongConfirm = false },
+            title = { Text("清空错词本？") },
+            text = { Text("将删除全部 ${wrongWords.size} 个错词。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    clearWrongConfirm = false
+                    viewModel.clearWrongWords()
+                    android.widget.Toast.makeText(
+                        context, "已清空错词本", android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                }) { Text("清空", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { clearWrongConfirm = false }) { Text("取消") }
+            },
         )
     }
 

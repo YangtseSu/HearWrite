@@ -26,14 +26,14 @@ import androidx.compose.ui.unit.dp
 fun ListRow(
     title: String,
     subtitle: String?,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .let { base -> if (onClick != null) base.clickable(onClick = onClick) else base }
             .padding(start = 20.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

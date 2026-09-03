@@ -36,6 +36,9 @@ interface WrongWordsDao {
     @Query("SELECT word FROM wrong_words ORDER BY addedAt ASC, rowid ASC")
     fun observeWords(): Flow<List<String>>
 
+    @Query("SELECT * FROM wrong_words ORDER BY addedAt ASC, rowid ASC")
+    fun observeAll(): Flow<List<WrongWordEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(word: WrongWordEntity)
 

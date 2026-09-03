@@ -4,16 +4,20 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -28,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import org.yangtse.hearwrite.data.HistoryEntry
+import org.yangtse.hearwrite.data.WrongWordMark
 import org.yangtse.hearwrite.domain.parseWords
 import org.yangtse.hearwrite.ui.theme.StarGold
 import java.time.Instant
@@ -85,12 +90,7 @@ fun HistorySheet(
                 }
             }
             if (entries.isEmpty()) {
-                Text(
-                    "暂无历史记录",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 32.dp),
-                )
+                EmptyHint("暂无历史记录")
             } else {
                 LazyColumn(modifier = Modifier.heightIn(max = SHEET_LIST_MAX_HEIGHT)) {
                     items(entries, key = { it.id }) { entry ->
@@ -123,6 +123,7 @@ fun HistorySheet(
                                 }
                             },
                         )
+                        HorizontalDivider()
                     }
                 }
             }
@@ -152,12 +153,7 @@ fun FavoritesSheet(
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 4.dp),
             )
             if (items.isEmpty()) {
-                Text(
-                    "暂无收藏",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 32.dp),
-                )
+                EmptyHint("暂无收藏")
             } else {
                 LazyColumn(modifier = Modifier.heightIn(max = SHEET_LIST_MAX_HEIGHT)) {
                     items(items, key = { it.id }) { item ->
@@ -180,6 +176,79 @@ fun FavoritesSheet(
                         )
                         HorizontalDivider()
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 错词本 bottom sheet: every word marked wrong across sessions (oldest mark
+ * first) with its mark time. Rows are read-only (a single word has no apply
+ * semantics) — 移除 per row, 清空 via a confirm dialog owned by the caller,
+ * and a bottom 听写错词 action that starts a review dictation over the book.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WrongWordsSheet(
+    entries: List<WrongWordMark>,
+    onDictate: () -> Unit,
+    onDelete: (String) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "错词本（${entries.size}）",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                if (entries.isNotEmpty()) {
+                    TextButton(onClick = onClear) {
+                        Text("清空", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+            if (entries.isEmpty()) {
+                EmptyHint("暂无错词")
+            } else {
+                LazyColumn(modifier = Modifier.heightIn(max = SHEET_LIST_MAX_HEIGHT)) {
+                    items(entries, key = { it.word }) { mark ->
+                        ListRow(
+                            title = mark.word,
+                            subtitle = "标记于 ${formatStamp(mark.addedAt)}",
+                            trailing = {
+                                IconButton(
+                                    onClick = { onDelete(mark.word) },
+                                    modifier = Modifier.size(48.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Delete,
+                                        contentDescription = "移除错词",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            },
+                        )
+                        HorizontalDivider()
+                    }
+                }
+                Button(
+                    onClick = onDictate,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 16.dp),
+                ) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("听写错词（${entries.size} 词）")
                 }
             }
         }
