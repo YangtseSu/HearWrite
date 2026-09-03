@@ -123,7 +123,7 @@ UI: countdown ring (last-second tick; `clearAndSetSemantics` announcing remainin
 | `data/` | Source word lists + bundled data assets (APK assets; see formats below) |
 | `data/meta/` | 《现代汉语常用词表（草案）》 frequency table — regeneration source for compounds.json, not shipped |
 | `scripts/` | Data tooling (Python 3, stdlib-first), added when needed |
-| `docs/` | Screenshots for README (added when UI exists) |
+| `docs/` | `PHASES.md` phase log, `DEVELOPMENT.md` build/signing/packaging guide; README screenshots added when needed |
 | `/home/yangtse/projects/alice/` | Read-only reference (RN implementation); consult when this file is ambiguous — `src/lib/dictation.ts`, `src/hooks/usePlayback.ts`, `src/lib/tts.ts`, `src/lib/ocr.ts` are the behavioral ground truth |
 
 ## Data Assets (formats & provenance — never hand-edit derived files)

@@ -1,82 +1,75 @@
 # HearWrite 听写
 
-面向中国学生的 Android 听写训练应用：粘贴或拍照录入词表 → 应用逐词朗读并倒计时 → 学生书写 → 标记错词 → 之后复习。原生 Kotlin + Jetpack Compose 实现，从 [alice](https://github.com/YangtseSu/alice)（React Native 应用）从头重写（仅保持行为一致）。
+面向中国学生的 Android 听写训练应用：导入词表 → 应用逐词朗读并倒计时 → 学生在本子上默写 → 标记错词 → 之后复习错词。
+原生 Kotlin + Jetpack Compose 实现，无账号、无广告、无内购，所有数据只保存在本机。
 
-- 架构、工具链版本与行为契约：[`AGENTS.md`](AGENTS.md)
-- 分阶段计划与进度（10 个阶段全部完成）：[`docs/PHASES.md`](docs/PHASES.md)
-- 许可证：GPL-3.0-or-later（见 [`LICENSE`](LICENSE)）
+## 功能
 
-## 开发环境搭建（新机器）
+- **两种听写模式**：英文（单词 → 释义 → 单词）与汉字（生字 → 组词 → 生字，如「月 → 月亮的月 → 月」，自动处理多音字）。
+- **内置词库**：中考1600、高考3500、初中2182、人教版/外研版/闽教版/仁爱版等 10 套教材共 403 份词表，支持按词表名或单词搜索，一键开始听写。
+- **灵活导入**：粘贴输入（每行一个词）；拍照识词（AI 识别课本词表，识别结果可编辑后再开始）。
+- **离线词典补全**：英文词表自动补全词性与中文释义（内置 ECDICT 离线词典，不联网也能用）。
+- **三档发音**：有道词典真人发音（默认，需联网）／系统语音（完全离线）／自定义 OpenAI 兼容音源（自备 API Key）；断网或失败时自动回退，听写永不中断。
+- **错词本**：听写中一键标记，结束页直接复习错词、导出错词到剪贴板；跨次听写累积，可逐词移除或清空。
+- **历史与收藏**：最近 50 条听写记录，常用词表可收藏，一键再次听写。
+- **播放控制**：语速、间隔（1–10 秒）、自动播报下一词、朗读英文释义，听写中可实时调整；倒计时最后一秒滴答声、完成提示音、标记错词震动。
+- **深色 / 浅色主题**（可跟随系统）。
 
-工具链相关的一切（Gradle、AGP、Kotlin、Compose BOM）都已锁定在仓库内；只有三样东西是机器本地的：**JDK 21**、**Android SDK** 和 GitHub 认证。
+## 下载安装
 
-### 1. 克隆仓库
+- 从 GitHub [Releases](https://github.com/YangtseSu/HearWrite/releases) 下载 `app-release.apk` 安装（需允许安装未知来源应用）。
+- 也可以自行构建签名包，见 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)。
 
-仓库为私有仓库——先完成认证：
+要求 Android 16（API 36）及以上。
 
-```bash
-gh auth login          # 或配置 SSH 密钥
-gh repo clone YangtseSu/HearWrite && cd HearWrite
+## 快速上手
+
+1. **导入词表**（首页）：直接粘贴；点「英文示例」「汉字示例」体验格式；或点「拍照识词」拍课本词表；或从「词库」选一份内置词表。
+2. **听写**：点「开始听写」。每词朗读两遍，词盘中的词语默认隐藏（学生先默写），点按显示；最后一秒倒计时结束自动播下一词；写错了点「标记错词」。
+3. **复习**：结束后在成绩页点「复习错词」只重听错词；「导出错词」把错词复制成词表，粘贴回首页即可再练。
+
+首页还可以设置**起始序号**（从第 N 个词开始）与**随机顺序**（打乱词序，仅本次有效）。
+
+## 词表格式
+
+每行一个词，支持以下写法（竖线全角 `｜` 半角 `|` 均可）：
+
+```
+apple | n. | 苹果        ← 英文：单词 | 词性 | 释义（可只有单词）
+月 | yuè | 月亮          ← 生字：生字 | 拼音（带声调） | 组词（需含本字）
+香蕉                     ← 词语：直接一行
+you're = you are         ← 只朗读左侧
 ```
 
-### 2. JDK 21
+## 设置说明
 
-`gradle.properties` 将 Gradle 守护进程固定到 `org.gradle.java.home=/usr/lib/jvm/java-21-openjdk`。
-
-- Arch 系 Linux：`sudo pacman -S jdk21-openjdk`——路径一致，无需改动。
-- 其他操作系统/发行版：路径不同（如 Debian/Ubuntu 上是 `java-21-openjdk-amd64`）。把那一行改成本地 JDK 21 路径，并**保持该改动不入库**（这是每台机器各自的设置）。
-
-任何 JVM ≥ 21 都能运行守护进程；编译目标在 `app/build.gradle.kts` 中固定为 Java 21。
-
-### 3. Android SDK
-
-安装到 `~/Android/Sdk`（约 2 GB）。请使用 **Google 官方 cmdline-tools**——发行版自带的 `sdkmanager` 二进制携带过期的软件包索引，找不到 API 37 平台：
-
-```bash
-curl -o /tmp/clt.zip https://dl.google.com/android/repository/commandlinetools-linux-16111833_latest.zip
-mkdir -p /tmp/clt ~/Android/Sdk/cmdline-tools && unzip -q /tmp/clt.zip -d /tmp/clt
-mv /tmp/clt/cmdline-tools ~/Android/Sdk/cmdline-tools/latest
-yes | ~/Android/Sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root="$HOME/Android/Sdk" --licenses
-yes | ~/Android/Sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root="$HOME/Android/Sdk" \
-    "platforms;android-37" "platform-tools" "build-tools;36.0.0"
-echo "sdk.dir=$HOME/Android/Sdk" > local.properties   # 已被 gitignore，机器本地文件
-```
-
-### 4. 构建
-
-```bash
-./gradlew :app:assembleDebug :app:testDebugUnitTest
-```
-
-无需系统安装 Gradle：wrapper 会一次性把锁定的 Gradle 9.7.1 下载到 `~/.gradle/wrapper/dists`，并缓存供所有项目复用。发行包 URL 指向腾讯镜像，并锚定了官方 SHA-256（部分网络无法访问 `services.gradle.org`）；其余依赖均从 Google Maven / Maven Central 解析。首次构建需要几分钟，之后都是增量构建。
-
-### 5. 在设备上运行
-
-仓库未提交模拟器配置——演示在开启 USB 调试的真机上运行：
-
-```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
-
-## 日常命令
-
-| 命令 | 用途 |
+| 设置 | 说明 |
 | --- | --- |
-| `./gradlew :app:assembleDebug` | 构建 Debug APK |
-| `./gradlew :app:testDebugUnitTest` | 单元测试（domain 逻辑门禁） |
-| `./gradlew :app:lintDebug` | Android lint |
+| 主题 | 跟随系统 / 浅色 / 深色 |
+| 语速 | 0.5–1.5（默认 0.9），立即生效 |
+| 默认间隔 / 自动播报 / 朗读释义 | 听写节奏；听写页也可临时调整 |
+| 发音来源 | 有道词典（默认，联网）；系统语音（离线）；自定义音源（OpenAI 兼容 TTS，自备 Key，支持小米 MiMo、智谱、OpenAI 等预设） |
+| 提示音 | 倒计时滴答与完成提示音开关 |
+| 拍照识词 | OpenAI 兼容视觉接口（默认预设智谱 `glm-4v-flash`，免费），需自备 API Key |
 
-## 仓库结构
+**API Key 只保存在本机**（应用私有存储），仅用于向对应服务商发请求；本应用没有后端服务器，不上传任何词表或听写记录。AI 识图可能存在误差，请核对识别结果。
 
-| 路径 | 用途 |
-| --- | --- |
-| `app/` | Android 应用（单一 `:app` 模块） |
-| `data/` | 原始词表 + 内置数据资源（原样打包进 APK assets；只读，禁止手工重新生成） |
-| `scripts/` | 数据处理脚本（Python 3），按需添加 |
-| `hearwrite.svg` | 应用图标设计源文件（自适应图标各层生成到 `app/src/main/res/`） |
+## 权限说明
 
-## 约定
+- 网络：在线发音（有道词典 / 自定义音源）与拍照识词请求。
+- 震动：标记错词时的震动反馈。
+- 拍照识词**不申请相机权限**：拍摄走系统相机，选图走系统相册选择器。
 
-- README.md 使用中文撰写（面向中文读者）；`AGENTS.md` 等其他文档、代码、注释与提交信息使用英文；所有面向用户的界面字符串硬编码为中文（无 `strings.xml`）。
-- 一次提交只做一件事（`feat:`/`fix:`/`docs:`/`data:`/`chore:`/`test:`），每个提交都必须可编译。
-- AGP 9 使用**内置 Kotlin**——不要应用 `org.jetbrains.kotlin.android`；Kotlin 版本通过 Compose 编译器插件（`org.jetbrains.kotlin.plugin.compose`）锁定。
+## 数据来源
+
+内置词表来自教材整理；英汉释义基于 [ECDICT](https://github.com/skywind3000/ECDICT)（MIT）；组词数据由《现代汉语常用字表》频率表生成。详见 [`docs/PHASES.md`](docs/PHASES.md) Phase 0。
+
+## 相关文档
+
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — 开发者：环境搭建、构建、**签名与打包发布**
+- [`docs/PHASES.md`](docs/PHASES.md) — 分阶段开发日志（10 个阶段全部完成）
+- [`AGENTS.md`](AGENTS.md) — 架构、工具链版本与行为契约（开发者）
+
+## 许可证
+
+GPL-3.0-or-later，见 [`LICENSE`](LICENSE)。
