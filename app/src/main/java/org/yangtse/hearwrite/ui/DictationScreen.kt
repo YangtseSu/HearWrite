@@ -62,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import org.yangtse.hearwrite.ui.theme.DoneGreen
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -84,7 +85,6 @@ import org.yangtse.hearwrite.domain.parseWordLine
 import java.util.Locale
 import kotlin.math.ceil
 
-private val DONE_GREEN = Color(0xFF2E7D32)
 
 private fun formatElapsed(sec: Long): String =
     if (sec >= 60) "${sec / 60} 分 ${sec % 60} 秒" else "$sec 秒"
@@ -206,8 +206,8 @@ fun DictationScreen(
 @Composable
 private fun StatusPill(ui: DictationUiState) {
     val (label, color) = when {
-        ui.finished -> "已完成" to DONE_GREEN
-        ui.state == PlayState.PLAYING -> "听写中" to DONE_GREEN
+        ui.finished -> "已完成" to DoneGreen
+        ui.state == PlayState.PLAYING -> "听写中" to DoneGreen
         ui.state == PlayState.PAUSED -> "已暂停" to MaterialTheme.colorScheme.tertiary
         else -> "未开始" to MaterialTheme.colorScheme.outline
     }
@@ -349,7 +349,7 @@ private fun FinishCard(
         Icon(
             Icons.Filled.CheckCircle,
             contentDescription = null,
-            tint = DONE_GREEN,
+            tint = DoneGreen,
             modifier = Modifier.size(64.dp),
         )
         Text(

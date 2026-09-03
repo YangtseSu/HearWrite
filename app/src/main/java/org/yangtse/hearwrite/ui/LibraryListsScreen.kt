@@ -26,12 +26,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import org.yangtse.hearwrite.ui.theme.StarGold
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 
-private val STAR_GOLD = Color(0xFFF9A825)
 
 /** One category: its lists in the upstream label order; a tap opens the
  *  preview, the star toggles the list's favorite state (收藏 drawer on Home). */
@@ -96,7 +95,7 @@ fun LibraryListsScreen(
                                 if (favorited) Icons.Filled.Star else Icons.Filled.StarBorder,
                                 contentDescription = if (favorited) "取消收藏" else "收藏",
                                 tint = if (favorited) {
-                                    STAR_GOLD
+                                    StarGold
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 },

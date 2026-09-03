@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -58,6 +57,7 @@ import kotlinx.coroutines.launch
 import org.yangtse.hearwrite.data.OCR_DISCLAIMER
 import org.yangtse.hearwrite.data.OcrLang
 import org.yangtse.hearwrite.domain.parseWords
+import org.yangtse.hearwrite.ui.theme.StarGold
 import java.io.File
 
 /** 示例 content: English words with gloss columns (朗读释义 demo-able). */
@@ -176,7 +176,7 @@ fun HomeScreen(
                             tint = if (favorites.isEmpty()) {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             } else {
-                                androidx.compose.ui.graphics.Color(0xFFF9A825)
+                                StarGold
                             },
                         )
                     }
@@ -258,7 +258,7 @@ fun HomeScreen(
             ocrError?.let { message ->
                 Surface(
                     color = MaterialTheme.colorScheme.errorContainer,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 4.dp)) {

@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -26,18 +26,18 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.yangtse.hearwrite.data.HistoryEntry
 import org.yangtse.hearwrite.domain.parseWords
+import org.yangtse.hearwrite.ui.theme.StarGold
+import androidx.compose.ui.unit.dp
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-private val STAR_GOLD = Color(0xFFF9A825)
 private val SHEET_LIST_MAX_HEIGHT = 440.dp
 
 private fun toast(context: Context, message: String) {
@@ -125,12 +125,12 @@ fun HistorySheet(
                             }
                             IconButton(
                                 onClick = { onToggleFavorite(entry.id) },
-                                modifier = Modifier.width(44.dp),
+                                modifier = Modifier.size(48.dp),
                             ) {
                                 Icon(
                                     if (favorited) Icons.Filled.Star else Icons.Filled.StarBorder,
                                     contentDescription = if (favorited) "取消收藏" else "收藏",
-                                    tint = if (favorited) STAR_GOLD else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = if (favorited) StarGold else MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             IconButton(onClick = { onDelete(entry.id) }) {
@@ -208,7 +208,7 @@ fun FavoritesSheet(
                                 Icon(
                                     Icons.Filled.Star,
                                     contentDescription = "取消收藏",
-                                    tint = STAR_GOLD,
+                                    tint = StarGold,
                                 )
                             }
                         }
