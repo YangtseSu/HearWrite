@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The 拍照识词 Ollama preset (OcrProviderConfig.kt) is a BYOK local
+     endpoint at http://localhost:11434 — targetSdk 37 blocks cleartext by
+     default, so loopback hosts are opted in explicitly; everything else
+     stays HTTPS-only. On a phone, reach the PC's Ollama via
+     `adb reverse tcp:11434 tcp:11434` (localhost then resolves through the
+     reverse tunnel). -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Privacy posture: BYOK provider keys, dictation history, drafts and the
+     wrong-word book never leave the device (README "所有数据只保存在本机").
+     DataStore lives in files/datastore/, Room in the database domain. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="datastore/" />
+        <exclude domain="database" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="datastore/" />
+        <exclude domain="database" path="." />
+    </device-transfer>
+</data-extraction-rules>

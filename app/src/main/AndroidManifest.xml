@@ -12,7 +12,9 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:label="HearWrite 听写"
         android:supportsRtl="true"
-        android:theme="@style/Theme.HearWrite">
+        android:theme="@style/Theme.HearWrite"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:networkSecurityConfig="@xml/network_security_config">
 
         <activity
             android:name=".MainActivity"
