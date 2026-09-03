@@ -3,6 +3,7 @@ package org.yangtse.hearwrite.data
 import java.util.Base64
 import kotlin.math.roundToInt
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -272,6 +273,33 @@ internal fun decodeTtsProviderConfig(raw: String): TtsProviderConfig? = try {
     )
 } catch (e: Exception) {
     null
+}
+
+/**
+ * Preset id a legacy single-config blob belongs to: matched by
+ * baseUrl+model, falling back to the hand-rolled 自定义 slot — each preset
+ * keeps its own stored config, so an unmatched blob must not land on one.
+ */
+internal fun legacyTtsPresetId(cfg: TtsProviderConfig): String =
+    TTS_PROVIDER_PRESETS.firstOrNull {
+        it.id != "custom" && it.baseUrl == cfg.baseUrl.trim() && it.model == cfg.model.trim()
+    }?.id ?: "custom"
+
+/** `{"<presetId>":{…}}` — one stored config per provider preset. */
+internal fun encodeTtsConfigMap(map: Map<String, TtsProviderConfig>): String = buildJsonObject {
+    map.forEach { (id, cfg) -> put(id, ttsJson.parseToJsonElement(encodeTtsProviderConfig(cfg))) }
+}.toString()
+
+/**
+ * Decode the per-preset map; corrupt entries (non-object or non-decodable
+ * values) are dropped so one bad blob never takes the whole store down.
+ */
+internal fun decodeTtsConfigMap(raw: String): Map<String, TtsProviderConfig> = try {
+    ttsJson.parseToJsonElement(raw).jsonObject.entries.mapNotNull { (id, el) ->
+        (el as? JsonObject)?.let { decodeTtsProviderConfig(it.toString()) }?.let { id to it }
+    }.toMap()
+} catch (e: Exception) {
+    emptyMap()
 }
 
 /**

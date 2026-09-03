@@ -13,6 +13,7 @@ import java.io.File
 import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.data.DEFAULT_OCR_PRESET
 import org.yangtse.hearwrite.data.DEFAULT_TTS_PRESET
+import org.yangtse.hearwrite.data.OCR_PROVIDER_PRESETS
 import org.yangtse.hearwrite.data.OcrProviderConfig
 import org.yangtse.hearwrite.data.OcrProviderPreset
 import org.yangtse.hearwrite.data.TTS_PROVIDER_PRESETS
@@ -42,6 +43,24 @@ sealed interface TtsTestState {
     data class Failed(val message: String) : TtsTestState
 }
 
+/** Editable custom-TTS provider form for the selected preset (draft per chip). */
+data class TtsFormDraft(
+    val api: TtsApiKind,
+    val baseUrl: String,
+    val apiKey: String,
+    val model: String,
+    val voiceEn: String,
+    val voiceZh: String,
+    val responseFormat: String,
+)
+
+/** Editable OCR provider form for the selected preset (draft per chip). */
+data class OcrFormDraft(
+    val baseUrl: String,
+    val apiKey: String,
+    val model: String,
+)
+
 /**
  * Settings screen state: 听写 (语速, 朗读释义), 语音
  * (发音来源 incl. the OpenAI-compatible custom provider form, 提示音),
@@ -49,10 +68,11 @@ sealed interface TtsTestState {
  * persist through the DataStore settings repository; the rate applies live
  * to the shared system speaker. Interval and auto-next are not duplicated
  * here: the Home playback panel and the dictation screen adjust them live
- * and write the same DataStore keys. The OCR 识别 section
- * edits the BYOK vision-provider config (default preset 智谱 GLM-4V-Flash),
- * with a 测试连接 button against the entered fields; 保存 writes it to
- * DataStore.
+ * and write the same DataStore keys. The provider forms (TTS + OCR) keep
+ * one draft and one stored config **per 服务商 preset** — switching chips
+ * loads that provider's own saved config (or its preset defaults), so no
+ * key ever bleeds into another provider's form; disabling the custom TTS
+ * source (有道/系统语音) never deletes any stored config.
  */
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -78,19 +98,29 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val theme: StateFlow<ThemeMode> = _theme.asStateFlow()
 
     // ---- OCR 识别 (拍照识词) BYOK config fields ----------------------------
+    // One draft + one stored config per 服务商 preset; the chip switch loads
+    // the target provider's own state instead of reusing typed values.
 
-    private val _ocrBaseUrl = MutableStateFlow("")
-    val ocrBaseUrl: StateFlow<String> = _ocrBaseUrl.asStateFlow()
+    private val _ocrPresetId = MutableStateFlow(DEFAULT_OCR_PRESET.id)
+    val ocrPresetId: StateFlow<String> = _ocrPresetId.asStateFlow()
 
-    private val _ocrApiKey = MutableStateFlow("")
-    val ocrApiKey: StateFlow<String> = _ocrApiKey.asStateFlow()
+    private val _ocrForm = MutableStateFlow(ocrDraftFor(DEFAULT_OCR_PRESET, null))
+    val ocrForm: StateFlow<OcrFormDraft> = _ocrForm.asStateFlow()
 
-    private val _ocrModel = MutableStateFlow("")
-    val ocrModel: StateFlow<String> = _ocrModel.asStateFlow()
+    /** Unsaved drafts per preset id, so a peek at another chip keeps edits. */
+    private val ocrDrafts = mutableMapOf<String, OcrFormDraft>()
 
-    /** A provider config has been saved (hub row shows the model then). */
-    private val _ocrConfigSaved = MutableStateFlow(false)
-    val ocrConfigSaved: StateFlow<Boolean> = _ocrConfigSaved.asStateFlow()
+    /** Mirror of the stored per-preset configs (chip marks + draft seeding). */
+    private val _ocrStored = MutableStateFlow<Map<String, OcrProviderConfig>>(emptyMap())
+    val ocrStoredConfigs: StateFlow<Map<String, OcrProviderConfig>> = _ocrStored.asStateFlow()
+
+    /** The runtime-active stored config (hub row shows its model then). */
+    private val _ocrActive = MutableStateFlow<OcrProviderConfig?>(null)
+    val ocrActive: StateFlow<OcrProviderConfig?> = _ocrActive.asStateFlow()
+
+    /** Preset id of the active OCR config (hub row label; "" when none). */
+    private val _ocrActiveId = MutableStateFlow("")
+    val ocrActivePresetId: StateFlow<String> = _ocrActiveId.asStateFlow()
 
     private val _ocrTestState = MutableStateFlow<OcrTestState>(OcrTestState.Idle)
     val ocrTestState: StateFlow<OcrTestState> = _ocrTestState.asStateFlow()
@@ -100,30 +130,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _ttsPresetId = MutableStateFlow(DEFAULT_TTS_PRESET.id)
     val ttsPresetId: StateFlow<String> = _ttsPresetId.asStateFlow()
 
-    private val _ttsApi = MutableStateFlow(DEFAULT_TTS_PRESET.api)
-    val ttsApi: StateFlow<TtsApiKind> = _ttsApi.asStateFlow()
+    private val _ttsForm = MutableStateFlow(ttsDraftFor(DEFAULT_TTS_PRESET, null))
+    val ttsForm: StateFlow<TtsFormDraft> = _ttsForm.asStateFlow()
 
-    private val _ttsBaseUrl = MutableStateFlow(DEFAULT_TTS_PRESET.baseUrl)
-    val ttsBaseUrl: StateFlow<String> = _ttsBaseUrl.asStateFlow()
+    private val ttsDrafts = mutableMapOf<String, TtsFormDraft>()
 
-    private val _ttsApiKey = MutableStateFlow("")
-    val ttsApiKey: StateFlow<String> = _ttsApiKey.asStateFlow()
+    private val _ttsStored = MutableStateFlow<Map<String, TtsProviderConfig>>(emptyMap())
+    val ttsStoredConfigs: StateFlow<Map<String, TtsProviderConfig>> = _ttsStored.asStateFlow()
 
-    private val _ttsModel = MutableStateFlow(DEFAULT_TTS_PRESET.model)
-    val ttsModel: StateFlow<String> = _ttsModel.asStateFlow()
-
-    private val _ttsVoiceEn = MutableStateFlow(DEFAULT_TTS_PRESET.voiceEn)
-    val ttsVoiceEn: StateFlow<String> = _ttsVoiceEn.asStateFlow()
-
-    private val _ttsVoiceZh = MutableStateFlow(DEFAULT_TTS_PRESET.voiceZh)
-    val ttsVoiceZh: StateFlow<String> = _ttsVoiceZh.asStateFlow()
-
-    private val _ttsResponseFormat = MutableStateFlow(DEFAULT_TTS_PRESET.responseFormat.orEmpty())
-    val ttsResponseFormat: StateFlow<String> = _ttsResponseFormat.asStateFlow()
-
-    /** A saved config exists (enables 清除配置; also the "active" status line). */
-    private val _ttsConfigSaved = MutableStateFlow(false)
-    val ttsConfigSaved: StateFlow<Boolean> = _ttsConfigSaved.asStateFlow()
+    /** The runtime-active stored config (status line + hub row). */
+    private val _ttsActive = MutableStateFlow<TtsProviderConfig?>(null)
+    val ttsActive: StateFlow<TtsProviderConfig?> = _ttsActive.asStateFlow()
 
     private val _ttsTestState = MutableStateFlow<TtsTestState>(TtsTestState.Idle)
     val ttsTestState: StateFlow<TtsTestState> = _ttsTestState.asStateFlow()
@@ -146,19 +163,34 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { _ttsSource.value = settings.ttsSource.first() }
         viewModelScope.launch { _soundEnabled.value = settings.soundEnabled.first() }
         viewModelScope.launch { _theme.value = settings.theme.first() }
-        // Prefill with the stored config; the default preset 智谱 GLM-4V-Flash
-        // when none is saved yet (the apiKey stays blank until the user
-        // pastes their own — BYOK only).
+        // Per-provider storage: mirror the stored configs and the active
+        // preset; the selected chip starts on the active provider (preset
+        // defaults with a blank key when none is saved yet — BYOK only).
+        viewModelScope.launch { settings.ocrProviderConfigs.collect { _ocrStored.value = it } }
         viewModelScope.launch {
-            val cfg = settings.ocrProviderConfig.first()
-            _ocrConfigSaved.value = cfg != null
-            if (cfg == null) {
-                _ocrBaseUrl.value = DEFAULT_OCR_PRESET.baseUrl
-                _ocrModel.value = DEFAULT_OCR_PRESET.model
-            } else {
-                _ocrBaseUrl.value = cfg.baseUrl
-                _ocrApiKey.value = cfg.apiKey
-                _ocrModel.value = cfg.model
+            settings.ocrProviderConfig.collect { _ocrActive.value = it }
+        }
+        viewModelScope.launch {
+            settings.ocrActivePresetId.collect { _ocrActiveId.value = it }
+        }
+        viewModelScope.launch {
+            val activeId = settings.ocrActivePresetId.first()
+            if (activeId.isNotBlank()) {
+                _ocrPresetId.value = activeId
+                _ocrForm.value =
+                    ocrDraftFor(ocrPresetById(activeId), settings.ocrProviderConfigs.first()[activeId])
+            }
+        }
+        viewModelScope.launch { settings.ttsProviderConfigs.collect { _ttsStored.value = it } }
+        viewModelScope.launch {
+            settings.ttsProviderConfig.collect { _ttsActive.value = it }
+        }
+        viewModelScope.launch {
+            val activeId = settings.ttsActivePresetId.first()
+            if (activeId.isNotBlank()) {
+                _ttsPresetId.value = activeId
+                _ttsForm.value =
+                    ttsDraftFor(ttsPresetById(activeId), settings.ttsProviderConfigs.first()[activeId])
             }
         }
         // Cache summary is computed off the main thread; clips only appear
@@ -166,27 +198,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         // hub re-scans when returning from a sub-page that may have tested
         // a provider).
         viewModelScope.launch(Dispatchers.IO) { _ttsCacheInfo.value = scanTtsCache() }
-        // The custom-TTS form mirrors the saved config (preset matched by
-        // baseUrl+model like alice); a fresh form defaults to the MiMo
-        // preset with a blank key.
-        viewModelScope.launch {
-            val cfg = settings.ttsProviderConfig.first()
-            if (cfg != null) {
-                _ttsConfigSaved.value = true
-                _ttsPresetId.value = TTS_PROVIDER_PRESETS.firstOrNull {
-                    it.id != "custom" && it.baseUrl == cfg.baseUrl && it.model == cfg.model
-                }?.id ?: "custom"
-                _ttsApi.value = cfg.api
-                _ttsBaseUrl.value = cfg.baseUrl
-                _ttsApiKey.value = cfg.apiKey
-                _ttsModel.value = cfg.model
-                _ttsVoiceEn.value = cfg.voiceEn
-                _ttsVoiceZh.value = cfg.voiceZh
-                _ttsResponseFormat.value = cfg.responseFormat.orEmpty()
-            } else {
-                applyTtsPreset(DEFAULT_TTS_PRESET)
-            }
-        }
     }
 
     fun onSpeechRateChange(rate: Float) {
@@ -217,69 +228,72 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { settings.setTheme(mode) }
     }
 
-    // --------------------------------- 自定义音源 (OpenAI-compatible TTS)
+    private fun ttsPresetById(id: String): TtsProviderPreset =
+        TTS_PROVIDER_PRESETS.firstOrNull { it.id == id } ?: DEFAULT_TTS_PRESET
 
-    /** Fill the form from a preset; the key is never touched (alice behavior). */
+    /** Seed a preset's draft: its stored config, else preset defaults + blank key. */
+    private fun ttsDraftFor(preset: TtsProviderPreset, cfg: TtsProviderConfig?): TtsFormDraft =
+        cfg?.let {
+            TtsFormDraft(
+                api = it.api,
+                baseUrl = it.baseUrl,
+                apiKey = it.apiKey,
+                model = it.model,
+                voiceEn = it.voiceEn,
+                voiceZh = it.voiceZh,
+                responseFormat = it.responseFormat.orEmpty(),
+            )
+        } ?: TtsFormDraft(
+            api = preset.api,
+            baseUrl = preset.baseUrl,
+            apiKey = "",
+            model = preset.model,
+            voiceEn = preset.voiceEn,
+            voiceZh = preset.voiceZh,
+            responseFormat = preset.responseFormat.orEmpty(),
+        )
+
+    /** Switch chips: stash this form's draft, load the target provider's own. */
     fun onTtsPresetChange(preset: TtsProviderPreset) {
+        if (preset.id == _ttsPresetId.value) return
+        ttsDrafts[_ttsPresetId.value] = _ttsForm.value
         _ttsPresetId.value = preset.id
-        applyTtsPreset(preset)
+        _ttsForm.value = ttsDrafts[preset.id]
+            ?: ttsDraftFor(preset, _ttsStored.value[preset.id])
         _ttsTestState.value = TtsTestState.Idle
     }
 
-    private fun applyTtsPreset(preset: TtsProviderPreset) {
-        _ttsApi.value = preset.api
-        _ttsBaseUrl.value = preset.baseUrl
-        _ttsModel.value = preset.model
-        _ttsVoiceEn.value = preset.voiceEn
-        _ttsVoiceZh.value = preset.voiceZh
-        _ttsResponseFormat.value = preset.responseFormat.orEmpty()
-    }
-
-    fun onTtsApiChange(kind: TtsApiKind) {
-        _ttsApi.value = kind
+    private fun updateTtsForm(transform: (TtsFormDraft) -> TtsFormDraft) {
+        _ttsForm.value = transform(_ttsForm.value)
         _ttsTestState.value = TtsTestState.Idle
     }
 
-    fun onTtsBaseUrlChange(value: String) {
-        _ttsBaseUrl.value = value
-        _ttsTestState.value = TtsTestState.Idle
-    }
+    fun onTtsApiChange(kind: TtsApiKind) = updateTtsForm { it.copy(api = kind) }
 
-    fun onTtsApiKeyChange(value: String) {
-        _ttsApiKey.value = value
-        _ttsTestState.value = TtsTestState.Idle
-    }
+    fun onTtsBaseUrlChange(value: String) = updateTtsForm { it.copy(baseUrl = value) }
 
-    fun onTtsModelChange(value: String) {
-        _ttsModel.value = value
-        _ttsTestState.value = TtsTestState.Idle
-    }
+    fun onTtsApiKeyChange(value: String) = updateTtsForm { it.copy(apiKey = value) }
 
-    fun onTtsVoiceEnChange(value: String) {
-        _ttsVoiceEn.value = value
-        _ttsTestState.value = TtsTestState.Idle
-    }
+    fun onTtsModelChange(value: String) = updateTtsForm { it.copy(model = value) }
 
-    fun onTtsVoiceZhChange(value: String) {
-        _ttsVoiceZh.value = value
-        _ttsTestState.value = TtsTestState.Idle
-    }
+    fun onTtsVoiceEnChange(value: String) = updateTtsForm { it.copy(voiceEn = value) }
 
-    fun onTtsResponseFormatChange(value: String) {
-        _ttsResponseFormat.value = value
-        _ttsTestState.value = TtsTestState.Idle
-    }
+    fun onTtsVoiceZhChange(value: String) = updateTtsForm { it.copy(voiceZh = value) }
+
+    fun onTtsResponseFormatChange(value: String) =
+        updateTtsForm { it.copy(responseFormat = value) }
 
     /**
-     * Persist the entered provider config and activate the custom source
-     * (the 保存并启用 button; alice `handleSave` also switches the source).
+     * Persist the entered config under the selected preset and activate the
+     * custom source (the 保存并启用 button). Other presets' stored configs
+     * are untouched.
      */
     fun saveTtsConfig() {
+        val presetId = _ttsPresetId.value
         val cfg = currentTtsConfig() ?: return
         viewModelScope.launch {
             try {
-                settings.setTtsProviderConfig(cfg)
-                _ttsConfigSaved.value = true
+                settings.setTtsProviderConfig(presetId, cfg)
                 _ttsSource.value = TtsSource.CUSTOM
                 settings.setTtsSource(TtsSource.CUSTOM)
             } catch (e: Exception) {
@@ -288,14 +302,24 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** Clear the provider config and revert to the Youdao source. */
+    /**
+     * 清除配置: drop only the selected preset's stored config. Disabling the
+     * custom source (switching to 有道/系统语音) never calls this — stored
+     * configs survive; reverting to Youdao happens only when the cleared
+     * preset was the active one.
+     */
     fun clearTtsConfig() {
+        val presetId = _ttsPresetId.value
         viewModelScope.launch {
             try {
-                settings.setTtsProviderConfig(null)
-                _ttsConfigSaved.value = false
-                _ttsSource.value = TtsSource.YOUDAO
-                settings.setTtsSource(TtsSource.YOUDAO)
+                val wasActive = settings.ttsActivePresetId.first() == presetId
+                settings.clearTtsProviderConfig(presetId)
+                if (wasActive) {
+                    _ttsSource.value = TtsSource.YOUDAO
+                    settings.setTtsSource(TtsSource.YOUDAO)
+                }
+                ttsDrafts.remove(presetId)
+                _ttsForm.value = ttsDraftFor(ttsPresetById(presetId), null)
             } catch (e: Exception) {
                 // DataStore failures must never crash the screen (AGENTS.md).
             }
@@ -331,36 +355,48 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** The entered config (trimmed), or null when any required field is blank. */
-    private fun currentTtsConfig(): TtsProviderConfig? = TtsProviderConfig(
-        api = _ttsApi.value,
-        baseUrl = _ttsBaseUrl.value.trim(),
-        apiKey = _ttsApiKey.value.trim(),
-        model = _ttsModel.value.trim(),
-        voiceEn = _ttsVoiceEn.value.trim(),
-        voiceZh = _ttsVoiceZh.value.trim(),
-        responseFormat = _ttsResponseFormat.value.trim().ifEmpty { null },
-    ).takeIf { it.isComplete }
+    /** The selected preset's entered config (trimmed), null when incomplete. */
+    private fun currentTtsConfig(): TtsProviderConfig? = _ttsForm.value.let {
+        TtsProviderConfig(
+            api = it.api,
+            baseUrl = it.baseUrl.trim(),
+            apiKey = it.apiKey.trim(),
+            model = it.model.trim(),
+            voiceEn = it.voiceEn.trim(),
+            voiceZh = it.voiceZh.trim(),
+            responseFormat = it.responseFormat.trim().ifEmpty { null },
+        )
+    }.takeIf { it.isComplete }
 
     // ------------------------------------------------- OCR 识别 (拍照识词)
 
+    private fun ocrPresetById(id: String): OcrProviderPreset =
+        OCR_PROVIDER_PRESETS.firstOrNull { it.id == id } ?: DEFAULT_OCR_PRESET
+
+    /** Seed a preset's draft: its stored config, else preset defaults + blank key. */
+    private fun ocrDraftFor(preset: OcrProviderPreset, cfg: OcrProviderConfig?): OcrFormDraft =
+        cfg?.let { OcrFormDraft(baseUrl = it.baseUrl, apiKey = it.apiKey, model = it.model) }
+            ?: OcrFormDraft(baseUrl = preset.baseUrl, apiKey = "", model = preset.model)
+
+    /** Switch chips: stash this form's draft, load the target provider's own. */
+    fun onOcrPresetChange(preset: OcrProviderPreset) {
+        if (preset.id == _ocrPresetId.value) return
+        ocrDrafts[_ocrPresetId.value] = _ocrForm.value
+        _ocrPresetId.value = preset.id
+        _ocrForm.value = ocrDrafts[preset.id]
+            ?: ocrDraftFor(preset, _ocrStored.value[preset.id])
+    }
+
     fun onOcrBaseUrlChange(value: String) {
-        _ocrBaseUrl.value = value
+        _ocrForm.value = _ocrForm.value.copy(baseUrl = value)
     }
 
     fun onOcrApiKeyChange(value: String) {
-        _ocrApiKey.value = value
+        _ocrForm.value = _ocrForm.value.copy(apiKey = value)
     }
 
     fun onOcrModelChange(value: String) {
-        _ocrModel.value = value
-    }
-
-    /** Fill baseUrl + model from a preset (custom keeps whatever is typed). */
-    fun onOcrPresetChange(preset: OcrProviderPreset) {
-        if (preset.id == "custom") return
-        _ocrBaseUrl.value = preset.baseUrl
-        _ocrModel.value = preset.model
+        _ocrForm.value = _ocrForm.value.copy(model = value)
     }
 
     /** True when every field is non-blank (enables 测试连接/保存). */
@@ -383,13 +419,27 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** Persist the entered config (trimmed) as the OCR provider. */
+    /** Persist the entered config under the selected preset (保存并启用). */
     fun saveOcrConfig() {
+        val presetId = _ocrPresetId.value
         val cfg = currentOcrConfig() ?: return
         viewModelScope.launch {
             try {
-                settings.setOcrProviderConfig(cfg)
-                _ocrConfigSaved.value = true
+                settings.setOcrProviderConfig(presetId, cfg)
+            } catch (e: Exception) {
+                // DataStore failures must never crash the screen (AGENTS.md).
+            }
+        }
+    }
+
+    /** 清除配置: drop only the selected preset's stored OCR config. */
+    fun clearOcrConfig() {
+        val presetId = _ocrPresetId.value
+        viewModelScope.launch {
+            try {
+                settings.clearOcrProviderConfig(presetId)
+                ocrDrafts.remove(presetId)
+                _ocrForm.value = ocrDraftFor(ocrPresetById(presetId), null)
             } catch (e: Exception) {
                 // DataStore failures must never crash the screen (AGENTS.md).
             }
@@ -431,10 +481,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private fun currentOcrConfig(): OcrProviderConfig? =
+    private fun currentOcrConfig(): OcrProviderConfig? = _ocrForm.value.let {
         OcrProviderConfig(
-            baseUrl = _ocrBaseUrl.value.trim(),
-            apiKey = _ocrApiKey.value.trim(),
-            model = _ocrModel.value.trim(),
-        ).takeIf { it.isComplete }
+            baseUrl = it.baseUrl.trim(),
+            apiKey = it.apiKey.trim(),
+            model = it.model.trim(),
+        )
+    }.takeIf { it.isComplete }
 }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
@@ -58,19 +59,14 @@ fun VoiceSourceSettingsPage(
 ) {
     val context = LocalContext.current
     val ttsSource by viewModel.ttsSource.collectAsStateWithLifecycle()
-    val ttsConfigSaved by viewModel.ttsConfigSaved.collectAsStateWithLifecycle()
+    val ttsForm by viewModel.ttsForm.collectAsStateWithLifecycle()
     val ttsPresetId by viewModel.ttsPresetId.collectAsStateWithLifecycle()
-    val ttsApi by viewModel.ttsApi.collectAsStateWithLifecycle()
-    val ttsBaseUrl by viewModel.ttsBaseUrl.collectAsStateWithLifecycle()
-    val ttsApiKey by viewModel.ttsApiKey.collectAsStateWithLifecycle()
-    val ttsModel by viewModel.ttsModel.collectAsStateWithLifecycle()
-    val ttsVoiceEn by viewModel.ttsVoiceEn.collectAsStateWithLifecycle()
-    val ttsVoiceZh by viewModel.ttsVoiceZh.collectAsStateWithLifecycle()
-    val ttsResponseFormat by viewModel.ttsResponseFormat.collectAsStateWithLifecycle()
+    val ttsStoredConfigs by viewModel.ttsStoredConfigs.collectAsStateWithLifecycle()
+    val ttsActive by viewModel.ttsActive.collectAsStateWithLifecycle()
     val ttsTestState by viewModel.ttsTestState.collectAsStateWithLifecycle()
     var showTtsKey by remember { mutableStateOf(false) }
     val ttsFormComplete =
-        ttsBaseUrl.isNotBlank() && ttsApiKey.isNotBlank() && ttsModel.isNotBlank()
+        ttsForm.baseUrl.isNotBlank() && ttsForm.apiKey.isNotBlank() && ttsForm.model.isNotBlank()
 
     SettingsSubPage(title = "发音来源", onBack = onBack) {
         SettingsCard {
@@ -110,16 +106,19 @@ fun VoiceSourceSettingsPage(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
                 )
-                TtsSource.CUSTOM -> Text(
-                    if (ttsConfigSaved) {
-                        "当前使用：${ttsModel.trim()}"
-                    } else {
-                        "自备 API Key；选好服务商、填完配置后点「保存并启用」"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                )
+                TtsSource.CUSTOM -> {
+                    val active = ttsActive
+                    Text(
+                        if (active != null) {
+                            "当前使用：${active.model.trim()}"
+                        } else {
+                            "自备 API Key；选好服务商、填完配置后点「保存并启用」"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                    )
+                }
             }
         }
 
@@ -142,6 +141,17 @@ fun VoiceSourceSettingsPage(
                         FilterChip(
                             selected = ttsPresetId == preset.id,
                             onClick = { viewModel.onTtsPresetChange(preset) },
+                            leadingIcon = if (ttsStoredConfigs.containsKey(preset.id)) {
+                                {
+                                    Icon(
+                                        Icons.Filled.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
+                            } else {
+                                null
+                            },
                             label = {
                                 Text(preset.label, style = MaterialTheme.typography.bodyLarge)
                             },
@@ -166,14 +176,14 @@ fun VoiceSourceSettingsPage(
                     SettingsRadioRow(
                         title = "/audio/speech",
                         supporting = "标准 OpenAI TTS 兼容接口",
-                        selected = ttsApi == TtsApiKind.SPEECH,
+                        selected = ttsForm.api == TtsApiKind.SPEECH,
                         divider = true,
                         onClick = { viewModel.onTtsApiChange(TtsApiKind.SPEECH) },
                     )
                     SettingsRadioRow(
                         title = "Chat Completions",
                         supporting = "经对话接口合成（如小米 MiMo）",
-                        selected = ttsApi == TtsApiKind.CHAT,
+                        selected = ttsForm.api == TtsApiKind.CHAT,
                         divider = false,
                         onClick = { viewModel.onTtsApiChange(TtsApiKind.CHAT) },
                     )
@@ -186,7 +196,7 @@ fun VoiceSourceSettingsPage(
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
                 ) {
                     OutlinedTextField(
-                        value = ttsBaseUrl,
+                        value = ttsForm.baseUrl,
                         onValueChange = viewModel::onTtsBaseUrlChange,
                         label = { Text("接口地址（Base URL）") },
                         singleLine = true,
@@ -194,7 +204,7 @@ fun VoiceSourceSettingsPage(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
-                        value = ttsApiKey,
+                        value = ttsForm.apiKey,
                         onValueChange = viewModel::onTtsApiKeyChange,
                         label = { Text("API Key") },
                         supportingText = { Text("Key 仅保存在本机，仅用于发音请求") },
@@ -218,7 +228,7 @@ fun VoiceSourceSettingsPage(
                             .padding(top = 4.dp),
                     )
                     OutlinedTextField(
-                        value = ttsModel,
+                        value = ttsForm.model,
                         onValueChange = viewModel::onTtsModelChange,
                         label = { Text("模型") },
                         singleLine = true,
@@ -233,7 +243,7 @@ fun VoiceSourceSettingsPage(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         OutlinedTextField(
-                            value = ttsVoiceEn,
+                            value = ttsForm.voiceEn,
                             onValueChange = viewModel::onTtsVoiceEnChange,
                             label = { Text("英文音色") },
                             placeholder = { Text("默认") },
@@ -241,7 +251,7 @@ fun VoiceSourceSettingsPage(
                             modifier = Modifier.weight(1f),
                         )
                         OutlinedTextField(
-                            value = ttsVoiceZh,
+                            value = ttsForm.voiceZh,
                             onValueChange = viewModel::onTtsVoiceZhChange,
                             label = { Text("中文音色") },
                             placeholder = { Text("默认") },
@@ -255,9 +265,9 @@ fun VoiceSourceSettingsPage(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 2.dp),
                     )
-                    if (ttsApi == TtsApiKind.SPEECH) {
+                    if (ttsForm.api == TtsApiKind.SPEECH) {
                         OutlinedTextField(
-                            value = ttsResponseFormat,
+                            value = ttsForm.responseFormat,
                             onValueChange = viewModel::onTtsResponseFormatChange,
                             label = { Text("响应格式") },
                             placeholder = { Text("mp3") },
@@ -311,7 +321,7 @@ fun VoiceSourceSettingsPage(
                             .padding(top = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        if (ttsConfigSaved) {
+                        if (ttsStoredConfigs.containsKey(ttsPresetId)) {
                             OutlinedButton(onClick = viewModel::clearTtsConfig) {
                                 Text("清除配置")
                             }
@@ -346,16 +356,13 @@ fun OcrProviderSettingsPage(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val ocrBaseUrl by viewModel.ocrBaseUrl.collectAsStateWithLifecycle()
-    val ocrApiKey by viewModel.ocrApiKey.collectAsStateWithLifecycle()
-    val ocrModel by viewModel.ocrModel.collectAsStateWithLifecycle()
+    val ocrForm by viewModel.ocrForm.collectAsStateWithLifecycle()
+    val ocrPresetId by viewModel.ocrPresetId.collectAsStateWithLifecycle()
+    val ocrStoredConfigs by viewModel.ocrStoredConfigs.collectAsStateWithLifecycle()
     val ocrTestState by viewModel.ocrTestState.collectAsStateWithLifecycle()
     var showApiKey by remember { mutableStateOf(false) }
     val ocrComplete =
-        ocrBaseUrl.isNotBlank() && ocrApiKey.isNotBlank() && ocrModel.isNotBlank()
-    val activePresetId = OCR_PROVIDER_PRESETS.firstOrNull {
-        it.id != "custom" && it.baseUrl == ocrBaseUrl.trim() && it.model == ocrModel.trim()
-    }?.id ?: "custom"
+        ocrForm.baseUrl.isNotBlank() && ocrForm.apiKey.isNotBlank() && ocrForm.model.isNotBlank()
 
     SettingsSubPage(title = "拍照识词", onBack = onBack) {
         SettingsSectionHeader("服务商")
@@ -369,8 +376,19 @@ fun OcrProviderSettingsPage(
             ) {
                 OCR_PROVIDER_PRESETS.forEach { preset ->
                     FilterChip(
-                        selected = activePresetId == preset.id,
+                        selected = ocrPresetId == preset.id,
                         onClick = { viewModel.onOcrPresetChange(preset) },
+                        leadingIcon = if (ocrStoredConfigs.containsKey(preset.id)) {
+                            {
+                                Icon(
+                                    Icons.Filled.Check,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        } else {
+                            null
+                        },
                         label = { Text(preset.label, style = MaterialTheme.typography.bodyLarge) },
                     )
                 }
@@ -383,14 +401,14 @@ fun OcrProviderSettingsPage(
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
             ) {
                 OutlinedTextField(
-                    value = ocrBaseUrl,
+                    value = ocrForm.baseUrl,
                     onValueChange = viewModel::onOcrBaseUrlChange,
                     label = { Text("接口地址（Base URL）") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
-                    value = ocrApiKey,
+                    value = ocrForm.apiKey,
                     onValueChange = viewModel::onOcrApiKeyChange,
                     label = { Text("API Key") },
                     supportingText = { Text("Key 仅保存在本机，仅用于拍照识词请求") },
@@ -414,7 +432,7 @@ fun OcrProviderSettingsPage(
                         .padding(top = 4.dp),
                 )
                 OutlinedTextField(
-                    value = ocrModel,
+                    value = ocrForm.model,
                     onValueChange = viewModel::onOcrModelChange,
                     label = { Text("模型") },
                     singleLine = true,
@@ -459,19 +477,29 @@ fun OcrProviderSettingsPage(
                         modifier = Modifier.padding(top = 8.dp),
                     )
                 }
-                Button(
-                    onClick = {
-                        viewModel.saveOcrConfig()
-                        Toast.makeText(
-                            context, "已保存 OCR 服务配置", Toast.LENGTH_SHORT,
-                        ).show()
-                    },
-                    enabled = ocrComplete,
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text("保存并启用")
+                    if (ocrStoredConfigs.containsKey(ocrPresetId)) {
+                        OutlinedButton(onClick = viewModel::clearOcrConfig) {
+                            Text("清除配置")
+                        }
+                    }
+                    Button(
+                        onClick = {
+                            viewModel.saveOcrConfig()
+                            Toast.makeText(
+                                context, "已保存 OCR 服务配置", Toast.LENGTH_SHORT,
+                            ).show()
+                        },
+                        enabled = ocrComplete,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("保存并启用")
+                    }
                 }
             }
         }

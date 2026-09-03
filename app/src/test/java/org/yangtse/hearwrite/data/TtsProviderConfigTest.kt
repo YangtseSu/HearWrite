@@ -320,6 +320,62 @@ class TtsProviderConfigTest {
         assertEquals("", decoded.voiceZh)
     }
 
+    // -------------------------------------------- per-preset storage codec
+
+    @Test
+    fun `config map round-trips one entry per preset`() {
+        val map = mapOf(
+            "mimo" to TtsProviderConfig(
+                api = TtsApiKind.CHAT,
+                baseUrl = "https://api.xiaomimimo.com/v1",
+                apiKey = "k1",
+                model = "mimo-v2.5-tts",
+                voiceEn = "Chloe",
+                voiceZh = "冰糖",
+            ),
+            "zhipu" to TtsProviderConfig(
+                api = TtsApiKind.SPEECH,
+                baseUrl = "https://open.bigmodel.cn/api/paas/v4",
+                apiKey = "k2",
+                model = "glm-tts",
+                responseFormat = "wav",
+            ),
+        )
+        assertEquals(map, decodeTtsConfigMap(encodeTtsConfigMap(map)))
+    }
+
+    @Test
+    fun `config map drops corrupt entries instead of failing the store`() {
+        val raw = """
+            {"mimo":{"api":"chat","baseUrl":"https://x","apiKey":"k","model":"m"},
+             "broken":{"api":"sms","baseUrl":"https://x","apiKey":"k","model":"m"},
+             "not-an-object":5}
+        """.trimIndent()
+        val decoded = decodeTtsConfigMap(raw)
+        assertEquals(setOf("mimo"), decoded.keys)
+        assertEquals("https://x", decoded["mimo"]!!.baseUrl)
+    }
+
+    @Test
+    fun `config map tolerates garbage and empty objects`() {
+        assertEquals(emptyMap<String, TtsProviderConfig>(), decodeTtsConfigMap("not json"))
+        assertEquals(emptyMap<String, TtsProviderConfig>(), decodeTtsConfigMap("{}"))
+    }
+
+    @Test
+    fun `legacy preset matching pairs baseUrl and model, else custom`() {
+        assertEquals(
+            "mimo",
+            legacyTtsPresetId(
+                TtsProviderConfig(TtsApiKind.CHAT, "https://api.xiaomimimo.com/v1", "k", "mimo-v2.5-tts"),
+            ),
+        )
+        assertEquals(
+            "custom",
+            legacyTtsPresetId(TtsProviderConfig(TtsApiKind.SPEECH, "https://elsewhere/v1", "k", "m")),
+        )
+    }
+
     // --------------------------------------------------- HTTP error message
 
     @Test

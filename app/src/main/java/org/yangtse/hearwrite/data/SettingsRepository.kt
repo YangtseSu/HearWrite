@@ -1,6 +1,7 @@
 package org.yangtse.hearwrite.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -10,12 +11,6 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
 import org.yangtse.hearwrite.domain.DEFAULT_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.DEFAULT_SPEECH_RATE
 import org.yangtse.hearwrite.domain.ThemeMode
@@ -66,32 +61,87 @@ class SettingsRepository(private val context: Context) {
         ThemeMode.fromStored(prefs[KEY_THEME])
     }
 
-    /**
-     * BYOK OCR provider config (拍照识词) stored as one JSON blob — null when
-     * never configured or unparseable (AGENTS.md Persistence). JSON is
-     * handled dynamically — this module has no serialization codegen.
-     */
-    val ocrProviderConfig: Flow<OcrProviderConfig?> = dataStore.data.map { prefs ->
-        prefs[KEY_OCR_PROVIDER_CONFIG]?.let(::decodeOcrConfig)
-    }
+    // ---- Per-provider BYOK configs ----------------------------------------
+    //
+    // TTS and OCR provider configs are stored **per preset id** — each
+    // 服务商 chip owns its full config (URL, key, model, voices), so
+    // switching or disabling a provider never carries another provider's
+    // key around and never loses a stored config. The active preset id only
+    // changes on 保存并启用; it drives which config the runtime uses.
+    //
+    // Releases before per-provider storage kept a single JSON blob per
+    // feature; those blobs are still read (matched to a preset by
+    // baseUrl+model, else the 自定义 slot) and removed on the first write.
 
-    suspend fun setOcrProviderConfig(cfg: OcrProviderConfig) {
-        dataStore.edit { it[KEY_OCR_PROVIDER_CONFIG] = encodeOcrConfig(cfg) }
-    }
+    private val ocrStoreFlow: Flow<Pair<Map<String, OcrProviderConfig>, String>> =
+        dataStore.data.map(::ocrStore)
 
-    /** Custom OpenAI-compatible TTS provider config (自定义音源) — null when unset/unparseable. */
-    val ttsProviderConfig: Flow<TtsProviderConfig?> = dataStore.data.map { prefs ->
-        prefs[KEY_TTS_PROVIDER_CONFIG]?.let(::decodeTtsProviderConfig)
-    }
+    /** Stored OCR config per preset id (拍照识词); empty when never configured. */
+    val ocrProviderConfigs: Flow<Map<String, OcrProviderConfig>> =
+        ocrStoreFlow.map { it.first }
 
-    /** Persist (or clear, with null) the custom TTS provider config. */
-    suspend fun setTtsProviderConfig(cfg: TtsProviderConfig?) {
+    /** Preset id of the active OCR config ("" when none saved). */
+    val ocrActivePresetId: Flow<String> = ocrStoreFlow.map { it.second }
+
+    /** The active OCR provider config, or null when unset/incomplete. */
+    val ocrProviderConfig: Flow<OcrProviderConfig?> =
+        ocrStoreFlow.map { (map, id) -> map[id]?.takeIf { it.isComplete } }
+
+    /** Store [cfg] under [presetId] and make it the active OCR provider. */
+    suspend fun setOcrProviderConfig(presetId: String, cfg: OcrProviderConfig) {
         dataStore.edit {
-            if (cfg == null) {
-                it.remove(KEY_TTS_PROVIDER_CONFIG)
-            } else {
-                it[KEY_TTS_PROVIDER_CONFIG] = encodeTtsProviderConfig(cfg)
+            it.remove(KEY_OCR_PROVIDER_CONFIG) // legacy single blob
+            val map = it[KEY_OCR_PROVIDER_CONFIGS]?.let(::decodeOcrConfigMap).orEmpty()
+            it[KEY_OCR_PROVIDER_CONFIGS] = encodeOcrConfigMap(map + (presetId to cfg))
+            it[KEY_OCR_ACTIVE_PRESET] = presetId
+        }
+    }
+
+    /** Drop one preset's stored OCR config (explicit 清除配置; others survive). */
+    suspend fun clearOcrProviderConfig(presetId: String) {
+        dataStore.edit {
+            it.remove(KEY_OCR_PROVIDER_CONFIG)
+            val map = it[KEY_OCR_PROVIDER_CONFIGS]?.let(::decodeOcrConfigMap).orEmpty() - presetId
+            if (map.isEmpty()) it.remove(KEY_OCR_PROVIDER_CONFIGS) else {
+                it[KEY_OCR_PROVIDER_CONFIGS] = encodeOcrConfigMap(map)
             }
+            if (it[KEY_OCR_ACTIVE_PRESET] == presetId) it.remove(KEY_OCR_ACTIVE_PRESET)
+        }
+    }
+
+    private val ttsStoreFlow: Flow<Pair<Map<String, TtsProviderConfig>, String>> =
+        dataStore.data.map(::ttsStore)
+
+    /** Stored custom-TTS config per preset id (自定义音源); empty when never configured. */
+    val ttsProviderConfigs: Flow<Map<String, TtsProviderConfig>> =
+        ttsStoreFlow.map { it.first }
+
+    /** Preset id of the active custom-TTS config ("" when none saved). */
+    val ttsActivePresetId: Flow<String> = ttsStoreFlow.map { it.second }
+
+    /** The active custom-TTS provider config, or null when unset/incomplete. */
+    val ttsProviderConfig: Flow<TtsProviderConfig?> =
+        ttsStoreFlow.map { (map, id) -> map[id]?.takeIf { it.isComplete } }
+
+    /** Store [cfg] under [presetId] and make it the active custom-TTS provider. */
+    suspend fun setTtsProviderConfig(presetId: String, cfg: TtsProviderConfig) {
+        dataStore.edit {
+            it.remove(KEY_TTS_PROVIDER_CONFIG) // legacy single blob
+            val map = it[KEY_TTS_PROVIDER_CONFIGS]?.let(::decodeTtsConfigMap).orEmpty()
+            it[KEY_TTS_PROVIDER_CONFIGS] = encodeTtsConfigMap(map + (presetId to cfg))
+            it[KEY_TTS_ACTIVE_PRESET] = presetId
+        }
+    }
+
+    /** Drop one preset's stored TTS config (explicit 清除配置; others survive). */
+    suspend fun clearTtsProviderConfig(presetId: String) {
+        dataStore.edit {
+            it.remove(KEY_TTS_PROVIDER_CONFIG)
+            val map = it[KEY_TTS_PROVIDER_CONFIGS]?.let(::decodeTtsConfigMap).orEmpty() - presetId
+            if (map.isEmpty()) it.remove(KEY_TTS_PROVIDER_CONFIGS) else {
+                it[KEY_TTS_PROVIDER_CONFIGS] = encodeTtsConfigMap(map)
+            }
+            if (it[KEY_TTS_ACTIVE_PRESET] == presetId) it.remove(KEY_TTS_ACTIVE_PRESET)
         }
     }
 
@@ -137,22 +187,29 @@ class SettingsRepository(private val context: Context) {
         soundEnabled = soundEnabled.first(),
     )
 
-    /** `{"baseUrl":…,"apiKey":…,"model":…}` — same shape as alice's stored config. */
-    private fun encodeOcrConfig(cfg: OcrProviderConfig): String = buildJsonObject {
-        put("baseUrl", cfg.baseUrl)
-        put("apiKey", cfg.apiKey)
-        put("model", cfg.model)
-    }.toString()
+    /** Per-preset map + active preset id, parsed from one DataStore snapshot. */
+    private fun ocrStore(
+        prefs: Preferences,
+    ): Pair<Map<String, OcrProviderConfig>, String> {
+        val legacy = prefs[KEY_OCR_PROVIDER_CONFIG]?.let(::decodeOcrConfig)
+        val map = prefs[KEY_OCR_PROVIDER_CONFIGS]?.let(::decodeOcrConfigMap)
+            ?: legacy?.let { mapOf(legacyOcrPresetId(it) to it) }
+            ?: emptyMap()
+        val activeId = prefs[KEY_OCR_ACTIVE_PRESET]?.takeIf { it.isNotBlank() }
+            ?: legacy?.let(::legacyOcrPresetId).orEmpty()
+        return map to activeId
+    }
 
-    private fun decodeOcrConfig(raw: String): OcrProviderConfig? = try {
-        val obj = ocrJson.parseToJsonElement(raw).jsonObject
-        OcrProviderConfig(
-            baseUrl = obj["baseUrl"]?.jsonPrimitive?.contentOrNull?.trim() ?: "",
-            apiKey = obj["apiKey"]?.jsonPrimitive?.contentOrNull?.trim() ?: "",
-            model = obj["model"]?.jsonPrimitive?.contentOrNull?.trim() ?: "",
-        )
-    } catch (e: Exception) {
-        null
+    private fun ttsStore(
+        prefs: Preferences,
+    ): Pair<Map<String, TtsProviderConfig>, String> {
+        val legacy = prefs[KEY_TTS_PROVIDER_CONFIG]?.let(::decodeTtsProviderConfig)
+        val map = prefs[KEY_TTS_PROVIDER_CONFIGS]?.let(::decodeTtsConfigMap)
+            ?: legacy?.let { mapOf(legacyTtsPresetId(it) to it) }
+            ?: emptyMap()
+        val activeId = prefs[KEY_TTS_ACTIVE_PRESET]?.takeIf { it.isNotBlank() }
+            ?: legacy?.let(::legacyTtsPresetId).orEmpty()
+        return map to activeId
     }
 
     private companion object {
@@ -166,8 +223,10 @@ class SettingsRepository(private val context: Context) {
         val KEY_THEME = stringPreferencesKey("theme")
         val KEY_OCR_PROVIDER_CONFIG = stringPreferencesKey("ocr_provider_config")
         val KEY_TTS_PROVIDER_CONFIG = stringPreferencesKey("tts_provider_config")
-
-        val ocrJson = Json { ignoreUnknownKeys = true }
+        val KEY_OCR_PROVIDER_CONFIGS = stringPreferencesKey("ocr_provider_configs")
+        val KEY_TTS_PROVIDER_CONFIGS = stringPreferencesKey("tts_provider_configs")
+        val KEY_OCR_ACTIVE_PRESET = stringPreferencesKey("ocr_active_preset")
+        val KEY_TTS_ACTIVE_PRESET = stringPreferencesKey("tts_active_preset")
     }
 }
 

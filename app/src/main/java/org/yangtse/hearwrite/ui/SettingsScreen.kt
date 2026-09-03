@@ -107,17 +107,13 @@ private fun SettingsHub(
     val speechRate by viewModel.speechRate.collectAsStateWithLifecycle()
     val readTranslation by viewModel.readTranslation.collectAsStateWithLifecycle()
     val ttsSource by viewModel.ttsSource.collectAsStateWithLifecycle()
-    val ttsConfigSaved by viewModel.ttsConfigSaved.collectAsStateWithLifecycle()
-    val ttsModel by viewModel.ttsModel.collectAsStateWithLifecycle()
+    val ttsActive by viewModel.ttsActive.collectAsStateWithLifecycle()
     val soundEnabled by viewModel.soundEnabled.collectAsStateWithLifecycle()
     val cacheInfo by viewModel.ttsCacheInfo.collectAsStateWithLifecycle()
-    val ocrConfigSaved by viewModel.ocrConfigSaved.collectAsStateWithLifecycle()
-    val ocrModel by viewModel.ocrModel.collectAsStateWithLifecycle()
-    val ocrBaseUrl by viewModel.ocrBaseUrl.collectAsStateWithLifecycle()
+    val ocrActive by viewModel.ocrActive.collectAsStateWithLifecycle()
+    val ocrActiveId by viewModel.ocrActivePresetId.collectAsStateWithLifecycle()
     val ocrPresetLabel = OCR_PROVIDER_PRESETS
-        .firstOrNull {
-            it.id != "custom" && it.baseUrl == ocrBaseUrl.trim() && it.model == ocrModel.trim()
-        }?.label ?: "自定义"
+        .firstOrNull { it.id == ocrActiveId }?.label ?: "自定义"
     val cacheCleared by viewModel.ttsCacheCleared.collectAsStateWithLifecycle()
 
     var showClearCacheDialog by rememberSaveable { mutableStateOf(false) }
@@ -266,11 +262,9 @@ private fun SettingsHub(
                     supporting = when (ttsSource) {
                         TtsSource.YOUDAO -> "有道真人词典发音，需要网络；失败时自动改用系统语音"
                         TtsSource.SYSTEM -> "系统内置语音，完全离线"
-                        TtsSource.CUSTOM -> if (ttsConfigSaved) {
-                            "当前使用：${ttsModel.trim()}"
-                        } else {
-                            "自备 API Key；选好服务商、填完配置后点「保存并启用」"
-                        }
+                        TtsSource.CUSTOM -> ttsActive?.let {
+                            "当前使用：${it.model.trim()}"
+                        } ?: "自备 API Key；选好服务商、填完配置后点「保存并启用」"
                     },
                     leading = { Icon(Icons.Outlined.RecordVoiceOver, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailing = {
@@ -320,11 +314,9 @@ private fun SettingsHub(
             SettingsCard {
                 SettingsRow(
                     title = "识别服务",
-                    supporting = if (ocrConfigSaved && ocrModel.isNotBlank()) {
-                        "用 AI 视觉识别课本照片中的词表 · ${ocrModel.trim()}"
-                    } else {
-                        "用 AI 视觉识别课本照片中的词表（需自备 API Key）"
-                    },
+                    supporting = ocrActive?.let {
+                        "用 AI 视觉识别课本照片中的词表 · ${it.model.trim()}"
+                    } ?: "用 AI 视觉识别课本照片中的词表（需自备 API Key）",
                     leading = { Icon(Icons.Outlined.DocumentScanner, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailing = { SettingsValueTrailing(ocrPresetLabel) },
                     divider = false,
