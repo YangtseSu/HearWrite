@@ -169,7 +169,6 @@ class SystemSpeaker(context: Context) : Speaker {
                 if (result == TextToSpeech.ERROR) {
                     settle(cont, settled, false, "speak returned ERROR")
                 } else {
-                    Log.i(TAG, "speak start lang=$lang text=\"$trimmed\" id=$utteranceId rate=$speechRate")
                 }
             }
             watchdog.cancel()
@@ -204,7 +203,6 @@ class SystemSpeaker(context: Context) : Speaker {
         why: String,
     ) {
         if (settled.compareAndSet(false, true)) {
-            Log.i(TAG, "speak end ($why) ok=$ok")
             try {
                 cont.resume(ok)
             } catch (e: IllegalStateException) {

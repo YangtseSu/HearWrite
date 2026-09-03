@@ -104,7 +104,7 @@ class OpenAiCompatibleTts(
         cachedClip(trimmed)?.let { return true }
         val result = flightResult(trimmed, cfg, rate)
         if (result.isFailure) {
-            Log.d(TAG, "provider download failed for \"$trimmed\"", result.exceptionOrNull())
+            Log.w(TAG, "provider download failed for \"$trimmed\"", result.exceptionOrNull())
         }
         return result.isSuccess
     }
@@ -205,7 +205,6 @@ class OpenAiCompatibleTts(
         try {
             dest.parentFile?.mkdirs()
             dest.writeBytes(bytes)
-            Log.i(TAG, "cached ${dest.name} (${bytes.size} B)")
         } catch (e: Exception) {
             throw TtsProviderException("音频缓存写入失败")
         }
@@ -278,7 +277,7 @@ class OpenAiCompatibleTts(
                     // that raced a cancellation must not leak its stream.
                     try {
                         response.use { res ->
-                            val done = TtsPostResult.Done(res.code, res.body?.bytes() ?: ByteArray(0))
+                            val done = TtsPostResult.Done(res.code, res.body.bytes())
                             if (!cont.isCancelled) {
                                 cont.resume(done)
                             }

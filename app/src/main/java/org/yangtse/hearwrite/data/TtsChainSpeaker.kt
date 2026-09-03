@@ -193,7 +193,6 @@ class TtsChainSpeaker(
 
         fun finish(ok: Boolean, why: String) {
             if (!settled.compareAndSet(false, true)) return
-            if (why != "stop") Log.i(TAG, "clip end ($why) ok=$ok")
             try {
                 if (player.isPlaying) player.stop()
             } catch (e: Exception) {

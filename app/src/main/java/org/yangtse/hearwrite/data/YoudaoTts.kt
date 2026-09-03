@@ -176,12 +176,11 @@ class YoudaoTts(private val context: Context) {
                 // re-downloaded next time.
                 dest.parentFile?.mkdirs()
                 dest.writeBytes(bytes)
-                Log.i(TAG, "cached ${dest.name} (${bytes.size} B)")
                 return
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.d(TAG, "download failed for \"$text\": $url", e)
+                Log.w(TAG, "download failed for \"$text\": $url", e)
             }
         }
     }
@@ -217,7 +216,7 @@ class YoudaoTts(private val context: Context) {
                         try {
                             safeResume(cont, res.body?.bytes())
                         } catch (e: Exception) {
-                            Log.d(TAG, "body read failed: $url", e)
+                            Log.w(TAG, "body read failed: $url", e)
                             safeResume(cont, null)
                         }
                     }

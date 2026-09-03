@@ -4,7 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
-import android.media.ExifInterface
+import androidx.core.graphics.scale
+import androidx.exifinterface.media.ExifInterface
 import android.net.Uri
 import android.util.Base64
 import android.util.Log
@@ -174,7 +175,7 @@ class OcrService(
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             val probe = resolver.openInputStream(uri)
             if (probe == null) {
-                Log.d(TAG, "decodeCropSource: openInputStream null for $uri")
+                Log.w(TAG, "decodeCropSource: openInputStream null for $uri")
                 return@withContext null
             }
             try {
@@ -183,7 +184,7 @@ class OcrService(
                 probe.close()
             }
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
-                Log.d(TAG, "decodeCropSource: cannot decode bounds for $uri")
+                Log.w(TAG, "decodeCropSource: cannot decode bounds for $uri")
                 return@withContext null
             }
 
@@ -197,7 +198,7 @@ class OcrService(
             val decoded = resolver.openInputStream(uri)?.use {
                 BitmapFactory.decodeStream(it, null, options)
             } ?: run {
-                Log.d(TAG, "decodeCropSource: decode failed for $uri")
+                Log.w(TAG, "decodeCropSource: decode failed for $uri")
                 return@withContext null
             }
 
@@ -210,7 +211,7 @@ class OcrService(
             if (rotated !== decoded) decoded.recycle()
             rotated
         } catch (e: Exception) {
-            Log.d(TAG, "decodeCropSource failed for $uri", e)
+            Log.w(TAG, "decodeCropSource failed for $uri", e)
             null
         }
     }
@@ -226,7 +227,7 @@ class OcrService(
         withContext(Dispatchers.IO) {
             try {
                 if (rect.left >= rect.right || rect.top >= rect.bottom) {
-                    Log.d(TAG, "cropToDataUrl: degenerate rect $rect")
+                    Log.w(TAG, "cropToDataUrl: degenerate rect $rect")
                     return@withContext null
                 }
                 val l = (rect.left * source.width).roundToInt().coerceIn(0, source.width - 1)
@@ -244,7 +245,7 @@ class OcrService(
                     if (crop !== source) crop.recycle()
                 }
             } catch (e: Exception) {
-                Log.d(TAG, "cropToDataUrl failed", e)
+                Log.w(TAG, "cropToDataUrl failed", e)
                 null
             }
         }
@@ -259,8 +260,7 @@ class OcrService(
     private fun encodeToDataUrl(bitmap: Bitmap): String {
         val scaled = if (max(bitmap.width, bitmap.height) > OCR_MAX_EDGE) {
             val scale = OCR_MAX_EDGE.toFloat() / max(bitmap.width, bitmap.height)
-            Bitmap.createScaledBitmap(
-                bitmap,
+            bitmap.scale(
                 (bitmap.width * scale).roundToInt(),
                 (bitmap.height * scale).roundToInt(),
                 true,
@@ -410,7 +410,7 @@ class OcrService(
                     if (cont.isCancelled) return
                     try {
                         cont.resume(response.use { res ->
-                            PostResult.Done(res.code, res.body?.string() ?: "")
+                            PostResult.Done(res.code, res.body.string())
                         })
                     } catch (e: Exception) {
                         cont.resume(PostResult.Failed)

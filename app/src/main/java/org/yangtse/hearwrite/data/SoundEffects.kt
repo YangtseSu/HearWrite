@@ -67,7 +67,6 @@ class SoundEffects(private val context: Context) {
                 true
             }
             player.prepareAsync()
-            Log.i(TAG, "playing $asset (vol $volume)")
         } catch (e: Exception) {
             Log.w(TAG, "play failed for $asset", e)
             try {
