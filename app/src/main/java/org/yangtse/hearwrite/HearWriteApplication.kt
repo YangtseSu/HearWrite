@@ -2,6 +2,9 @@ package org.yangtse.hearwrite
 
 import android.app.Application
 import androidx.room.Room
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.yangtse.hearwrite.data.BuiltinLibraryRepository
 import org.yangtse.hearwrite.data.CompoundRepository
 import org.yangtse.hearwrite.data.DictationSessionStore
@@ -24,6 +27,24 @@ import org.yangtse.hearwrite.data.YoudaoTts
  * ECDICT dictionary parse never run on the startup path.
  */
 class HearWriteApplication : Application() {
+    private val _pendingDraftImport = MutableStateFlow<String?>(null)
+
+    /**
+     * One-shot draft import for Home (the 词库 preview's 载入草稿): the preview
+     * sets this before popping back to Home; HomeScreen consumes and clears it
+     * (applyEntry + toast). Process-scoped, so a stale import can never surface
+     * on a later cold start.
+     */
+    val pendingDraftImport: StateFlow<String?> = _pendingDraftImport.asStateFlow()
+
+    fun requestDraftImport(linesText: String) {
+        _pendingDraftImport.value = linesText
+    }
+
+    fun consumeDraftImport() {
+        _pendingDraftImport.value = null
+    }
+
     val libraryRepository: BuiltinLibraryRepository by lazy { BuiltinLibraryRepository(assets) }
 
     val settingsRepository: SettingsRepository by lazy { SettingsRepository(this) }

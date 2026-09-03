@@ -62,6 +62,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.yangtse.hearwrite.data.OcrLang
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import org.yangtse.hearwrite.HearWriteApplication
 import java.io.File
 
 /**
@@ -147,6 +148,20 @@ fun HomeScreen(
     // keystrokes on exit.
     DisposableEffect(Unit) {
         onDispose { viewModel.flushDraft() }
+    }
+
+    // 词库 preview's 载入草稿: one-shot import bus — apply into the draft,
+    // clear the bus, confirm. Runs on every re-entry, so a request staged
+    // while this screen was off-stack is consumed exactly once on return.
+    val app = context.applicationContext as HearWriteApplication
+    LaunchedEffect(Unit) {
+        app.pendingDraftImport.collect { lines ->
+            if (lines != null) {
+                viewModel.applyEntry(lines)
+                app.consumeDraftImport()
+                android.widget.Toast.makeText(context, "已载入草稿", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     // alice parity: the FAB and the bottom panel step aside while typing.

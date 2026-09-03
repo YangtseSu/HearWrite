@@ -70,6 +70,12 @@ fun HearWriteApp() {
         }
         composable(Routes.LIBRARY_PREVIEW) {
             LibraryPreviewScreen(
+                onLoadToDraft = { lines ->
+                    // Stage the import before leaving; HomeScreen consumes it
+                    // on return and lands in 展示态 with the list loaded.
+                    app.requestDraftImport(lines.joinToString("\n"))
+                    navController.popBackStack(Routes.HOME, false)
+                },
                 onStartDictation = startDictation,
                 onBack = { navController.popBackStack() },
             )
