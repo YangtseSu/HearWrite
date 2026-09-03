@@ -266,10 +266,9 @@ private fun WordDisplayList(
                             )
                         }
                     }
-                    IconButton(
-                        onClick = { onDeleteWord(index) },
-                        modifier = Modifier.size(36.dp),
-                    ) {
+                    // Default IconButton size (48dp minimum touch target); the
+                    // icon stays 20dp so the row keeps its visual density.
+                    IconButton(onClick = { onDeleteWord(index) }) {
                         Icon(
                             Icons.Filled.Cancel,
                             contentDescription = "删除 ${entry.word}",
