@@ -170,7 +170,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         cropDecodeJob = null
         _cropBitmap.value?.recycle()
         _cropBitmap.value = null
-        super.onCleared()
     }
 
     private var cropDecodeJob: Job? = null

@@ -417,7 +417,6 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
 
     override fun onCleared() {
         engine.dispose() // leaving the screen stops playback
-        super.onCleared()
     }
 
     companion object {

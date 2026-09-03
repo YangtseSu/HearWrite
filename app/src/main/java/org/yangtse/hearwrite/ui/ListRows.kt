@@ -26,8 +26,8 @@ import androidx.compose.ui.unit.dp
 fun ListRow(
     title: String,
     subtitle: String?,
-    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     Row(

@@ -16,7 +16,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -179,7 +179,7 @@ fun RowScope.SettingsValueTrailing(value: String) {
     )
     Spacer(Modifier.width(2.dp))
     Icon(
-        Icons.Filled.KeyboardArrowRight,
+        Icons.AutoMirrored.Filled.KeyboardArrowRight,
         contentDescription = null,
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -189,7 +189,7 @@ fun RowScope.SettingsValueTrailing(value: String) {
 @Composable
 fun RowScope.SettingsChevronTrailing() {
     Icon(
-        Icons.Filled.KeyboardArrowRight,
+        Icons.AutoMirrored.Filled.KeyboardArrowRight,
         contentDescription = null,
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
     )
