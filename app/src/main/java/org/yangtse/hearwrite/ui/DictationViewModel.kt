@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.delay
@@ -37,6 +38,8 @@ data class DictationUiState(
     val intervalSec: Double,
     val autoNext: Boolean,
     val wrongWords: List<String>,
+    /** Words marked wrong during the current run (the score uses this, not the book). */
+    val runWrongCount: Int,
     val markedFlash: Boolean,
     val ready: Boolean,
     val elapsedSec: Long?,
@@ -58,8 +61,10 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     private val settings = app.settingsRepository
     private val wrongWordsRepository = app.wrongWordsRepository
 
-    /** Lines handed over by the launching screen (slice → shuffle applied). */
-    val lines: List<String> = app.dictationSession.lines.ifEmpty { emptyList() }
+    /** Lines handed over by the launching screen (slice → shuffle applied).
+     *  Consumed once — a ViewModel recreated after an activity kill must not
+     *  replay or restart the old session. */
+    val lines: List<String> = app.dictationSession.take()
 
     /**
      * Word passes ride the TTS chain (Youdao ready-cache → system); the 组词
@@ -76,6 +81,12 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _wrongWords = MutableStateFlow<List<String>>(emptyList())
     val wrongWords: StateFlow<List<String>> = _wrongWords.asStateFlow()
+
+    /** Heads marked during the current run (repeat offenders included). */
+    private val runWrongWords = mutableSetOf<String>()
+
+    private val _runWrongCount = MutableStateFlow(0)
+    val runWrongCount: StateFlow<Int> = _runWrongCount.asStateFlow()
 
     private val _markedFlash = MutableStateFlow(false)
     val markedFlash: StateFlow<Boolean> = _markedFlash.asStateFlow()
@@ -117,6 +128,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         val intervalSec: Double,
         val autoNext: Boolean,
         val wrongWords: List<String>,
+        val runWrongCount: Int,
         val markedFlash: Boolean,
         val ready: Boolean,
     )
@@ -125,8 +137,12 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         combine(engine.state, engine.finished, engine.index, engine.remainingMs) { s, f, i, r ->
             EngineStateView(s, f, i, r)
         },
-        combine(_intervalSec, _autoNext, _wrongWords, _markedFlash, _ready) { i, a, w, f, r ->
-            SessionStateView(i, a, w, f, r)
+        combine(
+            combine(_intervalSec, _autoNext) { i, a -> i to a },
+            combine(_wrongWords, _markedFlash, _ready) { w, f, r -> Triple(w, f, r) },
+            _runWrongCount,
+        ) { tempo, rest, count ->
+            SessionStateView(tempo.first, tempo.second, rest.first, count, rest.second, rest.third)
         },
         _total,
         _elapsedSec,
@@ -140,6 +156,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
             intervalSec = sessionView.intervalSec,
             autoNext = sessionView.autoNext,
             wrongWords = sessionView.wrongWords,
+            runWrongCount = sessionView.runWrongCount,
             markedFlash = sessionView.markedFlash,
             ready = sessionView.ready,
             elapsedSec = elapsed,
@@ -150,7 +167,14 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         // Apply the persisted settings snapshot, seed the 错词本 from Room,
         // then start the session.
         viewModelScope.launch {
-            val snapshot = settings.snapshot()
+            // A failed DataStore read must never block the session: fall back
+            // to defaults (AGENTS.md: every async block catches).
+            val snapshot = try {
+                settings.snapshot()
+            } catch (e: Exception) {
+                Log.w(TAG, "settings snapshot failed; using defaults", e)
+                settings.defaultSnapshot()
+            }
             app.systemSpeaker.setSpeechRate(snapshot.speechRate)
             app.ttsChain.setSource(snapshot.ttsSource)
             app.soundEffects.enabled = snapshot.soundEnabled
@@ -162,7 +186,12 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
             _autoNext.value = snapshot.autoNext
             // 组词 tables load off the main thread before the session starts
             // (first lookup parses compounds.json, then it is cached forever).
-            engine.setCompoundTables(app.compoundRepository.tables())
+            // Unavailable tables degrade to the meaning-column fallback.
+            try {
+                engine.setCompoundTables(app.compoundRepository.tables())
+            } catch (e: Exception) {
+                Log.w(TAG, "compound tables unavailable; 组词 falls back", e)
+            }
             // The wrong-word book seeds before the run starts, so the first
             // possible mark (engine must be PLAYING) sees the full book.
             _wrongWords.value = try {
@@ -252,6 +281,8 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     private fun beginRun(runLines: List<String>) {
         runStartedAtMs = System.currentTimeMillis()
         _elapsedSec.value = null
+        runWrongWords.clear()
+        _runWrongCount.value = 0
         _total.value = runLines.size
         _activeLines.value = runLines
         engine.start(runLines)
@@ -283,12 +314,21 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
 
     // --------------------------------------------------------- wrong words
 
-    /** 标记错词 for the current word (speakable headword, deduped book). */
+    /**
+     * 标记错词 for the current word (speakable headword, deduped book). The
+     * press always counts as a miss of the current run — a headword already
+     * sitting in the book (marked in an earlier session) still shows up in
+     * the score — but is added to the book once only.
+     */
     fun markCurrentWrong() {
         val ui = uiState.value
         if (!ui.isActive || ui.index >= ui.total) return
         val head = speakTextFromEntry(_activeLines.value.getOrNull(ui.index) ?: return)
-        if (head.isEmpty() || _wrongWords.value.contains(head)) return
+        if (head.isEmpty()) return
+        if (runWrongWords.add(head)) {
+            _runWrongCount.value = _runWrongCount.value + 1
+        }
+        if (head in _wrongWords.value) return
         _wrongWords.value = _wrongWords.value + head
         _markedFlash.value = true
         Haptics.notifyWarning(getApplication()) // alice notifyWarning parity
@@ -369,6 +409,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         intervalSec = MIN_INTERVAL_SEC,
         autoNext = true,
         wrongWords = emptyList(),
+        runWrongCount = 0,
         markedFlash = false,
         ready = false,
         elapsedSec = null,
@@ -380,6 +421,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     companion object {
+        private const val TAG = "DictationViewModel"
         private const val MARKED_FLASH_MS = 400L
     }
 }

@@ -7,6 +7,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -63,6 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import org.yangtse.hearwrite.ui.theme.DoneGreen
+import org.yangtse.hearwrite.ui.theme.DoneGreenDark
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -137,8 +139,11 @@ fun DictationScreen(
     val requestStop: () -> Unit = {
         if (ui.isActive && !ui.finished) exitDialogVisible = true else onClose()
     }
-    // System back during dictation asks for confirmation, never exits silently.
-    BackHandler(enabled = ui.isActive && !ui.finished) { requestStop() }
+    // System back during dictation asks for confirmation, never exits
+    // silently — and a finished/idle run still funnels through onClose so
+    // every exit lands Home (requestStop dispatches: active → dialog,
+    // otherwise → onClose).
+    BackHandler { requestStop() }
 
     if (exitDialogVisible) {
         AlertDialog(
@@ -205,9 +210,10 @@ fun DictationScreen(
 
 @Composable
 private fun StatusPill(ui: DictationUiState) {
+    val doneColor = if (isSystemInDarkTheme()) DoneGreenDark else DoneGreen
     val (label, color) = when {
-        ui.finished -> "已完成" to DoneGreen
-        ui.state == PlayState.PLAYING -> "听写中" to DoneGreen
+        ui.finished -> "已完成" to doneColor
+        ui.state == PlayState.PLAYING -> "听写中" to doneColor
         ui.state == PlayState.PAUSED -> "已暂停" to MaterialTheme.colorScheme.tertiary
         else -> "未开始" to MaterialTheme.colorScheme.outline
     }
@@ -346,10 +352,11 @@ private fun FinishCard(
             .padding(horizontal = 20.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        val doneColor = if (isSystemInDarkTheme()) DoneGreenDark else DoneGreen
         Icon(
             Icons.Filled.CheckCircle,
             contentDescription = null,
-            tint = DoneGreen,
+            tint = doneColor,
             modifier = Modifier.size(64.dp),
         )
         Text(
@@ -363,10 +370,12 @@ private fun FinishCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp),
         )
-        if (wrong.isNotEmpty()) {
-            val correct = (ui.total - wrong.size).coerceAtLeast(0)
+        // Score = this run's marks (repeat offenders included), not the size
+        // of the persisted book, which may hold words from earlier sessions.
+        if (ui.runWrongCount > 0) {
+            val correct = (ui.total - ui.runWrongCount).coerceAtLeast(0)
             Text(
-                "正确 $correct 词 · 错词 ${wrong.size}",
+                "正确 $correct 词 · 错词 ${ui.runWrongCount}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

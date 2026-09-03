@@ -187,6 +187,16 @@ class SettingsRepository(private val context: Context) {
         soundEnabled = soundEnabled.first(),
     )
 
+    /** The DataStore defaults; used when the persisted read itself fails. */
+    fun defaultSnapshot(): SettingsSnapshot = SettingsSnapshot(
+        intervalSec = DEFAULT_INTERVAL_SEC,
+        speechRate = DEFAULT_SPEECH_RATE,
+        autoNext = true,
+        readTranslation = false,
+        ttsSource = TtsSource.YOUDAO,
+        soundEnabled = true,
+    )
+
     /** Per-preset map + active preset id, parsed from one DataStore snapshot. */
     private fun ocrStore(
         prefs: Preferences,

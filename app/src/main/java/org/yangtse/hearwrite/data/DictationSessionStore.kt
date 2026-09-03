@@ -12,4 +12,16 @@ class DictationSessionStore {
     /** Canonical list lines, slice → shuffle already applied by the caller. */
     @Volatile
     var lines: List<String> = emptyList()
+
+    /**
+     * Consume the staged list — one session, one read. An activity kill that
+     * recreates the dictation ViewModel must not replay (or silently restart)
+     * the old session; without a staged list the screen shows the empty
+     * state and 返回 restarts from Home.
+     */
+    fun take(): List<String> {
+        val staged = lines
+        lines = emptyList()
+        return staged
+    }
 }

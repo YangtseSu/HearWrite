@@ -70,3 +70,6 @@ val StarGold = Color(0xFFF9A825)
 
 /** Success/active states: 听写中 pill, 听写完成 check. */
 val DoneGreen = Color(0xFF2E7D32)
+
+/** The same states on dark surfaces — #2E7D32 is ~1.9:1 there (invisible). */
+val DoneGreenDark = Color(0xFF81C784)
