@@ -162,4 +162,11 @@ class SpeechTextTest {
     fun `ecdict style multi-sense gloss takes the pos-stripped first sense`() {
         assertEquals("使高兴", speakableMeaning("vt. 使高兴；n. 高兴"))
     }
+
+    @Test
+    fun `BOM at the head of a pasted list never reaches the headword`() {
+        assertEquals("月", speakTextFromEntry("\uFEFF月 | yuè | 月亮"))
+        assertEquals("apple", speakTextFromEntry("\uFEFFapple | n. | 苹果"))
+        assertEquals("使高兴", speakableMeaning("\uFEFFvt. 使高兴；n. 高兴"))
+    }
 }

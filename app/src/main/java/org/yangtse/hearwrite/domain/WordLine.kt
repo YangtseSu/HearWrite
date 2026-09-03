@@ -18,6 +18,16 @@ private const val PIPE = "|"
 private const val FULLWIDTH_PIPE = "｜"
 private val PIPE_SPLIT_RE = Regex("[$PIPE$FULLWIDTH_PIPE]")
 
+/**
+ * JS `String.trim()`-parity edge trim for user-supplied list text: Kotlin's
+ * no-arg trim strips Unicode whitespace (U+3000, U+00A0, …) but keeps
+ * U+FEFF (BOM / ZWNBSP), which upstream JS trim removes — a pasted file
+ * saved as UTF-8 with BOM would otherwise prefix its first headword with an
+ * invisible char and silently break single-char 组词 and wrong-word keys.
+ */
+internal fun jsEdgeTrim(s: String): String =
+    s.trim { it.isWhitespace() || it == '\uFEFF' }
+
 /** POS prefixes shared by ECDICT and user word lists: "n." "vt." "adj." … */
 val POS_PREFIX_RE = Regex(
     """^(n\.|v\.|vt\.|vi\.|adj\.|adv\.|prep\.|conj\.|pron\.|num\.|art\.|int\.|interj\.|aux\.|abbr\.|contr\.|pl\.|a\.|na\.|un\.|vbl\.|pp\.|pn\.|exclam\.|pref\.|suf\.|suff\.|comb\.|quant\.|phr\.|ph\.|st\.|pr\.|ind\.|pers\.|col\.|ing\.|pla\.|stuff\.)\s*""",
@@ -47,7 +57,7 @@ fun normalizePos(pos: String): String {
  * Split multiline word-list input into lines (one per non-empty line).
  */
 fun parseWords(text: String): List<String> =
-    text.split(Regex("[\n\r]+")).map { it.trim() }.filter { it.isNotEmpty() }
+    text.split(Regex("[\n\r]+")).map(::jsEdgeTrim).filter { it.isNotEmpty() }
 
 /**
  * Parse a single line into a structured entry. Format: `word | pos | meaning`
@@ -55,13 +65,13 @@ fun parseWords(text: String): List<String> =
  * are null. Extra pipe-separated columns beyond `meaning` are ignored.
  */
 fun parseWordLine(line: String): WordEntry {
-    val trimmed = line.trim()
+    val trimmed = jsEdgeTrim(line)
     if (trimmed.isEmpty()) return WordEntry("")
     val parts = trimmed.split(PIPE_SPLIT_RE)
     return WordEntry(
-        word = parts[0].trim(),
-        pos = parts.getOrNull(1)?.trim()?.ifEmpty { null },
-        meaning = parts.getOrNull(2)?.trim()?.ifEmpty { null },
+        word = jsEdgeTrim(parts[0]),
+        pos = parts.getOrNull(1)?.let(::jsEdgeTrim)?.ifEmpty { null },
+        meaning = parts.getOrNull(2)?.let(::jsEdgeTrim)?.ifEmpty { null },
     )
 }
 

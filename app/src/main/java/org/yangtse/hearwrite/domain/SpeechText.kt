@@ -17,18 +17,18 @@ private const val SPEAK_MEANING_MAX_WIDTH = 12
  * side (`you're`) while the full line remains the display/answer text.
  */
 fun speakTextFromEntry(entry: String): String {
-    var text = entry.trim()
+    var text = jsEdgeTrim(entry)
     if (text.isEmpty()) return ""
 
     // Strip pos/meaning after the pipe delimiter (ASCII only, as upstream).
     val pipe = text.indexOf('|')
-    if (pipe != -1) text = text.substring(0, pipe).trim()
+    if (pipe != -1) text = jsEdgeTrim(text.substring(0, pipe))
     if (text.isEmpty()) return ""
 
     val eq = text.indexOfFirst { it == '=' || it == '＝' }
     if (eq == -1) return text
 
-    val left = text.substring(0, eq).trim()
+    val left = jsEdgeTrim(text.substring(0, eq))
     return left.ifEmpty { text }
 }
 
@@ -59,10 +59,10 @@ private fun meaningWidth(text: String): Double {
 fun speakableMeaning(meaning: String?): String {
     if (meaning == null) return ""
     for (raw in meaning.split(SENSE_SPLIT_RE)) {
-        var text = raw.trim()
+        var text = jsEdgeTrim(raw)
         val pos = POS_PREFIX_RE.matchAt(text, 0)
-        if (pos != null) text = text.substring(pos.range.last + 1).trim()
-        text = text.replace(MEANING_PAREN_RE, "").trim()
+        if (pos != null) text = jsEdgeTrim(text.substring(pos.range.last + 1))
+        text = jsEdgeTrim(text.replace(MEANING_PAREN_RE, ""))
         text = text.replace(MEANING_EDGE_PUNCT_RE, "")
         if (text.isEmpty()) continue
 

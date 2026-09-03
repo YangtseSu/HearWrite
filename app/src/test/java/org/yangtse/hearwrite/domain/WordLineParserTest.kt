@@ -180,9 +180,17 @@ class WordLineParserTest {
 
     @Test
     fun `pos prefix regex prefers longest literal alternative`() {
-        // "art." must win over "a.", "vt." over "v."
         assertTrue(POS_PREFIX_RE.matchAt("art. 一件", 0)?.value?.startsWith("art.") == true)
         assertTrue(POS_PREFIX_RE.matchAt("vt. 使高兴", 0)?.value?.startsWith("vt.") == true)
         assertTrue(POS_PREFIX_RE.matchAt("vi. 发生", 0)?.value?.startsWith("vi.") == true)
+    }
+
+    @Test
+    fun `BOM and unicode whitespace are stripped at line edges js parity`() {
+        assertEquals(listOf("月", "apple"), parseWords("\uFEFF月\uFEFF\n\u3000apple"))
+        assertEquals("月", parseWordLine("\uFEFF月 | yuè | 月亮").word)
+        assertEquals("yuè", parseWordLine("\uFEFF月 | yuè | 月亮").pos)
+        // A BOM-only or fullwidth-space-only line is blank after the parity trim.
+        assertEquals(emptyList<String>(), parseWords("\u3000\u3000\n\uFEFF"))
     }
 }
