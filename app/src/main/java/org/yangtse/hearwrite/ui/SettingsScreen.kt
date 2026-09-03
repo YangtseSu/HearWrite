@@ -48,7 +48,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import org.yangtse.hearwrite.domain.TtsSource
 
 /** One sub-page reachable from the settings hub (each draws its own top bar). */
-private enum class SettingsSubPage { THEME, SPEECH_RATE, INTERVAL, VOICE_SOURCE, OCR_PROVIDER }
+private enum class SettingsSubPage { THEME, SPEECH_RATE, INTERVAL, VOICE_SOURCE, OCR_PROVIDER, ABOUT }
 
 /**
  * 设置 — an Android-settings-style hub. Grouped cards list every setting;
@@ -95,6 +95,7 @@ fun SettingsScreen(
             viewModel = viewModel,
             onBack = { goHub() },
         )
+        SettingsSubPage.ABOUT -> AboutSettingsPage(onBack = { goHub() })
     }
 }
 
@@ -315,6 +316,17 @@ private fun SettingsHub(
                 )
             }
 
+            SettingsSectionHeader("关于")
+            SettingsCard {
+                SettingsRow(
+                    title = "关于听写",
+                    supporting = "简介、版本号与开源许可",
+                    leading = { Icon(Icons.Outlined.Info, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    trailing = { SettingsChevronTrailing() },
+                    divider = false,
+                    onClick = { onOpen(SettingsSubPage.ABOUT) },
+                )
+            }
             Spacer(Modifier.height(8.dp))
         }
     }
