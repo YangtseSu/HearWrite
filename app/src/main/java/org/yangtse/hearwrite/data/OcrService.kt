@@ -3,6 +3,8 @@ package org.yangtse.hearwrite.data
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import android.util.Base64
 import android.util.Log
@@ -42,6 +44,27 @@ const val OCR_MAX_EDGE = 1600
 
 /** JPEG quality of the compressed image (alice `OCR_JPEG_QUALITY`). */
 const val OCR_JPEG_QUALITY = 0.82f
+
+/**
+ * Longest edge of the decoded crop-source bitmap (选定识别区域 step). The
+ * crop UI needs headroom over the 1600 px OCR cap so a small region still
+ * carries real text resolution; decode is power-of-two sampled to ≤ this.
+ */
+const val OCR_CROP_SOURCE_EDGE = 4096
+
+/** Minimum selectable crop side in source pixels (below this it is noise). */
+const val OCR_CROP_MIN_SIDE_PX = 96
+
+/**
+ * A crop selection in normalized image coordinates — every edge in [0,1],
+ * `left < right`, `top < bottom` (enforced by the crop UI gestures).
+ */
+data class NormalizedRect(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+)
 
 /** Disclaimer surfaced at every OCR entry point (AGENTS.md). */
 const val OCR_DISCLAIMER = "AI 识图可能存在误差，请核对识别结果"
@@ -120,10 +143,28 @@ class OcrService(
     suspend fun config(): OcrProviderConfig? =
         settings.ocrProviderConfig.firstOrNull()?.takeIf { it.isComplete }
 
-    /** Read + downscale an image to a `data:image/jpeg;base64,…` URL, or null on failure. */
-    suspend fun compressToDataUrl(uri: Uri): String? = withContext(Dispatchers.IO) {
+    /**
+     * Decode a picked/captured image for the 选定识别区域 step: power-of-two
+     * sampled so the decoded longest edge is ≤ [OCR_CROP_SOURCE_EDGE], and
+     * rotated per EXIF orientation (BitmapFactory ignores EXIF; camera
+     * captures carry it). The caller owns the returned bitmap.
+     */
+    suspend fun decodeCropSource(uri: Uri): Bitmap? = withContext(Dispatchers.IO) {
         try {
             val resolver = context.contentResolver
+
+            // EXIF orientation — read before any pixel decode; some inputs
+            // (PNG, odd streams) have none or throw, treat them as normal.
+            val orientation = try {
+                resolver.openInputStream(uri)?.use { stream ->
+                    ExifInterface(stream).getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION,
+                        ExifInterface.ORIENTATION_NORMAL,
+                    )
+                } ?: ExifInterface.ORIENTATION_NORMAL
+            } catch (e: Exception) {
+                ExifInterface.ORIENTATION_NORMAL
+            }
 
             // Size probe: inJustDecodeBounds decodes no pixels and returns
             // null, but fills outWidth/outHeight — check the fields, not the
@@ -131,7 +172,7 @@ class OcrService(
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             val probe = resolver.openInputStream(uri)
             if (probe == null) {
-                Log.d(TAG, "compress: openInputStream null for $uri")
+                Log.d(TAG, "decodeCropSource: openInputStream null for $uri")
                 return@withContext null
             }
             try {
@@ -140,52 +181,102 @@ class OcrService(
                 probe.close()
             }
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
-                Log.d(TAG, "compress: cannot decode bounds for $uri")
+                Log.d(TAG, "decodeCropSource: cannot decode bounds for $uri")
                 return@withContext null
             }
 
-            // inSampleSize keeps the decode buffer bounded; the exact ≤1600
-            // longest edge is applied afterwards.
+            // inSampleSize keeps the decode buffer bounded (≤ 4096 edge).
             val maxEdge = max(bounds.outWidth, bounds.outHeight)
             val options = BitmapFactory.Options()
             var sample = 1
-            while (maxEdge / (sample * 2) >= OCR_MAX_EDGE) sample *= 2
+            while (maxEdge / sample > OCR_CROP_SOURCE_EDGE) sample *= 2
             options.inSampleSize = sample
 
             val decoded = resolver.openInputStream(uri)?.use {
                 BitmapFactory.decodeStream(it, null, options)
-            }
-            if (decoded == null) {
-                Log.d(TAG, "compress: decode failed for $uri")
+            } ?: run {
+                Log.d(TAG, "decodeCropSource: decode failed for $uri")
                 return@withContext null
             }
-            val scaled = if (max(decoded.width, decoded.height) > OCR_MAX_EDGE) {
-                val scale = OCR_MAX_EDGE.toFloat() / max(decoded.width, decoded.height)
-                Bitmap.createScaledBitmap(
-                    decoded,
-                    (decoded.width * scale).roundToInt(),
-                    (decoded.height * scale).roundToInt(),
-                    true,
-                )
-            } else {
-                decoded
+
+            val rotated = when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> rotateBitmap(decoded, 90f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> rotateBitmap(decoded, 180f)
+                ExifInterface.ORIENTATION_ROTATE_270 -> rotateBitmap(decoded, 270f)
+                else -> decoded
             }
-            try {
-                val out = ByteArrayOutputStream()
-                scaled.compress(
-                    Bitmap.CompressFormat.JPEG,
-                    (OCR_JPEG_QUALITY * 100).roundToInt(),
-                    out,
-                )
-                val base64 = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
-                "data:image/jpeg;base64,$base64"
-            } finally {
-                if (scaled !== decoded) scaled.recycle()
-                decoded.recycle()
-            }
+            if (rotated !== decoded) decoded.recycle()
+            rotated
         } catch (e: Exception) {
-            Log.d(TAG, "compress failed for $uri", e)
+            Log.d(TAG, "decodeCropSource failed for $uri", e)
             null
+        }
+    }
+
+    /**
+     * Crop [rect] (normalized over [source]) and encode the result to a
+     * `data:image/jpeg;base64,…` URL (≤1600 px, JPEG 0.82 — the same output
+     * as the old whole-image path). A full-image rect short-circuits to
+     * [source] without copying. Does not recycle [source]; the caller owns
+     * it. Returns null on failure or a degenerate rect.
+     */
+    suspend fun cropToDataUrl(source: Bitmap, rect: NormalizedRect): String? =
+        withContext(Dispatchers.IO) {
+            try {
+                if (rect.left >= rect.right || rect.top >= rect.bottom) {
+                    Log.d(TAG, "cropToDataUrl: degenerate rect $rect")
+                    return@withContext null
+                }
+                val l = (rect.left * source.width).roundToInt().coerceIn(0, source.width - 1)
+                val r = (rect.right * source.width).roundToInt().coerceIn(l + 1, source.width)
+                val t = (rect.top * source.height).roundToInt().coerceIn(0, source.height - 1)
+                val b = (rect.bottom * source.height).roundToInt().coerceIn(t + 1, source.height)
+                val crop = if (l == 0 && t == 0 && r == source.width && b == source.height) {
+                    source
+                } else {
+                    Bitmap.createBitmap(source, l, t, r - l, b - t)
+                }
+                try {
+                    encodeToDataUrl(crop)
+                } finally {
+                    if (crop !== source) crop.recycle()
+                }
+            } catch (e: Exception) {
+                Log.d(TAG, "cropToDataUrl failed", e)
+                null
+            }
+        }
+
+    /** Rotate [bitmap] by a 90° multiple, returning a new bitmap. */
+    private fun rotateBitmap(bitmap: Bitmap, degrees: Float): Bitmap {
+        val matrix = Matrix().apply { postRotate(degrees) }
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    }
+
+    /** Scale to ≤ [OCR_MAX_EDGE] and JPEG-encode [bitmap] into a data URL. */
+    private fun encodeToDataUrl(bitmap: Bitmap): String {
+        val scaled = if (max(bitmap.width, bitmap.height) > OCR_MAX_EDGE) {
+            val scale = OCR_MAX_EDGE.toFloat() / max(bitmap.width, bitmap.height)
+            Bitmap.createScaledBitmap(
+                bitmap,
+                (bitmap.width * scale).roundToInt(),
+                (bitmap.height * scale).roundToInt(),
+                true,
+            )
+        } else {
+            bitmap
+        }
+        try {
+            val out = ByteArrayOutputStream()
+            scaled.compress(
+                Bitmap.CompressFormat.JPEG,
+                (OCR_JPEG_QUALITY * 100).roundToInt(),
+                out,
+            )
+            val base64 = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+            return "data:image/jpeg;base64,$base64"
+        } finally {
+            if (scaled !== bitmap) scaled.recycle()
         }
     }
 

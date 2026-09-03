@@ -1,11 +1,13 @@
 package org.yangtse.hearwrite.ui
 
 import android.app.Application
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlin.math.roundToInt
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +23,7 @@ import kotlinx.coroutines.sync.Mutex
 import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.data.HistoryEntry
 import org.yangtse.hearwrite.data.LibraryList
+import org.yangtse.hearwrite.data.NormalizedRect
 import org.yangtse.hearwrite.data.OCR_PROGRESS_COMPRESSING
 import org.yangtse.hearwrite.data.OCR_PROGRESS_RECOGNIZING
 import org.yangtse.hearwrite.data.OcrLang
@@ -154,6 +157,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     /** dataUrl + lang of the last compressed image — the 重试 target. */
     private var lastOcrRun: Pair<String, OcrLang>? = null
+
+    // ---- 选定识别区域 (crop step) ------------------------------------------
+
+    private var cropDecodeJob: Job? = null
+
+    /** Crop session id: bumped on start/cancel so stale decode results die. */
+    private var cropSession = 0
+
+    private val _cropBitmap = MutableStateFlow<Bitmap?>(null)
+    /** Decoded source shown in the crop overlay (EXIF-rotated, ≤ 4096 px). */
+    val cropBitmap: StateFlow<Bitmap?> = _cropBitmap.asStateFlow()
+
+    private val _cropLoading = MutableStateFlow(false)
+    /** True while the picked image is being decoded for the crop overlay. */
+    val cropLoading: StateFlow<Boolean> = _cropLoading.asStateFlow()
 
     init {
         // Seed the draft from the persisted value, then watch for changes.
@@ -437,12 +455,99 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // ------------------------------------------------------- 拍照识词 (OCR)
 
     /**
-     * Run OCR on a picked/captured image: compress to a ≤1600 px JPEG data
-     * URL, then the vision call; success replaces the draft with the parsed
-     * lines for manual correction (upstream behavior).
+     * Begin the 选定识别区域 crop step for a picked/captured image: decode
+     * the source off the main thread; the overlay shows a spinner until
+     * [cropBitmap] lands. On decode failure [ocrError] carries the Chinese
+     * 读取失败 message and the overlay closes itself ([cropBitmap] stays null).
      */
-    fun recognizeImage(uri: Uri, lang: OcrLang) = launchOcrRun(lang) {
-        ocrService.compressToDataUrl(uri)
+    fun startOcrCrop(uri: Uri) {
+        cropDecodeJob?.cancel()
+        val session = ++cropSession
+        _cropBitmap.value?.recycle()
+        _cropBitmap.value = null
+        _ocrError.value = null
+        _cropLoading.value = true
+        cropDecodeJob = viewModelScope.launch {
+            val decoded = ocrService.decodeCropSource(uri)
+            if (session != cropSession) {
+                decoded?.recycle()
+                return@launch
+            }
+            _cropLoading.value = false
+            if (decoded == null) {
+                _ocrError.value = "读取图片失败，请重新拍摄或选择"
+            } else {
+                _cropBitmap.value = decoded
+            }
+        }
+    }
+
+    /** Leave the crop step without recognizing; recycles the decoded source. */
+    fun cancelOcrCrop() {
+        cropSession++
+        cropDecodeJob?.cancel()
+        cropDecodeJob = null
+        _cropLoading.value = false
+        _cropBitmap.value?.recycle()
+        _cropBitmap.value = null
+    }
+
+    /**
+     * Recognize the user's [rect] selection (normalized over the crop source,
+     * taken with the overlay's full-frame default = whole-page OCR): crop to
+     * the region, compress off the main thread, then the standard vision
+     * call; success replaces the draft with the parsed lines for manual
+     * correction (upstream behavior). The decoded source is recycled exactly
+     * once whatever the outcome (owned tracks it until the encode consumed
+     * its pixels).
+     */
+    fun confirmOcrCrop(rect: NormalizedRect, lang: OcrLang) {
+        val source = _cropBitmap.value ?: return
+        _cropBitmap.value = null
+        viewModelScope.launch {
+            if (!ocrGate.tryLock()) {
+                source.recycle()
+                return@launch
+            }
+            var owned: Bitmap? = source
+            try {
+                _ocrBusy.value = true
+                _ocrError.value = null
+                _ocrRetryable.value = false
+                // BYOK: no config (or incomplete) → Chinese error with retry
+                // hint; the user must supply their own key in 设置.
+                if (ocrService.config() == null) {
+                    _ocrError.value = "请先在设置中配置 OCR 服务（需自备 API Key）"
+                    return@launch
+                }
+                _ocrPhase.value = OCR_PROGRESS_COMPRESSING
+                val dataUrl = ocrService.cropToDataUrl(source, rect)
+                if (dataUrl == null) {
+                    _ocrError.value = "读取图片失败，请重新拍摄或选择"
+                    return@launch
+                }
+                owned = null
+                source.recycle()
+                lastOcrRun = dataUrl to lang
+                _ocrRetryable.value = true
+                _ocrPhase.value = OCR_PROGRESS_RECOGNIZING
+                when (val outcome = ocrService.recognize(dataUrl, lang)) {
+                    is OcrOutcome.Success -> {
+                        _draft.value = outcome.linesText
+                        _startIndex.value = 0
+                        _displayMode.value = true
+                        settings.setDraft(outcome.linesText)
+                        _ocrOutcome.value = ocrSuccessMessage(outcome.linesText, lang)
+                    }
+                    is OcrOutcome.Error -> _ocrError.value = outcome.message
+                }
+            } finally {
+                owned?.recycle()
+                _ocrBusy.value = false
+                _ocrPhase.value = ""
+                ocrGate.unlock()
+            }
+        }
     }
 
     /** Re-run the last recognition against the same image (after an error). */

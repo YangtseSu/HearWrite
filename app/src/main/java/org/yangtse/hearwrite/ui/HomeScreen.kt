@@ -105,6 +105,8 @@ fun HomeScreen(
     val ocrRetryable by viewModel.ocrRetryable.collectAsStateWithLifecycle()
     val ocrConfigured by viewModel.ocrConfigured.collectAsStateWithLifecycle()
     val ocrModel by viewModel.ocrModel.collectAsStateWithLifecycle()
+    val ocrCropBitmap by viewModel.cropBitmap.collectAsStateWithLifecycle()
+    val ocrCropLoading by viewModel.cropLoading.collectAsStateWithLifecycle()
 
     var showMenu by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
@@ -115,6 +117,7 @@ fun HomeScreen(
 
     // ---- 拍照识词 (OCR) state ----------------------------------------------
     var showOcrSheet by remember { mutableStateOf(false) }
+    var showOcrCrop by remember { mutableStateOf(false) }
     var ocrLang by remember { mutableStateOf(OcrLang.ENGLISH) }
     // Suppresses a second picker/camera launch while one is open (the VM's
     // Mutex backstop guards the network call itself — AGENTS.md re-entry).
@@ -130,13 +133,21 @@ fun HomeScreen(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
         pickerOpen = false
-        if (uri != null) viewModel.recognizeImage(uri, ocrLang)
+        // Every pick goes through the 选定识别区域 crop step first.
+        if (uri != null) {
+            showOcrCrop = true
+            viewModel.startOcrCrop(uri)
+        }
     }
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture(),
     ) { ok ->
         pickerOpen = false
-        if (ok) viewModel.recognizeImage(cameraUri, ocrLang)
+        // Every capture goes through the 选定识别区域 crop step first.
+        if (ok) {
+            showOcrCrop = true
+            viewModel.startOcrCrop(cameraUri)
+        }
     }
 
     // One-shot OCR success toast (已识别 N 个…), consumed once shown.
@@ -382,6 +393,23 @@ fun HomeScreen(
                 onOpenSettings()
             },
             onDismiss = { showOcrSheet = false },
+        )
+    }
+
+    // 选定识别区域 step: shown from pick/capture until confirm or dismiss;
+    // a decode failure clears it by itself (bitmap null, loading done) and
+    // leaves the shared OCR error card to explain.
+    if (showOcrCrop && (ocrCropLoading || ocrCropBitmap != null)) {
+        OcrCropOverlay(
+            bitmap = ocrCropBitmap,
+            onConfirm = { rect ->
+                showOcrCrop = false
+                viewModel.confirmOcrCrop(rect, ocrLang)
+            },
+            onDismiss = {
+                showOcrCrop = false
+                viewModel.cancelOcrCrop()
+            },
         )
     }
 
