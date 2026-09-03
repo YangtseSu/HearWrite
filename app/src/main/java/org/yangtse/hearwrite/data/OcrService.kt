@@ -506,15 +506,38 @@ private fun cleanToken(s: String): String = s
     .trim()
 
 /**
+ * The leading English token run of [tokens] — the headword phrase. Empty
+ * when the row does not begin with English, so a row that opens with Chinese
+ * (or pure 音标) is not an English entry at all. A lone `/` keeps the run
+ * going only while it is flanked by word tokens, so spaced slash phrases
+ * (`actor / actress`) survive whole — the format the OCR prompt asks for —
+ * while a trailing `/` or annotation tokens still end the run.
+ */
+private fun leadingEnglishRun(tokens: List<String>): List<String> {
+    val run = mutableListOf<String>()
+    var i = 0
+    while (i < tokens.size) {
+        val token = tokens[i]
+        if (WORD_RE.matches(token)) {
+            run += token
+            i++
+        } else if (token == "/" && run.isNotEmpty() && i + 1 < tokens.size && WORD_RE.matches(tokens[i + 1])) {
+            run += token
+            i++
+        } else {
+            break
+        }
+    }
+    return run
+}
+
+/**
  * English tokens that start a cleaned token run — the headword phrase.
  * Null when the run does not start with English, so a row that begins with
  * Chinese (or pure 音标) is not an English entry at all.
  */
 private fun englishPhrase(tokenRun: String): String? {
-    val phrase = tokenRun
-        .split(WHITESPACE_RE)
-        .filter { it.isNotEmpty() }
-        .takeWhile { WORD_RE.matches(it) }
+    val phrase = leadingEnglishRun(tokenRun.split(WHITESPACE_RE).filter { it.isNotEmpty() })
         .take(MAX_PHRASE_TOKENS)
     return phrase.takeIf { it.isNotEmpty() }?.joinToString(" ")
 }
@@ -529,10 +552,16 @@ private fun englishPhrase(tokenRun: String): String? {
  */
 private fun englishCandidates(candidate: String): List<String> {
     val tokens = candidate.split(WHITESPACE_RE).filter { it.isNotEmpty() }
-    val leading = tokens.takeWhile { WORD_RE.matches(it) }
+    val leading = leadingEnglishRun(tokens)
     if (leading.isEmpty()) return emptyList()
     if (leading.size == tokens.size) {
-        return if (leading.size <= MAX_PHRASE_TOKENS) listOf(candidate) else tokens
+        return if (leading.size <= MAX_PHRASE_TOKENS) {
+            listOf(candidate)
+        } else {
+            // Over-long pure dump flattened to single tokens; lone "/"
+            // separators are noise and never become entries.
+            tokens.filter { WORD_RE.matches(it) }
+        }
     }
     return if (leading.size <= MAX_PHRASE_TOKENS) listOf(leading.joinToString(" ")) else leading
 }

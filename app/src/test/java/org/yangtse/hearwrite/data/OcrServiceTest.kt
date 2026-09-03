@@ -282,4 +282,23 @@ class OcrServiceTest {
             ocrEmptyMessage(OcrLang.CHINESE, unparsed = true),
         )
     }
+
+    @Test
+    fun extractEnglishOcrLines_spacedSlashPhrase_keptWhole() {
+        assertEquals(
+            listOf("actor / actress"),
+            extractEnglishOcrLines("actor / actress"),
+        )
+        // Pipe-enriched rows keep the whole slash phrase too.
+        assertEquals(
+            listOf("actor / actress | n. | 演员"),
+            extractEnglishOcrLines("actor / actress | n. | 演员"),
+        )
+        // Salvage still yields the full slash phrase off a row that trails
+        // annotations, and plain rows after it stay independent.
+        assertEquals(
+            listOf("actor / actress", "apple"),
+            extractEnglishOcrLines("actor / actress /əˈktə(r)/ n. 演员\napple"),
+        )
+    }
 }
