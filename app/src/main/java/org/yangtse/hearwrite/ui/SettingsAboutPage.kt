@@ -2,10 +2,12 @@ package org.yangtse.hearwrite.ui
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,10 +25,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
+import org.yangtse.hearwrite.R
 
 /**
  * 设置 → 关于: app identity, feature blurb, data/asset provenance and the
@@ -57,18 +60,18 @@ fun AboutSettingsPage(onBack: () -> Unit) {
                 .padding(top = 24.dp, bottom = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // The launcher icon as the app logo (light tile color is part of the mark).
             Box(
                 modifier = Modifier
                     .size(84.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    .background(MaterialTheme.colorScheme.primary),
+                    .background(colorResource(R.color.ic_launcher_background)),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    "听写",
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Medium,
+                Image(
+                    painter = painterResource(R.mipmap.ic_launcher_foreground),
+                    contentDescription = "应用图标",
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
             Spacer(Modifier.height(16.dp))
