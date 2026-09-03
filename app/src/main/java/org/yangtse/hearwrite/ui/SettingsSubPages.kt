@@ -15,9 +15,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MAX_SPEECH_RATE
-import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_SPEECH_RATE
 import org.yangtse.hearwrite.domain.ThemeMode
 
@@ -45,8 +43,8 @@ fun ThemeSettingsPage(
 }
 
 /**
- * 设置 → 语速 / 默认间隔: one slider per page with the live value beside the
- * label (Android-settings style). Changes apply immediately and persist.
+ * 设置 → 语速: one slider page with the live value beside the label
+ * (Android-settings style). Changes apply immediately and persist.
  */
 @Composable
 fun SpeechRateSettingsPage(
@@ -64,26 +62,6 @@ fun SpeechRateSettingsPage(
         steps = 9, // 0.1 steps → 11 stops incl. endpoints
         sliderDescription = "听写语速",
         onValueChange = viewModel::onSpeechRateChange,
-        onBack = onBack,
-    )
-}
-
-@Composable
-fun IntervalSettingsPage(
-    viewModel: SettingsViewModel,
-    onBack: () -> Unit,
-) {
-    val intervalSec by viewModel.intervalSec.collectAsStateWithLifecycle()
-    SettingsSliderPage(
-        title = "默认间隔",
-        valueLabel = "默认间隔",
-        valueText = formatInterval(intervalSec),
-        caption = "每个词之间的等待秒数，听写页也可实时调整",
-        value = intervalSec.toFloat(),
-        valueRange = MIN_INTERVAL_SEC.toFloat()..MAX_INTERVAL_SEC.toFloat(),
-        steps = 17, // 0.5 s steps
-        sliderDescription = "默认听写间隔秒数",
-        onValueChange = viewModel::onIntervalChange,
         onBack = onBack,
     )
 }

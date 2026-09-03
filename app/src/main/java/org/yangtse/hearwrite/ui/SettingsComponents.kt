@@ -235,11 +235,6 @@ fun SettingsSubPage(
 internal fun formatRate(value: Float): String =
     String.format(Locale.ROOT, "%.1f", value)
 
-/** Interval label: integral seconds without a decimal point ("7 秒"), halves kept ("7.5 秒"). */
-internal fun formatInterval(sec: Double): String =
-    if (sec % 1.0 == 0.0) "${sec.toLong()} 秒"
-    else String.format(Locale.ROOT, "%.1f 秒", sec)
-
 /** Human cache size ("3.2 MB" / "640 KB" / "0 B"). */
 internal fun formatBytes(bytes: Long): String = when {
     bytes >= 1L shl 20 -> String.format(Locale.ROOT, "%.1f MB", bytes / 1048576.0)

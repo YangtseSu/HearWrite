@@ -17,9 +17,7 @@ import androidx.compose.material.icons.outlined.DocumentScanner
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.RecordVoiceOver
-import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.Speed
-import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.AlertDialog
@@ -48,11 +46,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import org.yangtse.hearwrite.domain.TtsSource
 
 /** One sub-page reachable from the settings hub (each draws its own top bar). */
-private enum class SettingsSubPage { THEME, SPEECH_RATE, INTERVAL, VOICE_SOURCE, OCR_PROVIDER, ABOUT }
+private enum class SettingsSubPage { THEME, SPEECH_RATE, VOICE_SOURCE, OCR_PROVIDER, ABOUT }
 
 /**
  * 设置 — an Android-settings-style hub. Grouped cards list every setting;
- * tappable rows open sub-pages (主题 / 语速 / 默认间隔 / 发音来源 / 拍照识词 /
+ * tappable rows open sub-pages (主题 / 语速 / 发音来源 / 拍照识词 /
  * 关于). System back pops the sub-page first, then leaves 设置 entirely.
  * All state lives in the single [SettingsViewModel] shared by hub and
  * sub-pages, so edits made deep in a page show up on the hub immediately.
@@ -83,10 +81,6 @@ fun SettingsScreen(
             viewModel = viewModel,
             onBack = { goHub() },
         )
-        SettingsSubPage.INTERVAL -> IntervalSettingsPage(
-            viewModel = viewModel,
-            onBack = { goHub() },
-        )
         SettingsSubPage.VOICE_SOURCE -> VoiceSourceSettingsPage(
             viewModel = viewModel,
             onBack = { goHub() },
@@ -110,8 +104,6 @@ private fun SettingsHub(
     val context = LocalContext.current
     val theme by viewModel.theme.collectAsStateWithLifecycle()
     val speechRate by viewModel.speechRate.collectAsStateWithLifecycle()
-    val intervalSec by viewModel.intervalSec.collectAsStateWithLifecycle()
-    val autoNext by viewModel.autoNext.collectAsStateWithLifecycle()
     val readTranslation by viewModel.readTranslation.collectAsStateWithLifecycle()
     val ttsSource by viewModel.ttsSource.collectAsStateWithLifecycle()
     val ttsConfigSaved by viewModel.ttsConfigSaved.collectAsStateWithLifecycle()
@@ -205,26 +197,6 @@ private fun SettingsHub(
                     leading = { Icon(Icons.Outlined.Speed, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailing = { SettingsValueTrailing(formatRate(speechRate)) },
                     onClick = { onOpen(SettingsSubPage.SPEECH_RATE) },
-                )
-                SettingsRow(
-                    title = "默认间隔",
-                    supporting = "每个词之间的等待时间，1–10 秒",
-                    leading = { Icon(Icons.Outlined.Timer, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    trailing = { SettingsValueTrailing(formatInterval(intervalSec)) },
-                    onClick = { onOpen(SettingsSubPage.INTERVAL) },
-                )
-                SettingsRow(
-                    title = "自动播报",
-                    supporting = "当前词听写完毕后自动播放下一个词",
-                    leading = { Icon(Icons.Outlined.SkipNext, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    trailing = {
-                        Switch(
-                            checked = autoNext,
-                            onCheckedChange = viewModel::onAutoNextChange,
-                            modifier = Modifier.semantics { contentDescription = "自动播放下一个词" },
-                        )
-                    },
-                    onClick = { viewModel.onAutoNextChange(!autoNext) },
                 )
                 SettingsRow(
                     title = "朗读释义",
