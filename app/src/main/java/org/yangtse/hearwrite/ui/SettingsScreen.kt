@@ -50,6 +50,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.yangtse.hearwrite.data.OCR_DISCLAIMER
 import org.yangtse.hearwrite.data.OCR_PROVIDER_PRESETS
+import org.yangtse.hearwrite.data.TTS_PROVIDER_PRESETS
+import org.yangtse.hearwrite.data.TtsApiKind
 import org.yangtse.hearwrite.domain.MAX_SPEECH_RATE
 import org.yangtse.hearwrite.domain.MIN_SPEECH_RATE
 import org.yangtse.hearwrite.domain.TtsSource
@@ -57,11 +59,11 @@ import java.util.Locale
 
 /**
  * Playback settings: 语速 (system TTS rate, applied live), 朗读释义, the TTS
- * source (有道词典/系统语音) and 提示音 (countdown tick + completion chime).
- * The OCR 识别 section configures the BYOK vision provider (拍照识词):
- * provider presets (default 智谱 GLM-4V-Flash), baseUrl/apiKey/model fields,
- * 测试连接 against the entered fields and 保存 into DataStore. Interval/
- * auto-next are adjusted on the dictation screen itself; Phase 10
+ * source (有道词典/自定义音源/系统语音 — the custom one expands into the
+ * OpenAI-compatible provider form: presets incl. 小米 MiMo, api wire shape,
+ * baseUrl/apiKey/model/voices/format fields, 测试并试听 and 保存) and 提示音.
+ * The OCR 识别 section configures the BYOK vision provider (拍照识词).
+ * Interval/auto-next are adjusted on the dictation screen itself; Phase 10
  * consolidates the remaining settings.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -79,13 +81,26 @@ fun SettingsScreen(
     val ocrApiKey by viewModel.ocrApiKey.collectAsStateWithLifecycle()
     val ocrModel by viewModel.ocrModel.collectAsStateWithLifecycle()
     val ocrTestState by viewModel.ocrTestState.collectAsStateWithLifecycle()
+    val ttsPresetId by viewModel.ttsPresetId.collectAsStateWithLifecycle()
+    val ttsApi by viewModel.ttsApi.collectAsStateWithLifecycle()
+    val ttsBaseUrl by viewModel.ttsBaseUrl.collectAsStateWithLifecycle()
+    val ttsApiKey by viewModel.ttsApiKey.collectAsStateWithLifecycle()
+    val ttsModel by viewModel.ttsModel.collectAsStateWithLifecycle()
+    val ttsVoiceEn by viewModel.ttsVoiceEn.collectAsStateWithLifecycle()
+    val ttsVoiceZh by viewModel.ttsVoiceZh.collectAsStateWithLifecycle()
+    val ttsResponseFormat by viewModel.ttsResponseFormat.collectAsStateWithLifecycle()
+    val ttsConfigSaved by viewModel.ttsConfigSaved.collectAsStateWithLifecycle()
+    val ttsTestState by viewModel.ttsTestState.collectAsStateWithLifecycle()
 
     var showApiKey by remember { mutableStateOf(false) }
+    var showTtsKey by remember { mutableStateOf(false) }
     val ocrComplete =
         ocrBaseUrl.isNotBlank() && ocrApiKey.isNotBlank() && ocrModel.isNotBlank()
     val activePresetId = OCR_PROVIDER_PRESETS.firstOrNull {
         it.id != "custom" && it.baseUrl == ocrBaseUrl.trim() && it.model == ocrModel.trim()
     }?.id ?: "custom"
+    val ttsFormComplete =
+        ttsBaseUrl.isNotBlank() && ttsApiKey.isNotBlank() && ttsModel.isNotBlank()
 
     Scaffold(
         topBar = {
@@ -169,7 +184,13 @@ fun SettingsScreen(
             Column(modifier = Modifier.padding(top = 12.dp)) {
                 Text("发音来源", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    "有道词典为真人词典发音，需要网络；断网或失败时自动改用系统语音",
+                    when (ttsSource) {
+                        TtsSource.YOUDAO -> "有道词典为真人词典发音，需要网络；断网或失败时自动改用系统语音"
+                        TtsSource.CUSTOM ->
+                            if (ttsConfigSaved) "当前使用自定义发音服务（${ttsModel.trim()}）"
+                            else "选择服务商并填写配置后，保存并启用自定义发音"
+                        TtsSource.SYSTEM -> "全部使用系统语音发音，无需网络"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp),
@@ -184,10 +205,233 @@ fun SettingsScreen(
                         label = { Text("有道词典") },
                     )
                     FilterChip(
+                        selected = ttsSource == TtsSource.CUSTOM,
+                        onClick = { viewModel.onTtsSourceChange(TtsSource.CUSTOM) },
+                        label = { Text("自定义音源") },
+                    )
+                    FilterChip(
                         selected = ttsSource == TtsSource.SYSTEM,
                         onClick = { viewModel.onTtsSourceChange(TtsSource.SYSTEM) },
                         label = { Text("系统语音") },
                     )
+                }
+            }
+
+            if (ttsSource == TtsSource.CUSTOM) {
+                // ---- 服务商预设 ---------------------------------------------
+                Column(modifier = Modifier.padding(top = 12.dp)) {
+                    Text("服务商预设", style = MaterialTheme.typography.bodyLarge)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(top = 8.dp),
+                    ) {
+                        TTS_PROVIDER_PRESETS.forEach { preset ->
+                            FilterChip(
+                                selected = ttsPresetId == preset.id,
+                                onClick = { viewModel.onTtsPresetChange(preset) },
+                                label = { Text(preset.label) },
+                            )
+                        }
+                    }
+                    val hint = TTS_PROVIDER_PRESETS.firstOrNull { it.id == ttsPresetId }?.hint
+                    if (!hint.isNullOrEmpty()) {
+                        Text(
+                            hint,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                }
+
+                // ---- 接口类型 (自定义预设 only) --------------------------------
+                if (ttsPresetId == "custom") {
+                    Column(modifier = Modifier.padding(top = 12.dp)) {
+                        Text("接口类型", style = MaterialTheme.typography.bodyLarge)
+                        Row(
+                            modifier = Modifier.padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            FilterChip(
+                                selected = ttsApi == TtsApiKind.SPEECH,
+                                onClick = { viewModel.onTtsApiChange(TtsApiKind.SPEECH) },
+                                label = { Text("/audio/speech") },
+                            )
+                            FilterChip(
+                                selected = ttsApi == TtsApiKind.CHAT,
+                                onClick = { viewModel.onTtsApiChange(TtsApiKind.CHAT) },
+                                label = { Text("Chat Completions") },
+                            )
+                        }
+                        Text(
+                            "标准 OpenAI TTS 选 /audio/speech；小米 MiMo 等经对话接口合成选 Chat Completions。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                }
+
+                // ---- 接口地址 -------------------------------------------------
+                OutlinedTextField(
+                    value = ttsBaseUrl,
+                    onValueChange = viewModel::onTtsBaseUrlChange,
+                    label = { Text("接口地址（Base URL）") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                )
+
+                // ---- API Key ----------------------------------------------------
+                OutlinedTextField(
+                    value = ttsApiKey,
+                    onValueChange = viewModel::onTtsApiKeyChange,
+                    label = { Text("API Key") },
+                    supportingText = { Text("Key 仅保存在本机，仅用于发音请求") },
+                    singleLine = true,
+                    visualTransformation = if (showTtsKey) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                    trailingIcon = {
+                        IconButton(onClick = { showTtsKey = !showTtsKey }) {
+                            Icon(
+                                if (showTtsKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = if (showTtsKey) "隐藏 API Key" else "显示 API Key",
+                            )
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                )
+
+                // ---- 模型 ---------------------------------------------------------
+                OutlinedTextField(
+                    value = ttsModel,
+                    onValueChange = viewModel::onTtsModelChange,
+                    label = { Text("模型") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                )
+
+                // ---- 音色 ---------------------------------------------------------
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = ttsVoiceEn,
+                        onValueChange = viewModel::onTtsVoiceEnChange,
+                        label = { Text("英文音色") },
+                        placeholder = { Text("默认") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = ttsVoiceZh,
+                        onValueChange = viewModel::onTtsVoiceZhChange,
+                        label = { Text("中文音色") },
+                        placeholder = { Text("默认") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Text(
+                    "留空使用服务商默认音色；修改音色或语速后会重新生成发音。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+
+                // ---- 响应格式 (speech shape only) ----------------------------------
+                if (ttsApi == TtsApiKind.SPEECH) {
+                    OutlinedTextField(
+                        value = ttsResponseFormat,
+                        onValueChange = viewModel::onTtsResponseFormatChange,
+                        label = { Text("响应格式") },
+                        placeholder = { Text("mp3") },
+                        supportingText = { Text("/audio/speech 返回的音频格式（mp3/wav…）") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                    )
+                }
+
+                // ---- 测试并试听 -----------------------------------------------------
+                OutlinedButton(
+                    onClick = viewModel::testTtsVoice,
+                    enabled = ttsFormComplete && ttsTestState != TtsTestState.Testing,
+                    modifier = Modifier.padding(top = 12.dp),
+                ) {
+                    Text("测试并试听")
+                }
+                when (val state = ttsTestState) {
+                    TtsTestState.Idle -> Unit
+                    TtsTestState.Testing -> Row(
+                        modifier = Modifier.padding(top = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "生成试听中…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TtsTestState.Ok -> Text(
+                        "连接成功，已播放试听",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    is TtsTestState.Failed -> Text(
+                        state.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+
+                // ---- 保存并启用 / 清除配置 ---------------------------------------------
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (ttsConfigSaved) {
+                        OutlinedButton(
+                            onClick = viewModel::clearTtsConfig,
+                        ) {
+                            Text("清除配置")
+                        }
+                    }
+                    Button(
+                        onClick = {
+                            viewModel.saveTtsConfig()
+                            android.widget.Toast.makeText(
+                                context, "已保存自定义发音配置", android.widget.Toast.LENGTH_SHORT,
+                            ).show()
+                        },
+                        enabled = ttsFormComplete,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("保存并启用")
+                    }
                 }
             }
 
