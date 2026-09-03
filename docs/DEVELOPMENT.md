@@ -1,6 +1,6 @@
 # 开发指南（构建 · 签名 · 打包）
 
-面向开发者。架构、工具链版本钉与行为契约见 [`../AGENTS.md`](../AGENTS.md)；分阶段开发日志见 [`PHASES.md`](PHASES.md)。本文记录：机器环境搭建、日常命令、以及**签名与打包发布**的完整流程。
+面向开发者。架构、工具链版本钉与行为契约见 [`../AGENTS.md`](../AGENTS.md)；分阶段开发日志见 [`PHASES.md`](PHASES.md)（**归档冻结于 Phase 10**，不再更新）。本文记录：机器环境搭建、日常命令、以及**签名与打包发布**的完整流程。
 
 ## 1. 环境搭建（新机器）
 
@@ -69,7 +69,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | --- | --- |
 | `app/` | Android 应用（单一 `:app` 模块：`ui/` Compose 界面、`domain/` 纯 Kotlin 逻辑、`data/` 仓库与网络） |
 | `data/` | 原始词表 + 内置数据资源（原样打包进 APK assets；**只读**，禁止手工重新生成） |
-| `docs/` | 阶段日志（`PHASES.md`）、本指南、README 截图（按需） |
+| `docs/` | 阶段日志归档（`PHASES.md`，冻结于 Phase 10）、本指南、README 截图（按需） |
 | `scripts/` | 数据处理脚本（Python 3），按需添加 |
 | `hearwrite.svg` | 应用图标设计源文件（自适应图标各层生成到 `app/src/main/res/`） |
 
