@@ -6,6 +6,14 @@
     <!-- Wrong-word mark vibration (alice haptics parity). -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- 拍照识词 camera capture resolves the system camera app explicitly
+         (package-visibility filtering on targetSdk 37). -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+    </queries>
+
     <application
         android:name=".HearWriteApplication"
         android:icon="@mipmap/ic_launcher"
