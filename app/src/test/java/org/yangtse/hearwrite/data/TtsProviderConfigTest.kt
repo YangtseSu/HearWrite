@@ -303,8 +303,36 @@ class TtsProviderConfigTest {
     fun `config codec rejects invalid api and garbage`() {
         assertNull(decodeTtsProviderConfig("""{"api":"sms","baseUrl":"https://x","apiKey":"k","model":"m"}"""))
         assertNull(decodeTtsProviderConfig("not json"))
-        assertNull(decodeTtsProviderConfig("""{"baseUrl":5}"""))
         assertNull(decodeTtsProviderConfig("{}"))
+    }
+
+    @Test
+    fun `config codec rejects non-string required fields instead of coercing them`() {
+        // A numeric baseUrl must not decode to the string "5" (alice typeof check).
+        assertNull(decodeTtsProviderConfig("""{"api":"speech","baseUrl":5,"apiKey":"k","model":"m"}"""))
+        assertNull(decodeTtsProviderConfig("""{"api":"speech","baseUrl":"https://x","apiKey":7,"model":"m"}"""))
+        assertNull(decodeTtsProviderConfig("""{"api":"chat","baseUrl":"https://x","apiKey":"k","model":[]}"""))
+        assertNull(decodeTtsProviderConfig("""{"api":"speech","apiKey":"k","model":"m"}"""))
+        // Optional voice fields coerce to their defaults instead of failing the blob.
+        val decoded = decodeTtsProviderConfig(
+            """{"api":"speech","baseUrl":"https://x","apiKey":"k","model":"m","voiceEn":5,"voiceZh":{"a":1}}""",
+        )!!
+        assertEquals("", decoded.voiceEn)
+        assertEquals("", decoded.voiceZh)
+    }
+
+    // --------------------------------------------------- HTTP error message
+
+    @Test
+    fun `http error message surfaces error message then falls back to the status`() {
+        assertEquals(
+            "The api key is invalid",
+            ttsHttpErrorMessage(401, """{"error":{"message":"The api key is invalid"}}"""),
+        )
+        assertEquals("HTTP 401", ttsHttpErrorMessage(401, """{"error":{"code":"bad_key"}}"""))
+        assertEquals("HTTP 502", ttsHttpErrorMessage(502, "<html>Bad Gateway</html>"))
+        assertEquals("HTTP 429", ttsHttpErrorMessage(429, "rate limited"))
+        assertEquals("HTTP 500", ttsHttpErrorMessage(500, ""))
     }
 
     @Test

@@ -6,6 +6,7 @@ import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -14,7 +15,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
 import okhttp3.Callback
@@ -44,6 +44,11 @@ private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
  * [prefetch] warms the cache in the background. [generateClip] is the
  * explicit settings-test path and throws [TtsProviderException] with a
  * Chinese message instead of degrading silently.
+ *
+ * The rate is snapshotted once per generation and drives the request body's
+ * `speed`, the clip file name and the single-flight key together — a 语速
+ * change mid-request can never write audio synthesized at the old speed
+ * under the new rate's hash.
  */
 class OpenAiCompatibleTts(
     private val context: Context,
@@ -98,7 +103,8 @@ class OpenAiCompatibleTts(
         if (trimmed.isEmpty()) return false
         cachedClip(trimmed)?.let { return true }
 
-        val key = ttsProviderFlightKey(trimmed, cfg, rate)
+        val r = rate
+        val key = ttsProviderFlightKey(trimmed, cfg, r)
         val existing = inFlight[key]
         if (existing != null) {
             try {
@@ -111,7 +117,7 @@ class OpenAiCompatibleTts(
             return cachedClip(trimmed) != null
         }
 
-        val job = scope.async { download(trimmed, cfg) }
+        val job = scope.async { download(trimmed, cfg, r) }
         val winner = inFlight.putIfAbsent(key, job)
         if (winner != null) {
             job.cancel()
@@ -138,10 +144,16 @@ class OpenAiCompatibleTts(
      * Throws [TtsProviderException] with a Chinese message on any failure;
      * the settings test surfaces it directly.
      */
-    suspend fun generateClip(text: String, cfg: TtsProviderConfig): File {
-        val trimmed = text.trim()
+    suspend fun generateClip(text: String, cfg: TtsProviderConfig): File =
+        generateClip(text.trim(), cfg, rate)
+
+    /**
+     * One generation at a fixed rate [r]: the same snapshot feeds the
+     * request body's speed, the destination file name and the in-flight key.
+     */
+    private suspend fun generateClip(trimmed: String, cfg: TtsProviderConfig, r: Float): File {
         val bytes = try {
-            fetchBytes(trimmed, cfg)
+            fetchBytes(trimmed, cfg, r)
         } catch (e: CancellationException) {
             throw e
         } catch (e: TtsProviderException) {
@@ -152,7 +164,7 @@ class OpenAiCompatibleTts(
         if (bytes.size < MIN_AUDIO_BYTES) {
             throw TtsProviderException("音频数据无效，请检查接口地址与模型")
         }
-        val dest = clipFile(trimmed, cfg, rate)
+        val dest = clipFile(trimmed, cfg, r)
         try {
             dest.parentFile?.mkdirs()
             dest.writeBytes(bytes)
@@ -164,9 +176,9 @@ class OpenAiCompatibleTts(
     }
 
     /** Playback path: generate into the cache, swallowing every failure. */
-    private suspend fun download(text: String, cfg: TtsProviderConfig) {
+    private suspend fun download(text: String, cfg: TtsProviderConfig, r: Float) {
         try {
-            generateClip(text, cfg)
+            generateClip(text, cfg, r)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -180,10 +192,10 @@ class OpenAiCompatibleTts(
      * responses surface `error.message` when present, else `HTTP <status>`
      * (AGENTS.md).
      */
-    private suspend fun fetchBytes(text: String, cfg: TtsProviderConfig): ByteArray {
+    private suspend fun fetchBytes(text: String, cfg: TtsProviderConfig, r: Float): ByteArray {
         val chat = cfg.api == TtsApiKind.CHAT
         val url = if (chat) chatCompletionsUrl(cfg.baseUrl) else speechUrl(cfg.baseUrl)
-        val body = if (chat) ttsChatRequestBody(cfg, text) else ttsSpeechRequestBody(cfg, text, rate)
+        val body = if (chat) ttsChatRequestBody(cfg, text) else ttsSpeechRequestBody(cfg, text, r)
         val request = Request.Builder()
             .url(url)
             .header("Authorization", "Bearer ${cfg.apiKey.trim()}")
@@ -194,11 +206,9 @@ class OpenAiCompatibleTts(
             is TtsPostResult.Failed -> throw TtsProviderException("网络请求失败，请检查 URL 与网络")
             is TtsPostResult.Done -> {
                 if (result.code !in 200..299) {
-                    val bodyText = result.bytes.toString(Charsets.UTF_8)
-                    val detail = errorDetail(bodyText)
-                        .ifEmpty { bodyText.trim().take(160) }
-                        .ifEmpty { "HTTP ${result.code}" }
-                    throw TtsProviderException(detail)
+                    throw TtsProviderException(
+                        ttsHttpErrorMessage(result.code, result.bytes.toString(Charsets.UTF_8)),
+                    )
                 }
                 if (chat) {
                     val audioData = ttsProviderAudioData(result.bytes.toString(Charsets.UTF_8))
@@ -238,22 +248,30 @@ class OpenAiCompatibleTts(
                 }
 
                 override fun onResponse(call: Call, response: Response) {
-                    if (cont.isCancelled) return
+                    // Read and close the body unconditionally — a response
+                    // that raced a cancellation must not leak its stream.
                     try {
-                        cont.resume(
-                            response.use { res ->
-                                TtsPostResult.Done(res.code, res.body?.bytes() ?: ByteArray(0))
-                            },
-                        )
+                        response.use { res ->
+                            val done = TtsPostResult.Done(res.code, res.body?.bytes() ?: ByteArray(0))
+                            if (!cont.isCancelled) {
+                                cont.resume(done)
+                            }
+                        }
                     } catch (e: Exception) {
-                        cont.resume(TtsPostResult.Failed)
+                        if (!cont.isCancelled) {
+                            try {
+                                cont.resume(TtsPostResult.Failed)
+                            } catch (e2: Exception) {
+                                // Already resumed; ignore.
+                            }
+                        }
                     }
                 }
             })
         }
 
-    private fun clipFile(text: String, cfg: TtsProviderConfig, rate: Float): File =
-        File(cacheDir, ttsProviderClipFileName(text, cfg, rate))
+    private fun clipFile(text: String, cfg: TtsProviderConfig, r: Float): File =
+        File(cacheDir, ttsProviderClipFileName(text, cfg, r))
 
     private sealed interface TtsPostResult {
         data class Done(val code: Int, val bytes: ByteArray) : TtsPostResult

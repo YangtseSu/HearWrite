@@ -250,25 +250,41 @@ internal fun encodeTtsProviderConfig(cfg: TtsProviderConfig): String = buildJson
     if (cfg.responseFormat != null) put("responseFormat", cfg.responseFormat)
 }.toString()
 
-/** Decode a stored provider config blob; null when absent/invalid (alice `loadTtsSettings`). */
+/**
+ * Decode a stored provider config blob; null when absent/invalid (alice
+ * `loadTtsSettings` — the endpoint/key/model must all be strings; numeric or
+ * object values are rejected so a type-coerced blob can never look complete).
+ */
 internal fun decodeTtsProviderConfig(raw: String): TtsProviderConfig? = try {
     val obj = ttsJson.parseToJsonElement(raw).jsonObject
-    val api = when (obj["api"]?.jsonPrimitive?.contentOrNull) {
+    fun str(key: String): String? = (obj[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+    val api = when (str("api")) {
         "speech" -> TtsApiKind.SPEECH
         "chat" -> TtsApiKind.CHAT
         else -> return null
     }
+    val baseUrl = str("baseUrl")?.trim() ?: return null
+    val apiKey = str("apiKey")?.trim() ?: return null
+    val model = str("model")?.trim() ?: return null
     TtsProviderConfig(
         api = api,
-        baseUrl = obj["baseUrl"]?.jsonPrimitive?.contentOrNull?.trim() ?: "",
-        apiKey = obj["apiKey"]?.jsonPrimitive?.contentOrNull?.trim() ?: "",
-        model = obj["model"]?.jsonPrimitive?.contentOrNull?.trim() ?: "",
-        voiceEn = obj["voiceEn"]?.jsonPrimitive?.contentOrNull?.trim() ?: "",
-        voiceZh = obj["voiceZh"]?.jsonPrimitive?.contentOrNull?.trim() ?: "",
-        responseFormat = obj["responseFormat"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() },
+        baseUrl = baseUrl,
+        apiKey = apiKey,
+        model = model,
+        voiceEn = str("voiceEn")?.trim() ?: "",
+        voiceZh = str("voiceZh")?.trim() ?: "",
+        responseFormat = str("responseFormat")?.trim()?.takeIf { it.isNotEmpty() },
     )
 } catch (e: Exception) {
     null
 }
+
+/**
+ * Non-OK response message per AGENTS.md: the provider's `error.message` when
+ * present, else `HTTP <status>` (alice `apiErrorMessage`). Raw response
+ * bodies are never shown — they are HTML/opaque and leak provider internals.
+ */
+fun ttsHttpErrorMessage(code: Int, body: String): String =
+    errorDetail(body).ifEmpty { "HTTP $code" }
 
 internal val ttsJson = Json { ignoreUnknownKeys = true }

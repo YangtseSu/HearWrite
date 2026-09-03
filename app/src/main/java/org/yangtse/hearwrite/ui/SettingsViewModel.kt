@@ -240,20 +240,28 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun saveTtsConfig() {
         val cfg = currentTtsConfig() ?: return
         viewModelScope.launch {
-            settings.setTtsProviderConfig(cfg)
-            _ttsConfigSaved.value = true
-            _ttsSource.value = TtsSource.CUSTOM
-            settings.setTtsSource(TtsSource.CUSTOM)
+            try {
+                settings.setTtsProviderConfig(cfg)
+                _ttsConfigSaved.value = true
+                _ttsSource.value = TtsSource.CUSTOM
+                settings.setTtsSource(TtsSource.CUSTOM)
+            } catch (e: Exception) {
+                // DataStore failures must never crash the screen (AGENTS.md).
+            }
         }
     }
 
     /** Clear the provider config and revert to the Youdao source. */
     fun clearTtsConfig() {
         viewModelScope.launch {
-            settings.setTtsProviderConfig(null)
-            _ttsConfigSaved.value = false
-            _ttsSource.value = TtsSource.YOUDAO
-            settings.setTtsSource(TtsSource.YOUDAO)
+            try {
+                settings.setTtsProviderConfig(null)
+                _ttsConfigSaved.value = false
+                _ttsSource.value = TtsSource.YOUDAO
+                settings.setTtsSource(TtsSource.YOUDAO)
+            } catch (e: Exception) {
+                // DataStore failures must never crash the screen (AGENTS.md).
+            }
         }
     }
 
