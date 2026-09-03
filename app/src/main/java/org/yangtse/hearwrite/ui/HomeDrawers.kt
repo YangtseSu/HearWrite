@@ -2,7 +2,6 @@ package org.yangtse.hearwrite.ui
 
 import android.content.Context
 import android.widget.Toast
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,12 +26,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.yangtse.hearwrite.data.HistoryEntry
 import org.yangtse.hearwrite.domain.parseWords
 import org.yangtse.hearwrite.ui.theme.StarGold
-import androidx.compose.ui.unit.dp
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -99,49 +96,33 @@ fun HistorySheet(
                     items(entries, key = { it.id }) { entry ->
                         val text = entry.enrichedText ?: entry.text
                         val favorited = entry.id in favoriteIds
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onApply(text)
-                                    toast(context, "已载入历史记录")
+                        ListRow(
+                            title = entry.text.lineSequence().first { it.isNotBlank() }.trim(),
+                            subtitle = "${wordCount(entry.text)} 词 · ${formatStamp(entry.createdAt)}",
+                            onClick = {
+                                onApply(text)
+                                toast(context, "已载入历史记录")
+                            },
+                            trailing = {
+                                IconButton(
+                                    onClick = { onToggleFavorite(entry.id) },
+                                    modifier = Modifier.size(48.dp),
+                                ) {
+                                    Icon(
+                                        if (favorited) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                        contentDescription = if (favorited) "取消收藏" else "收藏",
+                                        tint = if (favorited) StarGold else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
-                                .padding(start = 20.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    entry.text.lineSequence().first { it.isNotBlank() }.trim(),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    "${wordCount(entry.text)} 词 · ${formatStamp(entry.createdAt)}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 2.dp),
-                                )
-                            }
-                            IconButton(
-                                onClick = { onToggleFavorite(entry.id) },
-                                modifier = Modifier.size(48.dp),
-                            ) {
-                                Icon(
-                                    if (favorited) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                    contentDescription = if (favorited) "取消收藏" else "收藏",
-                                    tint = if (favorited) StarGold else MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            IconButton(onClick = { onDelete(entry.id) }) {
-                                Icon(
-                                    Icons.Filled.Delete,
-                                    contentDescription = "删除",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        HorizontalDivider()
+                                IconButton(onClick = { onDelete(entry.id) }) {
+                                    Icon(
+                                        Icons.Filled.Delete,
+                                        contentDescription = "删除",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            },
+                        )
                     }
                 }
             }
@@ -180,38 +161,23 @@ fun FavoritesSheet(
             } else {
                 LazyColumn(modifier = Modifier.heightIn(max = SHEET_LIST_MAX_HEIGHT)) {
                     items(items, key = { it.id }) { item ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onApply(item.linesText)
-                                    toast(context, "已载入收藏")
+                        ListRow(
+                            title = item.title,
+                            subtitle = item.subtitle,
+                            onClick = {
+                                onApply(item.linesText)
+                                toast(context, "已载入收藏")
+                            },
+                            trailing = {
+                                IconButton(onClick = { onToggleFavorite(item.id) }) {
+                                    Icon(
+                                        Icons.Filled.Star,
+                                        contentDescription = "取消收藏",
+                                        tint = StarGold,
+                                    )
                                 }
-                                .padding(start = 20.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    item.title,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Text(
-                                    item.subtitle,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 2.dp),
-                                )
-                            }
-                            IconButton(onClick = { onToggleFavorite(item.id) }) {
-                                Icon(
-                                    Icons.Filled.Star,
-                                    contentDescription = "取消收藏",
-                                    tint = StarGold,
-                                )
-                            }
-                        }
+                            },
+                        )
                         HorizontalDivider()
                     }
                 }

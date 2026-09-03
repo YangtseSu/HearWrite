@@ -1,9 +1,7 @@
 package org.yangtse.hearwrite.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -28,7 +26,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.yangtse.hearwrite.data.LibraryCategory
@@ -119,23 +116,12 @@ private fun CategoryList(
 
 @Composable
 private fun CategoryRow(category: LibraryCategory, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(category.name, style = MaterialTheme.typography.titleMedium)
-            Text(
-                "${category.listCount} 个词表",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Text("›", style = MaterialTheme.typography.titleLarge)
-    }
+    ListRow(
+        title = category.name,
+        subtitle = "${category.listCount} 个词表",
+        onClick = onClick,
+        trailing = { RowChevron() },
+    )
 }
 
 @Composable
@@ -146,17 +132,11 @@ private fun SearchResults(
     val result = state.result
     if (result.labelHits.isEmpty() && result.wordHits.isEmpty()) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(32.dp),
+            modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                "未找到匹配的词表",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            EmptyHint("未找到匹配的词表")
         }
         return
     }
@@ -205,27 +185,12 @@ private fun SearchListRow(
     subtitle: String,
     onClick: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.titleSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            "$category · $subtitle",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
+    ListRow(
+        title = label,
+        subtitle = "$category · $subtitle",
+        onClick = onClick,
+        trailing = { RowChevron() },
+    )
 }
 
 @Composable

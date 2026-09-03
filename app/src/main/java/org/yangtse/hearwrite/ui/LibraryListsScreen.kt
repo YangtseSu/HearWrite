@@ -1,8 +1,6 @@
 package org.yangtse.hearwrite.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -27,7 +25,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import org.yangtse.hearwrite.ui.theme.StarGold
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 
@@ -74,40 +71,25 @@ fun LibraryListsScreen(
             ) {
                 items(current, key = { it.id }) { list ->
                     val favorited = list.id in favoriteIds
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onOpenList(list.label) }
-                            .padding(start = 16.dp, end = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            list.label,
-                            style = MaterialTheme.typography.titleSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(vertical = 14.dp),
-                        )
-                        IconButton(onClick = { viewModel.toggleFavorite(list.id) }) {
-                            Icon(
-                                if (favorited) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                contentDescription = if (favorited) "取消收藏" else "收藏",
-                                tint = if (favorited) {
-                                    StarGold
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                            )
-                        }
-                        Text(
-                            "›",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(end = 12.dp),
-                        )
-                    }
+                    ListRow(
+                        title = list.label,
+                        subtitle = null,
+                        onClick = { onOpenList(list.label) },
+                        trailing = {
+                            IconButton(onClick = { viewModel.toggleFavorite(list.id) }) {
+                                Icon(
+                                    if (favorited) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                    contentDescription = if (favorited) "取消收藏" else "收藏",
+                                    tint = if (favorited) {
+                                        StarGold
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                )
+                            }
+                            RowChevron()
+                        },
+                    )
                     HorizontalDivider()
                 }
             }
