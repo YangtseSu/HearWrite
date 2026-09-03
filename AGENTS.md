@@ -161,13 +161,13 @@ No emulator is guaranteed — verify on a connected device or emulator via `adb`
 ## Code Conventions
 
 - **Language**: identifiers, comments, docstrings (KDoc), and commit messages in **English**; user-facing UI strings and spoken sample text hardcoded **Chinese**, inline in code — no `strings.xml`, no i18n.
-- **Style**: official Kotlin coding conventions (4-space indent, LF, UTF-8); `ktlint`/`detekt` not configured yet — do not add tooling mid-phase without noting it in PROGRESS.md. No `!!`; use `require`/`check` for programmer errors, and defensive catch-to-fallback only at network/audio boundaries.
+- **Style**: official Kotlin coding conventions (4-space indent, LF, UTF-8); `ktlint`/`detekt` not configured yet — do not add tooling mid-phase without noting it in docs/PHASES.md. No `!!`; use `require`/`check` for programmer errors, and defensive catch-to-fallback only at network/audio boundaries.
 - **Naming**: `*Screen.kt` composables, `*ViewModel.kt`, `*Repository.kt`, `*Dao.kt`; pure functions in `domain/` are top-level and testable.
 - **Errors**: user-facing failures become Chinese message strings; network/audio layers never throw into UI — they degrade (TTS chain, OCR retry).
-- **Commit discipline**: one thing per commit (`feat: …`, `fix: …`, `docs: …`, `data: …`, `chore: …`); **every commit must compile**. A phase closes with a commit that updates PROGRESS.md.
+- **Commit discipline**: one thing per commit (`feat: …`, `fix: …`, `docs: …`, `data: …`, `chore: …`); **every commit must compile**. A phase closes with a commit that updates docs/PHASES.md.
 
 ## Testing & QA
 
 - Unit tests (JUnit4 + `kotlinx-coroutines-test`) cover the `domain/` behavioral contract: line parsing (1/3 columns, fullwidth pipe, `you're = you are`), POS normalization, CJK detection, `cjkWordSpeech` (tier order, polyphone filtering with the `朝|zhāo → 朝阳` case, learned-first), `speakableMeaning` (POS strip + sense split + width cap), `compareLabels` ordering, and the `DictationEngine` — tested with a fake `Speaker` and `runTest` virtual time: phase order, no-retry on speak failure, cancel leaves no stray speaks, auto-next hold, generation races, and ★ live interval change verified via `advanceTimeBy`.
 - Assets/dict data are **read-only fixtures** — tests may load from `data/` but never modify it.
-- Verification workflow per phase: `assembleDebug` + `testDebugUnitTest` green → install → exercise the changed surface on device → demo described in PROGRESS.md → commit. Temporary debug UI built for a demo is removed before the phase's final commit.
+- Verification workflow per phase: `assembleDebug` + `testDebugUnitTest` green → install → exercise the changed surface on device → demo described in docs/PHASES.md → commit. Temporary debug UI built for a demo is removed before the phase's final commit.

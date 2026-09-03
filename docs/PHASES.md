@@ -1,6 +1,6 @@
-# PROGRESS
+# Phases — HearWrite 听写
 
-Rewrite of [alice](https://github.com/YangtseSu/alice) (Expo/RN) as a native Android app — Kotlin + Jetpack Compose, from scratch. Rules: **one thing per phase**, every phase ends with a project that compiles, installs, and demos; one commit per implemented item; every commit compiles. See `AGENTS.md` for the architecture and behavioral contract.
+Rewrite of [alice](https://github.com/YangtseSu/alice) (Expo/RN) as a native Android app — Kotlin + Jetpack Compose, from scratch. Rules: **one thing per phase**, every phase ends with a project that compiles, installs, and demos; one commit per implemented item; every commit compiles. See [`../AGENTS.md`](../AGENTS.md) for the architecture and behavioral contract.
 
 Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 
@@ -23,7 +23,7 @@ Status: 🚧 in progress · ✅ done · ⏸ blocked (waiting on decision/input)
 - [x] `AGENTS.md` — architecture, toolchain pins, behavioral contract from alice.
 - [x] Data assets copied from alice (no network fetch): word lists `data/` (10 categories, 403 lists), `data/dict/ecdict-meta.json` (ECDICT offline EN→ZH), `data/compounds/compounds.json` (converted from generated `compounds.ts`, 4724+17 chars), `data/meta/xiandaihanyuchangyongcibiao.txt` (组词 regeneration source), `data/audio/{tick,chime}.wav`.
 - [x] Asset provenance (no generation scripts in this repo): word lists + `ecdict-meta.json` (built from ECDICT by `alice/scripts/build-ecdict-meta.py`) + `data/audio/*.wav` are verbatim copies from alice; `data/compounds/compounds.json` was converted from alice's generated `src/lib/compounds.ts` (TS type annotations stripped → JSON, counts verified 4724+17); `data/meta/xiandaihanyuchangyongcibiao.txt` is the MOE frequency table that alice's `scripts/generate-compounds.ts` used to build compounds — port that script only if compounds.json ever needs regeneration. `meta/` is not shipped in the APK.
-- [x] `PROMPTS.md` — per-phase prompts for the coding agent.
+- [x] `PROMPTS.md` — per-phase prompts for the coding agent (removed 2026-09-03 once all phases completed; see git history).
 - Commits: `docs: …`, `data: …`.
 
 ## Phase 1 — Project scaffold ✅ (2026-09-02)

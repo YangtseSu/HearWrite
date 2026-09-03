@@ -3,7 +3,7 @@
 面向中国学生的 Android 听写训练应用：粘贴或拍照录入词表 → 应用逐词朗读并倒计时 → 学生书写 → 标记错词 → 之后复习。原生 Kotlin + Jetpack Compose 实现，从 [alice](https://github.com/YangtseSu/alice)（React Native 应用）从头重写（仅保持行为一致）。
 
 - 架构、工具链版本与行为契约：[`AGENTS.md`](AGENTS.md)
-- 分阶段计划与进度：[`PROGRESS.md`](PROGRESS.md)
+- 分阶段计划与进度（10 个阶段全部完成）：[`docs/PHASES.md`](docs/PHASES.md)
 - 许可证：GPL-3.0-or-later（见 [`LICENSE`](LICENSE)）
 
 ## 开发环境搭建（新机器）
