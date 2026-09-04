@@ -130,7 +130,7 @@ UI: countdown ring (last-second tick; `clearAndSetSemantics` announcing remainin
 | `app/src/main/assets/<category>/<label>.txt` | word lines, see *Word-line format* | Original alice word lists (user's own extraction from textbooks) |
 | `app/src/main/assets/dict/ecdict-meta.json` | flat `{word: "pos.|gloss"}` (senses `；`-split) | Regenerable via `scripts/build-ecdict-meta.py` from [ECDICT](https://github.com/skywind3000/ECDICT) (MIT) csv (auto-downloaded to `.cache/` on first run). Offline EN→ZH lookup: POS, senses, exam tags |
 | `app/src/main/assets/compounds/compounds.json` | `{compounds: {char: [[word, syllable], …]}, learned: {…}}`; syllable = tone digits, `ü=v`, neutral unmarked | Regenerated in-repo by `scripts/generate-compounds.py` from the frequency table + 人教版小学语文 lists (ported from the author's RN-predecessor generator). 4724 + 524 char keys |
-| `scripts/data/xiandaihanyuchangyongcibiao.txt` | `word\tpinyin\tlevel` | 《现代汉语常用词表（草案）》(教育部), 56008 words — regeneration source for `scripts/generate-compounds.py`, never shipped |
+| `scripts/data/xiandaihanyuchangyongcibiao.txt` | `word\tpinyin\tlevel` | 《现代汉语常用词表（草案）》(教育部, 商务印书馆 2008), 56008 words — downloaded from [`liangqi/chinese-frequency-word-list`](https://github.com/liangqi/chinese-frequency-word-list) (file `xiandaihaiyuchangyongcibiao.txt`, renamed to fix the pinyin typo); regeneration source for `scripts/generate-compounds.py`, never shipped |
 | `app/src/main/assets/audio/tick.wav`, `chime.wav` | countdown tick (last second, vol 0.5), session-finish chime (vol 0.6) | Synthesized in-house |
 
 The RN predecessor's `assets/silent.wav` (iOS background-audio keep-alive) is deliberately **not** ported — Android has no need.
