@@ -41,9 +41,9 @@
  */
 
 /*
- * Vendored into HearWrite from the standalone reference at
- * ~/projects/edge-tts/EdgeTts.kt (the author's Kotlin rewrite of
- * rany2/edge-tts, LGPLv3). HearWrite is GPL-3.0, so this LGPLv3 file is
+ * Vendored into HearWrite from the standalone Kotlin client at
+ * github.com/YangtseSu/edge-tts-kotlin (EdgeTts.kt, the author's rewrite
+ * of rany2/edge-tts, LGPLv3). HearWrite is GPL-3.0, so this LGPLv3 file is
  * combined and distributed under GPL-3.0 terms with this notice retained.
  *
  * LGPLv3 — Copyright (c) 2025- rany <rany@riseup.net> and contributors
@@ -52,7 +52,7 @@
  * General Public License as published by the Free Software Foundation,
  * either version 3 of the License, or (at your option) any later version.
  * See the upstream LICENSE (LGPLv3, with srt_composer.py MIT) for the full
- * text. Sync source of truth: ~/projects/edge-tts/EdgeTts.kt.
+ * text. Sync source of truth: github.com/YangtseSu/edge-tts-kotlin.
  */
 package io.edge
 
