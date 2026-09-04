@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
@@ -81,6 +82,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val ocrService = (application as HearWriteApplication).ocrService
     private val ttsChain = (application as HearWriteApplication).ttsChain
     private val openAiTts = (application as HearWriteApplication).openAiCompatibleTts
+    private val edgeTts = (application as HearWriteApplication).edgeTts
 
     private val _speechRate = MutableStateFlow(MIN_SPEECH_RATE)
     val speechRate: StateFlow<Float> = _speechRate.asStateFlow()
@@ -144,6 +146,80 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private val _ttsTestState = MutableStateFlow<TtsTestState>(TtsTestState.Idle)
     val ttsTestState: StateFlow<TtsTestState> = _ttsTestState.asStateFlow()
+
+    // ---- 微软 Edge 音色 (Edge source voice picker) -------------------------
+
+    /** Currently selected voice shortName per language (zh/en), live from settings. */
+    private val _edgeVoiceZh = MutableStateFlow("")
+    val edgeVoiceZh: StateFlow<String> = _edgeVoiceZh.asStateFlow()
+    private val _edgeVoiceEn = MutableStateFlow("")
+    val edgeVoiceEn: StateFlow<String> = _edgeVoiceEn.asStateFlow()
+
+    /**
+     * Preview state for one Edge voice (a single sample per voice). Reuses
+     * the [TtsTestState] shape: Idle/Testing/Ok/Failed(message).
+     */
+    private val _edgePreviewState = MutableStateFlow<TtsTestState>(TtsTestState.Idle)
+    val edgePreviewState: StateFlow<TtsTestState> = _edgePreviewState.asStateFlow()
+
+    init {
+        // Edge 音色: per-language selection (blank stored voice = the app
+        // default) live-follows the DataStore settings.
+        viewModelScope.launch {
+            combine(settings.edgeVoiceZh, settings.edgeVoiceEn) { zh, en -> zh to en }
+                .collect { (zh, en) ->
+                    _edgeVoiceZh.value = zh
+                    _edgeVoiceEn.value = en
+                }
+        }
+    }
+
+    /** Change the Edge voice for [lang] ("" = default) and persist it. */
+    fun onEdgeVoiceChange(lang: String, shortName: String) {
+        val value = shortName.trim()
+        viewModelScope.launch {
+            try {
+                if (lang.startsWith("zh", ignoreCase = true)) {
+                    _edgeVoiceZh.value = value
+                    settings.setEdgeVoiceZh(value)
+                } else {
+                    _edgeVoiceEn.value = value
+                    settings.setEdgeVoiceEn(value)
+                }
+            } catch (e: Exception) {
+                // DataStore failures must never crash the screen (AGENTS.md).
+            }
+        }
+    }
+
+    /**
+     * Preview one Edge voice (shortName) with a sample in its language.
+     * Plays through the chain's [ttsChain.playTestClip] on the caller's
+     * thread (the clip is written to a temp file first).
+     */
+    fun previewEdgeVoice(shortName: String, lang: String) {
+        if (_edgePreviewState.value is TtsTestState.Testing) return
+        val sample = if (lang.startsWith("zh", ignoreCase = true)) "苹果" else "apple"
+        _edgePreviewState.value = TtsTestState.Testing
+        viewModelScope.launch(Dispatchers.IO) {
+            val error = try {
+                val mp3 = edgeTts.previewVoice(shortName, sample)
+                if (mp3 == null) {
+                    "音频生成失败，请检查网络"
+                } else {
+                    val file = File.createTempFile("edge_preview_", ".mp3")
+                    file.writeBytes(mp3)
+                    val played = ttsChain.playTestClip(file)
+                    file.delete()
+                    if (played) null else "音频已生成，但本机播放失败"
+                }
+            } catch (e: Exception) {
+                "网络请求失败，请检查网络"
+            }
+            _edgePreviewState.value =
+                if (error == null) TtsTestState.Ok else TtsTestState.Failed(error)
+        }
+    }
 
     // ---- 发音缓存 (downloaded clips under cacheDir/tts) --------------------
 

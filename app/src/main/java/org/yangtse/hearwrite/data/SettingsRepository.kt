@@ -52,6 +52,12 @@ class SettingsRepository(private val context: Context) {
         } ?: TtsSource.YOUDAO
     }
 
+    /** Edge 音色 (微软 Edge source): per-language voice shortName; blank = default. */
+    val edgeVoiceZh: Flow<String> =
+        dataStore.data.map { it[KEY_EDGE_VOICE_ZH] ?: "" }
+    val edgeVoiceEn: Flow<String> =
+        dataStore.data.map { it[KEY_EDGE_VOICE_EN] ?: "" }
+
     /** 提示音 (countdown tick + completion chime): default on. */
     val soundEnabled: Flow<Boolean> =
         dataStore.data.map { it[KEY_SOUND_ENABLED] ?: true }
@@ -173,6 +179,14 @@ class SettingsRepository(private val context: Context) {
         dataStore.edit { it[KEY_TTS_SOURCE] = source.name.lowercase() }
     }
 
+    suspend fun setEdgeVoiceZh(shortName: String) {
+        dataStore.edit { it[KEY_EDGE_VOICE_ZH] = shortName }
+    }
+
+    suspend fun setEdgeVoiceEn(shortName: String) {
+        dataStore.edit { it[KEY_EDGE_VOICE_EN] = shortName }
+    }
+
     suspend fun setSoundEnabled(on: Boolean) {
         dataStore.edit { it[KEY_SOUND_ENABLED] = on }
     }
@@ -229,6 +243,8 @@ class SettingsRepository(private val context: Context) {
         val KEY_AUTO_NEXT = booleanPreferencesKey("auto_next")
         val KEY_READ_TRANSLATION = booleanPreferencesKey("read_translation")
         val KEY_TTS_SOURCE = stringPreferencesKey("tts_source")
+        val KEY_EDGE_VOICE_ZH = stringPreferencesKey("edge_voice_zh")
+        val KEY_EDGE_VOICE_EN = stringPreferencesKey("edge_voice_en")
         val KEY_SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         val KEY_THEME = stringPreferencesKey("theme")
         val KEY_OCR_PROVIDER_CONFIG = stringPreferencesKey("ocr_provider_config")

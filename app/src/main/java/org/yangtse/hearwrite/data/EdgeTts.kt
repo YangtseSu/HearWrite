@@ -89,6 +89,115 @@ private const val EDGE_OUTPUT_FORMAT = "audio-24khz-48kbitrate-mono-mp3"
 internal fun edgeVoiceFor(text: String): String =
     if (isCjkText(text)) EDGE_VOICE_ZH else EDGE_VOICE_EN
 
+/**
+ * One selectable Edge Read-Aloud voice (voices/list entry, protocol §4).
+ * [name] is the long `Microsoft Server Speech Text to Speech Voice (…)`
+ * form used verbatim inside SSML; [shortName] is the `zh-CN-XiaoxiaoNeural`
+ * cache/selection key; [friendlyName] is the human label.
+ */
+data class EdgeVoice(
+    val name: String,
+    val shortName: String,
+    val gender: String,
+    val locale: String,
+    val friendlyName: String,
+    val status: String,
+)
+
+/**
+ * The curated voice catalog shown in 设置 → Edge 音色, split by the
+ * language they speak. Sources: the live voices/list response, curated to
+ * the locales this app serves (zh-* for Chinese dictation, en-US for
+ * English — textbook lists are Mainland Chinese + English). Dialects are
+ * excluded (粤语/东北话 would mispronounce 普通话 lists) and unreleased
+ * voices dropped; zh-HK/zh-TW are traditional-script voices that cannot
+ * serve simplified 生字. ShortNames here are the *stable selection keys*,
+ * and [EdgeVoice.name] is the long `Microsoft Server Speech Text to Speech
+ * Voice (…)` form used verbatim inside SSML.
+ */
+val EDGE_VOICE_CATALOG: List<EdgeVoice> = listOf(
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (zh-CN, XiaoxiaoNeural)",
+        shortName = "zh-CN-XiaoxiaoNeural", gender = "Female", locale = "zh-CN",
+        friendlyName = "晓晓（女声 · 温暖）", status = "GA",
+    ),
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (zh-CN, XiaoyiNeural)",
+        shortName = "zh-CN-XiaoyiNeural", gender = "Female", locale = "zh-CN",
+        friendlyName = "晓伊（女声 · 活泼）", status = "GA",
+    ),
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (zh-CN, YunxiNeural)",
+        shortName = "zh-CN-YunxiNeural", gender = "Male", locale = "zh-CN",
+        friendlyName = "云希（男声 · 阳光）", status = "GA",
+    ),
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (zh-CN, YunjianNeural)",
+        shortName = "zh-CN-YunjianNeural", gender = "Male", locale = "zh-CN",
+        friendlyName = "云健（男声 · 激情）", status = "GA",
+    ),
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (zh-CN, YunyangNeural)",
+        shortName = "zh-CN-YunyangNeural", gender = "Male", locale = "zh-CN",
+        friendlyName = "云扬（男声 · 新闻）", status = "GA",
+    ),
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (zh-CN, YunxiaNeural)",
+        shortName = "zh-CN-YunxiaNeural", gender = "Male", locale = "zh-CN",
+        friendlyName = "云夏（童声 · 可爱）", status = "GA",
+    ),
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (en-US, AriaNeural)",
+        shortName = "en-US-AriaNeural", gender = "Female", locale = "en-US",
+        friendlyName = "Aria（女声）", status = "GA",
+    ),
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (en-US, JennyNeural)",
+        shortName = "en-US-JennyNeural", gender = "Female", locale = "en-US",
+        friendlyName = "Jenny（女声）", status = "GA",
+    ),
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (en-US, MichelleNeural)",
+        shortName = "en-US-MichelleNeural", gender = "Female", locale = "en-US",
+        friendlyName = "Michelle（女声）", status = "GA",
+    ),
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (en-US, GuyNeural)",
+        shortName = "en-US-GuyNeural", gender = "Male", locale = "en-US",
+        friendlyName = "Guy（男声）", status = "GA",
+    ),
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (en-US, BrianNeural)",
+        shortName = "en-US-BrianNeural", gender = "Male", locale = "en-US",
+        friendlyName = "Brian（男声）", status = "GA",
+    ),
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (en-US, ChristopherNeural)",
+        shortName = "en-US-ChristopherNeural", gender = "Male", locale = "en-US",
+        friendlyName = "Christopher（男声）", status = "GA",
+    ),
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (en-US, EricNeural)",
+        shortName = "en-US-EricNeural", gender = "Male", locale = "en-US",
+        friendlyName = "Eric（男声）", status = "GA",
+    ),
+)
+
+/** Default Edge voice shortName for [lang] ("" → zh voice). */
+internal fun edgeDefaultVoiceFor(lang: String): String =
+    if (lang.startsWith("zh", ignoreCase = true)) EDGE_VOICE_ZH else EDGE_VOICE_EN
+
+/**
+ * The curated shortNames for [lang]: zh-* → the Mainland zh-CN voices,
+ * otherwise en-US.
+ */
+internal fun edgeCatalogShortNames(lang: String): List<String> =
+    if (lang.startsWith("zh", ignoreCase = true)) {
+        EDGE_VOICE_CATALOG.filter { it.locale.startsWith("zh-CN") }.map { it.shortName }
+    } else {
+        EDGE_VOICE_CATALOG.filter { it.locale == "en-US" }.map { it.shortName }
+    }
+
 /** Python-parity JS date string (`time.strftime(..., gmtime)`, edge-tts). */
 private val EDGE_DATE_FORMAT = DateTimeFormatter
     .ofPattern("EEE MMM dd yyyy HH:mm:ss 'GMT+0000 (Coordinated Universal Time)'", Locale.US)
@@ -249,6 +358,13 @@ internal fun edgeClipFileName(text: String, voice: String, rate: Float): String 
  * [prefetch] warms the cache in the background and [cachedClip] returns
  * ready audio only; the playback chain never blocks on a download. Every
  * failure degrades to "no clip"; nothing here throws into the caller.
+ *
+ * Voice selection (设置 → Edge 音色): per-language shortNames follow the
+ * persisted settings (`edge_voice_zh` / `edge_voice_en`) with the built-in
+ * neural defaults as the fallback; the SSML `voice` is the matching long
+ * `Name` from the curated catalog (or the shortName when unknown — the
+ * service tolerates both). Clip cache keys already bind voice + rate, so
+ * switching a voice regenerates instead of replaying stale audio.
  */
 class EdgeTts(
     private val context: Context,
@@ -270,18 +386,42 @@ class EdgeTts(
     @Volatile
     private var clockSkewSec = 0.0
 
+    /** The persisted voice per language (zh/en shortNames); live-followed. */
+    @Volatile
+    private var voiceZh: String = EDGE_VOICE_ZH
+    @Volatile
+    private var voiceEn: String = EDGE_VOICE_EN
+
+    /** shortName → long `Name`, seeded from the curated catalog. */
+    private val voiceNames = ConcurrentHashMap<String, String>()
+
     init {
+        EDGE_VOICE_CATALOG.forEach { voiceNames[it.shortName] = it.name }
         scope.launch { settings.speechRate.collect { rate = it } }
+        scope.launch { settings.edgeVoiceZh.collect { voiceZh = it.ifBlank { EDGE_VOICE_ZH } } }
+        scope.launch { settings.edgeVoiceEn.collect { voiceEn = it.ifBlank { EDGE_VOICE_EN } } }
     }
 
     private val cacheDir: File
         get() = File(context.cacheDir, "tts")
 
+    /** The voice shortName currently selected for [text]'s language. */
+    fun selectedVoice(text: String): String {
+        val trimmed = text.trim()
+        return if (isCjkText(trimmed)) voiceZh else voiceEn
+    }
+
+    /** The long SSML voice name for [text] (shortName fallback when unknown). */
+    fun synthVoice(text: String): String {
+        val short = selectedVoice(text)
+        return voiceNames[short] ?: short
+    }
+
     /** The ready cached clip for [text], or null when absent/too small. */
     fun cachedClip(text: String): File? {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return null
-        val file = clipFile(trimmed, edgeVoiceFor(trimmed), rate)
+        val file = clipFile(trimmed, selectedVoice(trimmed), rate)
         return if (file.isFile && file.length() >= MIN_AUDIO_BYTES) file else null
     }
 
@@ -296,7 +436,7 @@ class EdgeTts(
         if (trimmed.isEmpty()) return false
         cachedClip(trimmed)?.let { return true }
 
-        val key = edgeFlightKey(trimmed, edgeVoiceFor(trimmed), rate)
+        val key = edgeFlightKey(trimmed, selectedVoice(trimmed), rate)
         val existing = inFlight[key]
         if (existing != null) {
             try {
@@ -336,8 +476,8 @@ class EdgeTts(
     /** Synthesize and write the clip; any failure just leaves no file. */
     private suspend fun download(trimmed: String, r: Float) {
         try {
-            val voice = edgeVoiceFor(trimmed)
-            val bytes = synthTurn(trimmed, voice, r) ?: return
+            val voice = selectedVoice(trimmed)
+            val bytes = synthTurn(trimmed, synthVoice(trimmed), r) ?: return
             if (bytes.size < MIN_AUDIO_BYTES) return
             val dest = clipFile(trimmed, voice, r)
             dest.parentFile?.mkdirs()
@@ -351,6 +491,23 @@ class EdgeTts(
 
     private fun clipFile(text: String, voice: String, r: Float): File =
         File(cacheDir, edgeClipFileName(text, voice, r))
+
+    /**
+     * Synthesize [sample] with the explicit [voice] shortName (not the
+     * persisted one) and return the MP3 bytes — the 设置试听 path for a voice
+     * that is not yet selected. Any failure returns null.
+     */
+    suspend fun previewVoice(voice: String, sample: String): ByteArray? {
+        val longName = voiceNames[voice] ?: voice
+        return try {
+            synthTurn(sample, longName, rate)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "voice preview failed for $voice", e)
+            null
+        }
+    }
 
     /**
      * One full WebSocket turn for [text]; null on any failure. A 403 with a

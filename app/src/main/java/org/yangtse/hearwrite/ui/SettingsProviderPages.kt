@@ -6,24 +6,32 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -33,11 +41,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.yangtse.hearwrite.data.EDGE_VOICE_CATALOG
+import org.yangtse.hearwrite.data.EdgeVoice
 import org.yangtse.hearwrite.data.OCR_DISCLAIMER
 import org.yangtse.hearwrite.data.OCR_PROVIDER_PRESETS
 import org.yangtse.hearwrite.data.TTS_PROVIDER_PRESETS
@@ -106,7 +117,7 @@ fun VoiceSourceSettingsPage(
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
                 )
                 TtsSource.EDGE -> Text(
-                    "微软在线神经网络语音，免费无需 API Key；需要网络，失败时自动降级",
+                    "微软在线神经网络语音，免费无需 API Key；需要网络，失败时自动降级。下方可分别选择中文与英文音色并试听。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
@@ -131,6 +142,22 @@ fun VoiceSourceSettingsPage(
                     )
                 }
             }
+        }
+
+        // 微软 Edge 音色: the source is sentence-capable (组词 phrases ride
+        // the chain), so both dictation languages get their own voice. The
+        // picker shows the curated catalog — zh-CN voices for Chinese
+        // (simplified textbooks), en-US for English; a voice switch takes
+        // effect immediately (the clip cache keys bind voice + rate).
+        if (ttsSource == TtsSource.EDGE) {
+            EdgeVoiceSection(
+                voiceZh = viewModel.edgeVoiceZh.collectAsStateWithLifecycle().value,
+                voiceEn = viewModel.edgeVoiceEn.collectAsStateWithLifecycle().value,
+                previewState = viewModel.edgePreviewState.collectAsStateWithLifecycle().value,
+                onVoiceZhChange = { viewModel.onEdgeVoiceChange("zh", it) },
+                onVoiceEnChange = { viewModel.onEdgeVoiceChange("en", it) },
+                onPreview = viewModel::previewEdgeVoice,
+            )
         }
 
         if (ttsSource == TtsSource.CUSTOM) {
@@ -520,5 +547,163 @@ fun OcrProviderSettingsPage(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 16.dp, top = 12.dp),
         )
+    }
+}
+
+/**
+ * 微软 Edge 音色 picker (shown on the 发音来源 page when the Edge source is
+ * selected): one radio group per dictation language — 中文 (普通话 zh-CN
+ * voices) and English (en-US) — each row with a preview (试听) button that
+ * synthesizes a sample in that voice without selecting it. Selections apply
+ * immediately (cache keys bind voice+rate so clips regenerate); a 恢复默认
+ * appears once any voice deviates from the app default.
+ */
+@Composable
+private fun EdgeVoiceSection(
+    voiceZh: String,
+    voiceEn: String,
+    previewState: TtsTestState,
+    onVoiceZhChange: (String) -> Unit,
+    onVoiceEnChange: (String) -> Unit,
+    onPreview: (shortName: String, lang: String) -> Unit,
+) {
+    val zhVoices = EDGE_VOICE_CATALOG.filter { it.locale.startsWith("zh") }
+    val enVoices = EDGE_VOICE_CATALOG.filter { it.locale.startsWith("en") }
+
+    SettingsSectionHeader("Edge 音色")
+    SettingsCard {
+        EdgeVoiceLangGroup(
+            title = "中文",
+            supporting = "用于汉字听写与组词朗读",
+            voices = zhVoices,
+            selectedShortName = voiceZh,
+            previewing = previewState is TtsTestState.Testing,
+            onSelect = onVoiceZhChange,
+            onPreview = { onPreview(it, "zh") },
+        )
+        HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
+        EdgeVoiceLangGroup(
+            title = "English",
+            supporting = "用于英文单词朗读",
+            voices = enVoices,
+            selectedShortName = voiceEn,
+            previewing = previewState is TtsTestState.Testing,
+            onSelect = onVoiceEnChange,
+            onPreview = { onPreview(it, "en") },
+        )
+    }
+    // Preview status lives under the group card; a transient per-voice
+    // result is shown once here (the group rows re-render but state is a
+    // single shared flow).
+    when (val state = previewState) {
+        TtsTestState.Idle -> Unit
+        TtsTestState.Testing -> Text(
+            "试听生成中…",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp),
+        )
+        TtsTestState.Ok -> Text(
+            "已播放试听",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp),
+        )
+        is TtsTestState.Failed -> Text(
+            state.message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp),
+        )
+    }
+}
+
+/**
+ * One language's voice list: a 默认 (use the built-in neural default for the
+ * language) radio + a row per curated voice, each with its own 试听 button.
+ */
+@Composable
+private fun EdgeVoiceLangGroup(
+    title: String,
+    supporting: String,
+    voices: List<EdgeVoice>,
+    selectedShortName: String,
+    previewing: Boolean,
+    onSelect: (String) -> Unit,
+    onPreview: (String) -> Unit,
+) {
+    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 2.dp),
+        )
+        Text(
+            supporting,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 16.dp, bottom = 4.dp),
+        )
+        // 默认 voice = the app's built-in neural default (blank stored value).
+        EdgeVoiceRow(
+            label = "默认（${if (voices.firstOrNull()?.locale?.startsWith("zh") == true) "晓晓" else "Aria"}）",
+            selected = selectedShortName.isBlank(),
+            enabled = true,
+            onClick = { onSelect("") },
+            onPreview = null,
+        )
+        voices.forEach { voice ->
+            EdgeVoiceRow(
+                label = voice.friendlyName,
+                selected = selectedShortName == voice.shortName,
+                enabled = !previewing,
+                onClick = { onSelect(voice.shortName) },
+                onPreview = { onPreview(voice.shortName) },
+            )
+        }
+    }
+}
+
+/**
+ * One selectable voice row: the whole row selects (radio), the trailing
+ * 试听 icon plays a sample in that voice without changing the selection.
+ */
+@Composable
+private fun EdgeVoiceRow(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    onPreview: (() -> Unit)?,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .heightIn(min = 48.dp)
+            .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        if (onPreview != null) {
+            IconButton(
+                onClick = onPreview,
+                enabled = enabled,
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(
+                    Icons.Filled.PlayArrow,
+                    contentDescription = "试听 $label",
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }

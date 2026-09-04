@@ -137,6 +137,40 @@ class EdgeTtsTest {
         assertEquals(EDGE_VOICE_EN, edgeVoiceFor("  hello "))
     }
 
+    // ------------------------------------------- Edge voice catalog
+
+    @Test
+    fun `default voice per language is the built-in neural pair`() {
+        assertEquals(EDGE_VOICE_ZH, edgeDefaultVoiceFor("zh"))
+        assertEquals(EDGE_VOICE_ZH, edgeDefaultVoiceFor("zh-CN"))
+        assertEquals(EDGE_VOICE_EN, edgeDefaultVoiceFor("en"))
+        assertEquals(EDGE_VOICE_EN, edgeDefaultVoiceFor("en-US"))
+    }
+
+    @Test
+    fun `catalog splits voices into zh and en lists`() {
+        val zh = edgeCatalogShortNames("zh")
+        val en = edgeCatalogShortNames("en")
+        assertTrue(zh.isNotEmpty())
+        assertTrue(en.isNotEmpty())
+        assertTrue(zh.none { !it.startsWith("zh-CN") })
+        assertTrue(en.none { !it.startsWith("en-US") })
+        assertTrue(zh.contains(EDGE_VOICE_ZH))
+        assertTrue(en.contains(EDGE_VOICE_EN))
+    }
+
+    @Test
+    fun `catalog entries carry distinct short names and long ssml names`() {
+        val shorts = EDGE_VOICE_CATALOG.map { it.shortName }
+        assertEquals(shorts.size, shorts.distinct().size)
+        // Long name must embed the shortName's voice part for the SSML.
+        EDGE_VOICE_CATALOG.forEach { v ->
+            assertTrue(v.name.startsWith("Microsoft Server Speech Text to Speech Voice ("))
+            assertTrue(v.name.endsWith(")"))
+            assertTrue(v.friendlyName.isNotBlank())
+        }
+    }
+
     // --------------------------------------------------- rate mapping
 
     @Test
