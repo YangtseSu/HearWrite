@@ -14,26 +14,42 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import org.yangtse.hearwrite.domain.Speaker
 import org.yangtse.hearwrite.domain.TtsSource
 
 /**
- * The word-pass TTS chain (AGENTS.md "TTS priority chain"): **ready cached
- * clips only** play through [MediaPlayer] — [speak] never waits for a
- * download. Link order by source:
+ * The word-pass TTS chain (AGENTS.md "TTS priority chain"): three **peer**
+ * sources — Youdao, Edge Read-Aloud and the OpenAI-compatible provider —
+ * plus the always-available system voice. Sources are mutually exclusive
+ * and cache-independent: the active source plays only its own cached clips
+ * (never another source's cache), and the system voice is the **sole
+ * fallback** when the source cannot serve the text.
+ *
+ * Link order by source:
  * - [TtsSource.YOUDAO]: Youdao ready clip → system voice.
- * - [TtsSource.EDGE]: Edge Read-Aloud ready clip → Youdao ready clip →
- *   system voice (keyless Microsoft neural voices).
- * - [TtsSource.CUSTOM]: provider ready clip → Youdao ready clip → system
- *   voice (the OpenAI-compatible provider from Settings; unconfigured or
- *   failing links fall straight through).
+ * - [TtsSource.EDGE]: Edge Read-Aloud ready clip → system voice (keyless
+ *   Microsoft neural voices).
+ * - [TtsSource.CUSTOM]: provider ready clip → system voice (the
+ *   OpenAI-compatible provider from Settings; unconfigured → system).
  * - [TtsSource.SYSTEM]: everything straight to the system voice.
  *
- * The 组词 phrase pass stays pinned to the system speaker (engine
- * `phraseSpeaker`). Clip playback contract (AGENTS.md): `MediaPlayer`
- * guarded by a completion listener **plus a 10 s watchdog** so a stuck clip
- * can never freeze dictation; [stop] interrupts the current clip, the
- * system utterance and the fallback (a stopped session never speaks).
+ * Cold-start behavior: a cache miss waits a bounded time
+ * ([SPEAK_FETCH_TIMEOUT_MS]) for the active source's download before the
+ * system fallback, so one dictation keeps a single voice instead of opening
+ * on the system voice while the source warms up. [prefetch] still warms the
+ * cache in the background; the speak-time wait joins the same per-text
+ * single flight and never blocks unboundedly.
+ *
+ * The 组词 phrase pass ALSO rides this chain — except under [TtsSource.YOUDAO],
+ * whose dict voice cannot serve sentences: the dictation phrase speaker
+ * (`DictationViewModel`) sends the phrase straight to the system zh-CN voice
+ * in that case, and phrases are never fetched from the network under Youdao.
+ *
+ * Clip playback contract (AGENTS.md): `MediaPlayer` guarded by a completion
+ * listener **plus a 10 s watchdog** so a stuck clip can never freeze
+ * dictation; [stop] interrupts the current clip, the system utterance and
+ * the fallback (a stopped session never speaks).
  */
 class TtsChainSpeaker(
     private val youdaoTts: YoudaoTts,
@@ -56,6 +72,9 @@ class TtsChainSpeaker(
         source = value
     }
 
+    /** The configured source — the dictation phrase pass routes on it. */
+    fun currentSource(): TtsSource = source
+
     /** Background-warm [text]/[lang] on the active source's cache. */
     suspend fun prefetch(text: String, lang: String) {
         if (text.isBlank()) return
@@ -76,14 +95,19 @@ class TtsChainSpeaker(
             return system.speak(trimmed, lang)
         }
 
-        // Ready-cached audio only — a miss degrades instantly, never blocks.
-        for (clip in cachedClips(trimmed, lang)) {
+        // Ready cached audio first; a cold-start miss waits a bounded time for
+        // the active source's own download (single-flight, cancellable) so
+        // the session does not open on the system voice. On failure/timeout
+        // the playback never blocks unboundedly — straight to system.
+        val clip = cachedClip(trimmed, lang)
+            ?: withTimeoutOrNull(SPEAK_FETCH_TIMEOUT_MS) { fetchFromSource(trimmed, lang) }
+        if (clip != null) {
             val ok = playClip(clip)
             if (ok || interrupted) {
                 // Heard, or stopped by pause/skip/leave: no second attempt.
                 return ok
             }
-            Log.w(TAG, "clip playback failed, trying the next link: ${clip.name}")
+            Log.w(TAG, "clip playback failed, falling back to system: ${clip.name}")
         }
         system.speak(trimmed, lang)
     } catch (e: CancellationException) {
@@ -103,17 +127,32 @@ class TtsChainSpeaker(
     }
 
     /**
-     * Ready cached clips for [trimmed] in link order (see the class KDoc).
-     * The provider link only exists when its config is set — an
-     * unconfigured custom source degrades to youdao → system.
+     * The active source's own ready clip — cached audio only, and **never
+     * another source's cache**: sources are peers by design, so one
+     * dictation under EDGE cannot play leftover Youdao clips (a mixed-voice
+     * session; the old cross-source fallback).
      */
-    private fun cachedClips(trimmed: String, lang: String): List<File> = when (source) {
-        TtsSource.SYSTEM -> emptyList()
-        TtsSource.CUSTOM ->
-            listOfNotNull(provider.cachedClip(trimmed), youdaoTts.cachedClip(trimmed, lang))
-        TtsSource.EDGE ->
-            listOfNotNull(edge.cachedClip(trimmed), youdaoTts.cachedClip(trimmed, lang))
-        TtsSource.YOUDAO -> listOfNotNull(youdaoTts.cachedClip(trimmed, lang))
+    private fun cachedClip(trimmed: String, lang: String): File? = when (source) {
+        TtsSource.SYSTEM -> null
+        TtsSource.YOUDAO -> youdaoTts.cachedClip(trimmed, lang)
+        TtsSource.EDGE -> edge.cachedClip(trimmed)
+        TtsSource.CUSTOM -> provider.cachedClip(trimmed)
+    }
+
+    /**
+     * Download [trimmed] from the active source and return its clip, or null
+     * on failure. Joins any in-flight prefetch via the per-text single
+     * flight. The caller bounds this with [SPEAK_FETCH_TIMEOUT_MS]; a failed
+     * fetch degrades to the system fallback.
+     */
+    private suspend fun fetchFromSource(trimmed: String, lang: String): File? {
+        val ready = when (source) {
+            TtsSource.YOUDAO -> youdaoTts.prefetch(trimmed, lang)
+            TtsSource.EDGE -> edge.prefetch(trimmed)
+            TtsSource.CUSTOM -> provider.prefetch(trimmed)
+            TtsSource.SYSTEM -> false
+        }
+        return if (ready) cachedClip(trimmed, lang) else null
     }
 
     /**
@@ -222,5 +261,13 @@ class TtsChainSpeaker(
 
         /** Watchdog for a single clip; a stuck MediaPlayer must never freeze dictation. */
         private const val CLIP_TIMEOUT_MS = 10_000L
+
+        /**
+         * Bounded cold-start wait for the active source's download before the
+         * system fallback. Covers typical Youdao (<1 s), Edge and provider
+         * (1–3 s) cold turns so one dictation keeps a single voice; a dead
+         * network degrades to the system voice within this bound.
+         */
+        private const val SPEAK_FETCH_TIMEOUT_MS = 4_000L
     }
 }

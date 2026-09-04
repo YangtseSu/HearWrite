@@ -22,13 +22,15 @@ interface Speaker {
 }
 
 /**
- * Active voice source for the word pass (AGENTS.md "TTS priority chain").
- * YOUDAO is the default; EDGE routes through Microsoft Edge Read-Aloud
- * (keyless neural voices, ready cached clips only, falling back to ready
- * Youdao clips and then the system voice); SYSTEM pins the chain to
- * `TextToSpeech`; CUSTOM routes the word pass through the configured
- * OpenAI-compatible provider first (ready cached clips only), falling back
- * to ready Youdao clips and then the system voice.
+ * Active voice source (AGENTS.md "TTS priority chain"). The three network
+ * sources are **peers**: each plays only its own cached clips (never
+ * another source's cache) and the system voice is the sole fallback on a
+ * cache miss or failure. YOUDAO is the default and is the per-word
+ * dictionary voice — it cannot serve the 组词 phrase, which goes straight to
+ * system TTS under Youdao; EDGE is Microsoft Edge Read-Aloud (keyless
+ * neural voices, sentence-capable); CUSTOM is the configured
+ * OpenAI-compatible provider (sentence-capable); SYSTEM pins the chain to
+ * `TextToSpeech`.
  */
 enum class TtsSource { YOUDAO, SYSTEM, CUSTOM, EDGE }
 

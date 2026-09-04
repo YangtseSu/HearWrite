@@ -19,10 +19,14 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.data.Haptics
+import org.yangtse.hearwrite.domain.CompoundTables
 import org.yangtse.hearwrite.domain.DictationEngine
 import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.PlayState
+import org.yangtse.hearwrite.domain.Speaker
+import org.yangtse.hearwrite.domain.TtsSource
+import org.yangtse.hearwrite.domain.cjkWordSpeech
 import org.yangtse.hearwrite.domain.isCjkEntry
 import org.yangtse.hearwrite.domain.parseWordLine
 import org.yangtse.hearwrite.domain.speakTextFromEntry
@@ -67,11 +71,30 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     val lines: List<String> = app.dictationSession.take()
 
     /**
-     * Word passes ride the TTS chain (Youdao ready-cache → system); the 组词
-     * phrase pass stays pinned to the system speaker — Youdao's dict voice
-     * cannot serve such sentences (AGENTS.md "TTS priority chain").
+     * 组词 phrase pass routing: the active TTS chain (own cache + bounded
+     * cold-start fetch) except under YOUDAO — the dict voice cannot serve
+     * sentences, so with Youdao the phrase goes straight to the system zh-CN
+     * voice with **no network attempt** (a Youdao-only special case; Edge and
+     * custom providers speak phrases in their own voices, AGENTS.md).
      */
-    val engine = DictationEngine(app.ttsChain, phraseSpeaker = app.systemSpeaker)
+    private val phraseSpeaker = object : Speaker {
+        override suspend fun speak(text: String, lang: String): Boolean =
+            if (app.ttsChain.currentSource() == TtsSource.YOUDAO) {
+                app.systemSpeaker.speak(text, lang)
+            } else {
+                app.ttsChain.speak(text, lang)
+            }
+
+        override fun stop() {
+            // The engine also stops the chain via its word speaker; both
+            // stops are idempotent.
+            app.ttsChain.stop()
+            app.systemSpeaker.stop()
+        }
+    }
+
+    /** Word passes ride the TTS chain; the 组词 phrase routes via [phraseSpeaker]. */
+    val engine = DictationEngine(app.ttsChain, phraseSpeaker = phraseSpeaker)
 
     private val _intervalSec = MutableStateFlow(MIN_INTERVAL_SEC)
     val intervalSec: StateFlow<Double> = _intervalSec.asStateFlow()
@@ -109,6 +132,9 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
 
     /** Wall-clock start of the current run (init session or a review round). */
     private var runStartedAtMs = 0L
+
+    /** 组词 candidate tables for phrase prefetch (set in init with the engine). */
+    private var tables = CompoundTables.EMPTY
 
     /** 朗读释义 state for the session (dictation screen mirrors the setting). */
     @Volatile
@@ -188,7 +214,8 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
             // (first lookup parses compounds.json, then it is cached forever).
             // Unavailable tables degrade to the meaning-column fallback.
             try {
-                engine.setCompoundTables(app.compoundRepository.tables())
+                tables = app.compoundRepository.tables()
+                engine.setCompoundTables(tables)
             } catch (e: Exception) {
                 Log.w(TAG, "compound tables unavailable; 组词 falls back", e)
             }
@@ -242,16 +269,25 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
 
     /**
      * Warm the audio cache around [index] (upstream `prefetchWordAudio` in
-     * the speak phase): the current line, the next line, and — only for
-     * English entries with 朗读释义 on — the gloss. 组词 phrases are never
-     * prefetched: they always speak through the system TTS link.
+     * the speak phase): the current line, the next line, and the current
+     * line's meaning pass — the 组词 phrase of a single CJK char (only under
+     * EDGE/CUSTOM, where the phrase rides the chain; under YOUDAO the phrase
+     * must never touch the network) or the English gloss when 朗读释义 is on.
      */
     private fun prefetchAround(index: Int) {
         val lines = _activeLines.value
         val current = lines.getOrNull(index) ?: return
         prefetchEntry(current)
         lines.getOrNull(index + 1)?.let(::prefetchEntry)
-        if (!isCjkEntry(current) && readTranslation) {
+        if (isCjkEntry(current)) {
+            val head = speakTextFromEntry(current)
+            if (head.length == 1) {
+                val phrase = cjkWordSpeech(current, tables, lines)
+                if (phrase.isNotEmpty() && app.ttsChain.currentSource() != TtsSource.YOUDAO) {
+                    prefetch(phrase, "zh-CN")
+                }
+            }
+        } else if (readTranslation) {
             val gloss = speakableMeaning(parseWordLine(current).meaning)
             if (gloss.isNotEmpty()) prefetch(gloss, "zh-CN")
         }

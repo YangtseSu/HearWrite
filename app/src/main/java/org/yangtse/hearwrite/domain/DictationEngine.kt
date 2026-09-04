@@ -38,9 +38,11 @@ private const val LANG_EN = "en-US"
  * (虚词, no candidate) simply gets no phrase pass — the upstream behavior.
  *
  * Voice routing: word passes and English glosses speak through [speaker]
- * (the active TTS chain in later phases); the 组词 phrase always speaks via
- * [phraseSpeaker], pinned to the system zh-CN TTS link — Youdao's dict voice
- * cannot serve such sentences (AGENTS.md "TTS priority chain").
+ * (the active TTS chain); the 组词 phrase speaks through [phraseSpeaker],
+ * which the ViewModel wires to the chain except under Youdao — the dict
+ * voice cannot serve sentences, so there the phrase goes straight to the
+ * system zh-CN TTS (a Youdao-only special case; Edge/custom providers speak
+ * phrases in their own voices; AGENTS.md "TTS priority chain").
  *
  * Cancellation contract (each line mirrors a real upstream bug — do not
  * regress, AGENTS.md):
