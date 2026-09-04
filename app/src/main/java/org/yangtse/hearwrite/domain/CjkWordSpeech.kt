@@ -95,6 +95,8 @@ fun parseCompoundTables(json: String): CompoundTables {
  *  3. [tables.common] 常用词池兜底（按读音过滤，频级升序取第一个通过的）。
  *
  * 多音字按条目带调拼音过滤：音节须一致（数字调，ü = v），任一方无调放行。
+ * 无拼音条目（用户手输单字）以该字常用词池最高频词读音为锚点过滤
+ * （"好" → 良好 的 hao3），避免 好客(hao4) 这类非常用读音劫持组词。
  * ⚠️ Candidates are never deduped by word — the raw pool arrays are walked and
  * the first row passing the reading filter wins (upstream deduped 澄清 keeping
  * only cheng2, orphaning the dèng reading entirely; 朝 pool carries 朝阳 zhao1
@@ -111,6 +113,15 @@ fun cjkWordSpeech(
 
     val parsed = parseWordLine(entry)
     val headPinyin = parsed.pos?.let(::toneToDigit) ?: ""
+
+    // A pinyin-less entry (bare char pasted by the user) has no reading
+    // anchor; pass-all would let any reading hijack the call — bare 好 must
+    // not compound into 好客(hao4) while its own passes speak the dominant
+    // hǎo. Anchor such heads to the char's most frequent common-pool reading
+    // (良好 → hao3). Chars with no common pool keep the pass-all fallback.
+    val readPinyin = headPinyin.ifEmpty {
+        tables.common[head]?.firstOrNull()?.syllable.orEmpty()
+    }
 
     // Tier 1: the entry's own meaning column (authoritative, no reading filter).
     val fromMeaning = mutableListOf<CompoundWord>()
@@ -131,12 +142,12 @@ fun cjkWordSpeech(
         fromLearned += CompoundWord(word, "")
     }
     for (row in tables.learned[head] ?: emptyList()) {
-        if (syllableMatches(headPinyin, row.syllable)) fromLearned += row
+        if (syllableMatches(readPinyin, row.syllable)) fromLearned += row
     }
 
     // Tier 3: the common-word pool, reading-filtered, frequency-ordered.
     val fromCommon = tables.common[head]
-        ?.filter { syllableMatches(headPinyin, it.syllable) }
+        ?.filter { syllableMatches(readPinyin, it.syllable) }
         ?: emptyList()
 
     // Tiers 1+2 merge into one pool ranked by the common-word frequency table;

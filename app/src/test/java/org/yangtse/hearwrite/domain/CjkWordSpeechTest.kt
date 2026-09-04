@@ -97,6 +97,26 @@ class CjkWordSpeechTest {
         assertEquals("澄清的澄", speech("澄 | dèng"))
     }
 
+    // ------------------------------------------------ pinyin-less entries
+
+    @Test
+    fun `bare char anchors to its most frequent reading`() {
+        // 好 without pinyin: pass-all used to let the learned row 好客(hao4)
+        // hijack the call while the standalone passes speak the dominant hǎo —
+        // word and compound disagreed. The anchor (common pool first row
+        // 良好 → hao3) rejects 好客; the hǎo pool wins.
+        assertEquals("良好的好", speech("好"))
+    }
+
+    @Test
+    fun `bare polyphone keeps learned-first when readings agree`() {
+        // Anchor = 朝鲜's chao2 (most frequent reading); the learned row
+        // 朝代(chao2) still passes, so learned-first ranking survives.
+        assertEquals("朝代的朝", speech("朝"))
+        // 岸 has a single reading (an4): the anchor passes the learned row 海岸.
+        assertEquals("海岸的岸", speech("岸"))
+    }
+
     // ------------------------------------------------------------ edge cases
 
     @Test
