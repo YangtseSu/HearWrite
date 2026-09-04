@@ -50,7 +50,7 @@ data class TtsProviderConfig(
         get() = baseUrl.isNotBlank() && apiKey.isNotBlank() && model.isNotBlank()
 }
 
-/** One selectable provider preset; mirror of alice's `TTS_PROVIDER_PRESETS`. */
+/** One selectable provider preset (label shown in the picker chips). */
 data class TtsProviderPreset(
     val id: String,
     val label: String,
@@ -63,9 +63,10 @@ data class TtsProviderPreset(
 )
 
 /**
- * OpenAI-compatible TTS providers. Only MiMo is free at the moment; the rest
- * are pre-filled convenience presets whose fields stay editable. Contents
- * mirror alice `src/lib/ttsConfig.ts` byte for byte.
+ * OpenAI-compatible TTS presets: 小米 MiMo (the only free one, default) and
+ * 自定义. The RN predecessor's 智谱 GLM / 硅基流动 / OpenAI presets were
+ * dropped by the author's choice; those providers remain reachable by
+ * filling the 自定义 slot with their base URL / model / voice fields.
  */
 val TTS_PROVIDER_PRESETS: List<TtsProviderPreset> = listOf(
     TtsProviderPreset(
@@ -76,34 +77,6 @@ val TTS_PROVIDER_PRESETS: List<TtsProviderPreset> = listOf(
         model = "mimo-v2.5-tts",
         voiceEn = "Chloe",
         voiceZh = "冰糖",
-    ),
-    TtsProviderPreset(
-        id = "zhipu",
-        label = "智谱 GLM",
-        api = TtsApiKind.SPEECH,
-        baseUrl = "https://open.bigmodel.cn/api/paas/v4",
-        model = "glm-tts",
-        voiceEn = "tongtong",
-        voiceZh = "tongtong",
-        responseFormat = "wav",
-    ),
-    TtsProviderPreset(
-        id = "siliconflow",
-        label = "硅基流动",
-        api = TtsApiKind.SPEECH,
-        baseUrl = "https://api.siliconflow.cn/v1",
-        model = "FunAudioLLM/CosyVoice2-0.5B",
-        voiceEn = "FunAudioLLM/CosyVoice2-0.5B:alex",
-        voiceZh = "FunAudioLLM/CosyVoice2-0.5B:anna",
-    ),
-    TtsProviderPreset(
-        id = "openai",
-        label = "OpenAI",
-        api = TtsApiKind.SPEECH,
-        baseUrl = "https://api.openai.com/v1",
-        model = "gpt-4o-mini-tts",
-        voiceEn = "alloy",
-        voiceZh = "alloy",
     ),
     TtsProviderPreset(id = "custom", label = "自定义", api = TtsApiKind.SPEECH, baseUrl = "", model = ""),
 )

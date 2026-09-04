@@ -36,20 +36,25 @@ class TtsProviderConfigTest {
     // ------------------------------------------------------------ presets
 
     @Test
-    fun `presets mirror the alice list with mimo first`() {
+    fun `presets are mimo and custom with mimo first`() {
+        // 智谱 GLM / 硅基流动 / OpenAI were removed from the preset list by
+        // the author's choice — 自定义 covers their endpoints.
         assertEquals(
-            listOf("mimo", "zhipu", "siliconflow", "openai", "custom"),
+            listOf("mimo", "custom"),
             TTS_PROVIDER_PRESETS.map { it.id },
         )
         val mimo = TTS_PROVIDER_PRESETS[0]
+        assertEquals("小米 MiMo", mimo.label)
         assertEquals(TtsApiKind.CHAT, mimo.api)
         assertEquals("https://api.xiaomimimo.com/v1", mimo.baseUrl)
         assertEquals("mimo-v2.5-tts", mimo.model)
         assertEquals("Chloe", mimo.voiceEn)
         assertEquals("冰糖", mimo.voiceZh)
-        val zhipu = TTS_PROVIDER_PRESETS[1]
-        assertEquals(TtsApiKind.SPEECH, zhipu.api)
-        assertEquals("wav", zhipu.responseFormat)
+        val custom = TTS_PROVIDER_PRESETS[1]
+        assertEquals("自定义", custom.label)
+        assertEquals(TtsApiKind.SPEECH, custom.api)
+        assertEquals("", custom.baseUrl)
+        assertEquals("", custom.model)
         assertEquals("mimo", DEFAULT_TTS_PRESET.id)
     }
 

@@ -187,7 +187,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
         viewModelScope.launch {
             val activeId = settings.ttsActivePresetId.first()
-            if (activeId.isNotBlank()) {
+            // Restore only presets still selectable — an id of a preset
+            // removed from the list (智谱 GLM / 硅基流动 / OpenAI) must not
+            // become an invisible active slot with no chip to return to.
+            if (activeId.isNotBlank() && TTS_PROVIDER_PRESETS.any { it.id == activeId }) {
                 _ttsPresetId.value = activeId
                 _ttsForm.value =
                     ttsDraftFor(ttsPresetById(activeId), settings.ttsProviderConfigs.first()[activeId])
