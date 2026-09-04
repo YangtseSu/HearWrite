@@ -52,9 +52,10 @@ class CjkWordSpeechTest {
 
     @Test
     fun `learned pool beats the common pool fallback`() {
-        // 月 has no meaning column here: tier 2 (人教版 learned row 月亮 yue4)
-        // wins — the bare common-pool walk would have picked 岁月 instead.
-        assertEquals("月亮的月", speech("月 | yuè"))
+        // 岸 has no meaning column: tier 2 (人教版 learned row 海岸 an4) wins —
+        // the bare common-pool walk would have picked 两岸 (higher rank).
+        // (Former 月|yuè case died with the 一上 lists, removed upstream 2026-09-01.)
+        assertEquals("海岸的岸", speech("岸 | àn"))
     }
 
     @Test
@@ -80,9 +81,12 @@ class CjkWordSpeechTest {
 
     @Test
     fun `bare polyphone walk takes the first passing reading row`() {
-        // AGENTS.md real walk for 朝|zhāo: 朝鲜(chao2)✗ → 朝廷(chao2)✗ → 明朝(zhao1)✓.
+        // zhāo: learned row 朝代(chao2) fails the reading filter → tier-3 walk
+        // (AGENTS.md): 朝鲜(chao2)✗ → 朝廷(chao2)✗ → 明朝(zhao1)✓.
         assertEquals("明朝的朝", speech("朝 | zhāo"))
-        assertEquals("朝鲜的朝", speech("朝 | cháo"))
+        // cháo: the learned row 朝代(chao2) matches → tier 2 wins over the
+        // pool, whose first passing row would be 朝鲜.
+        assertEquals("朝代的朝", speech("朝 | cháo"))
     }
 
     @Test

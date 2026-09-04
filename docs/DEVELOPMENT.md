@@ -67,15 +67,15 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | `./gradlew :app:testDebugUnitTest` | 单元测试（domain 逻辑门禁） |
 | `./gradlew :app:lintDebug` | Android lint |
 | `./gradlew :app:assembleRelease` | 构建签名 Release APK（见下节） |
+| `node scripts/generate-compounds.ts` | 重新生成 `compounds/compounds.json`（输入：`scripts/data/` 频率表 + `app/src/main/assets/人教版小学语文/`） |
 
 ## 3. 仓库结构
 
 | 路径 | 用途 |
 | --- | --- |
-| `app/` | Android 应用（单一 `:app` 模块：`ui/` Compose 界面、`domain/` 纯 Kotlin 逻辑、`data/` 仓库与网络） |
-| `data/` | 再生源数据 `meta/`（频率表，**不随 APK 打包**）；词表与内置资源本体在 `app/src/main/assets/`（**只读**，禁止手工重新生成） |
+| `app/` | Android 应用（单一 `:app` 模块：`ui/` Compose 界面、`domain/` 纯 Kotlin 逻辑、`data/` 仓库与网络）；词表与内置资源本体在 `app/src/main/assets/`（原样打包，**只读**，禁止手工重新生成） |
 | `docs/` | 阶段日志归档（`PHASES.md`，冻结于 Phase 10）、本指南、README 截图（按需）；图标设计源 `hearwrite.svg`（自适应图标各层由它生成到 `app/src/main/res/`） |
-| `scripts/` | 数据处理脚本（Python 3），按需添加 |
+| `scripts/` | `generate-compounds.ts` 组词数据生成器（Node ≥ 23.6 直接运行，零 npm 依赖）与再生源 `scripts/data/`（频率表，不随 APK 打包） |
 
 ## 4. 签名与打包发布
 

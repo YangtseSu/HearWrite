@@ -50,7 +50,7 @@ private fun syllableMatches(headPinyin: String, syllable: String): Boolean {
 data class CompoundWord(val word: String, val syllable: String)
 
 /**
- * 单字组词候选表（`data/compounds/compounds.json` 的内存形态）:
+ * 单字组词候选表（`app/src/main/assets/compounds/compounds.json` 的内存形态）:
  * [common] 按《现代汉语常用词表》频级升序（越靠前越常用），[learned] 为教材已学词。
  * Pool order is significant: candidates are walked row by row and duplicates
  * are preserved — one char can carry two readings of the same word
