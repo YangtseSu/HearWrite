@@ -199,14 +199,18 @@ internal fun edgeTextPath(text: String): String {
 }
 
 /**
- * Parse one binary audio frame: first two bytes big-endian header length,
- * then `Key:value` header lines, `\r\n`, then the payload (upstream
- * `get_headers_and_data`). Null when the frame is too short to be valid.
+ * Parse one binary audio frame: the first two bytes are the big-endian
+ * length `F` of the header block, and the payload starts immediately at
+ * `[2 + F]` — the header block **includes** its trailing `\r\n` (upstream
+ * `get_headers_and_data`: `data[header_length + 2:]`). No extra separator
+ * follows the block; real frames carry MP3 sync bytes (`\xff\xfb`/`\xff\xf3`)
+ * right at `[2 + F]` (verified 2026-09 against the live service). Null when
+ * the frame is too short to be valid.
  */
 internal fun edgeParseBinaryFrame(data: ByteArray): Pair<Map<String, String>, ByteArray>? {
     if (data.size < 2) return null
     val headerLength = ((data[0].toInt() and 0xFF) shl 8) or (data[1].toInt() and 0xFF)
-    val payloadStart = 2 + headerLength + 2 // header block + trailing \r\n
+    val payloadStart = 2 + headerLength
     if (payloadStart > data.size) return null
     val headers = mutableMapOf<String, String>()
     val head = data.copyOfRange(2, 2 + headerLength).toString(Charsets.US_ASCII)

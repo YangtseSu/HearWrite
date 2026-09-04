@@ -157,12 +157,14 @@ class EdgeTtsTest {
 
     @Test
     fun `binary audio frame splits headers from payload`() {
+        // Real service layout: the header block (length F) includes its
+        // trailing \r\n; the MP3 payload starts right at [2 + F].
         val header = "Path:audio\r\nContent-Type:audio/mpeg\r\n".toByteArray(Charsets.US_ASCII)
         val payload = byteArrayOf(0x49, 0x44, 0x33, 0x01)
         val frame = byteArrayOf(
             ((header.size shr 8) and 0xFF).toByte(),
             (header.size and 0xFF).toByte(),
-        ) + header + "\r\n".toByteArray(Charsets.US_ASCII) + payload
+        ) + header + payload
 
         val parsed = edgeParseBinaryFrame(frame)!!
         assertEquals("audio", parsed.first["Path"])
@@ -176,7 +178,7 @@ class EdgeTtsTest {
         val frame = byteArrayOf(
             ((header.size shr 8) and 0xFF).toByte(),
             (header.size and 0xFF).toByte(),
-        ) + header + "\r\n".toByteArray(Charsets.US_ASCII)
+        ) + header
         val parsed = edgeParseBinaryFrame(frame)!!
         assertEquals(0, parsed.second.size)
     }
