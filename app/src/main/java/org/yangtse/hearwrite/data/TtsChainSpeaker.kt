@@ -22,6 +22,8 @@ import org.yangtse.hearwrite.domain.TtsSource
  * clips only** play through [MediaPlayer] — [speak] never waits for a
  * download. Link order by source:
  * - [TtsSource.YOUDAO]: Youdao ready clip → system voice.
+ * - [TtsSource.EDGE]: Edge Read-Aloud ready clip → Youdao ready clip →
+ *   system voice (keyless Microsoft neural voices).
  * - [TtsSource.CUSTOM]: provider ready clip → Youdao ready clip → system
  *   voice (the OpenAI-compatible provider from Settings; unconfigured or
  *   failing links fall straight through).
@@ -36,6 +38,7 @@ import org.yangtse.hearwrite.domain.TtsSource
 class TtsChainSpeaker(
     private val youdaoTts: YoudaoTts,
     private val provider: OpenAiCompatibleTts,
+    private val edge: EdgeTts,
     private val system: SystemSpeaker,
 ) : Speaker {
 
@@ -59,6 +62,7 @@ class TtsChainSpeaker(
         when (source) {
             TtsSource.YOUDAO -> youdaoTts.prefetch(text, lang)
             TtsSource.CUSTOM -> provider.prefetch(text)
+            TtsSource.EDGE -> edge.prefetch(text)
             TtsSource.SYSTEM -> Unit
         }
     }
@@ -107,6 +111,8 @@ class TtsChainSpeaker(
         TtsSource.SYSTEM -> emptyList()
         TtsSource.CUSTOM ->
             listOfNotNull(provider.cachedClip(trimmed), youdaoTts.cachedClip(trimmed, lang))
+        TtsSource.EDGE ->
+            listOfNotNull(edge.cachedClip(trimmed), youdaoTts.cachedClip(trimmed, lang))
         TtsSource.YOUDAO -> listOfNotNull(youdaoTts.cachedClip(trimmed, lang))
     }
 

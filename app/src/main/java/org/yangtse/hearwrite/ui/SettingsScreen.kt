@@ -261,6 +261,7 @@ private fun SettingsHub(
                     title = "发音来源",
                     supporting = when (ttsSource) {
                         TtsSource.YOUDAO -> "有道真人词典发音，需要网络；失败时自动改用系统语音"
+                        TtsSource.EDGE -> "微软在线神经网络语音，免费无需 API Key"
                         TtsSource.SYSTEM -> "系统内置语音，完全离线"
                         TtsSource.CUSTOM -> ttsActive?.let {
                             "当前使用：${it.model.trim()}"
@@ -271,6 +272,7 @@ private fun SettingsHub(
                         SettingsValueTrailing(
                             when (ttsSource) {
                                 TtsSource.YOUDAO -> "有道词典"
+                                TtsSource.EDGE -> "微软 Edge"
                                 TtsSource.SYSTEM -> "系统语音"
                                 TtsSource.CUSTOM -> "TTS API"
                             },

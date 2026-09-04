@@ -83,6 +83,11 @@ fun VoiceSourceSettingsPage(
                     label = { Text("有道词典", style = MaterialTheme.typography.bodyLarge) },
                 )
                 FilterChip(
+                    selected = ttsSource == TtsSource.EDGE,
+                    onClick = { viewModel.onTtsSourceChange(TtsSource.EDGE) },
+                    label = { Text("微软 Edge", style = MaterialTheme.typography.bodyLarge) },
+                )
+                FilterChip(
                     selected = ttsSource == TtsSource.CUSTOM,
                     onClick = { viewModel.onTtsSourceChange(TtsSource.CUSTOM) },
                     label = { Text("TTS API", style = MaterialTheme.typography.bodyLarge) },
@@ -96,6 +101,12 @@ fun VoiceSourceSettingsPage(
             when (ttsSource) {
                 TtsSource.YOUDAO -> Text(
                     "真人词典发音，需要网络；断网或失败时自动改用系统语音",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                )
+                TtsSource.EDGE -> Text(
+                    "微软在线神经网络语音，免费无需 API Key；需要网络，失败时自动降级",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),

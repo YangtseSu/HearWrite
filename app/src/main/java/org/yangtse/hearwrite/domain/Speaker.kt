@@ -23,12 +23,14 @@ interface Speaker {
 
 /**
  * Active voice source for the word pass (AGENTS.md "TTS priority chain").
- * YOUDAO is the default; SYSTEM pins the chain to `TextToSpeech`; CUSTOM
- * routes the word pass through the configured OpenAI-compatible provider
- * first (ready cached clips only), falling back to ready Youdao clips and
- * then the system voice.
+ * YOUDAO is the default; EDGE routes through Microsoft Edge Read-Aloud
+ * (keyless neural voices, ready cached clips only, falling back to ready
+ * Youdao clips and then the system voice); SYSTEM pins the chain to
+ * `TextToSpeech`; CUSTOM routes the word pass through the configured
+ * OpenAI-compatible provider first (ready cached clips only), falling back
+ * to ready Youdao clips and then the system voice.
  */
-enum class TtsSource { YOUDAO, SYSTEM, CUSTOM }
+enum class TtsSource { YOUDAO, SYSTEM, CUSTOM, EDGE }
 
 /** Playback defaults shared by the engine, settings and UI (AGENTS.md). */
 const val DEFAULT_INTERVAL_SEC = 7.0

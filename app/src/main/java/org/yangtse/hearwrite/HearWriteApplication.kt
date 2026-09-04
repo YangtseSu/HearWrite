@@ -9,6 +9,7 @@ import org.yangtse.hearwrite.data.BuiltinLibraryRepository
 import org.yangtse.hearwrite.data.CompoundRepository
 import org.yangtse.hearwrite.data.DictationSessionStore
 import org.yangtse.hearwrite.data.DictionaryRepository
+import org.yangtse.hearwrite.data.EdgeTts
 import org.yangtse.hearwrite.data.FavoritesRepository
 import org.yangtse.hearwrite.data.HearWriteDatabase
 import org.yangtse.hearwrite.data.HistoryRepository
@@ -68,12 +69,19 @@ class HearWriteApplication : Application() {
     }
 
     /**
-     * The word-pass voice chain: (custom provider ready-cache →) Youdao
-     * ready-cache → system TTS, chosen by the persisted source (AGENTS.md
-     * "TTS priority chain").
+     * Microsoft Edge Read-Aloud clips (微软 Edge source): keyless neural
+     * voices; disk-cached with a per-clip single flight and the persisted
+     * 语速 baked into the clip hash. Never touched on the startup path.
+     */
+    val edgeTts: EdgeTts by lazy { EdgeTts(this, settingsRepository) }
+
+    /**
+     * The word-pass voice chain: (Edge / custom provider ready-cache →)
+     * Youdao ready-cache → system TTS, chosen by the persisted source
+     * (AGENTS.md "TTS priority chain").
      */
     val ttsChain: TtsChainSpeaker by lazy {
-        TtsChainSpeaker(youdaoTts, openAiCompatibleTts, systemSpeaker)
+        TtsChainSpeaker(youdaoTts, openAiCompatibleTts, edgeTts, systemSpeaker)
     }
 
     /** tick/chime UI sounds (提示音 setting). */
