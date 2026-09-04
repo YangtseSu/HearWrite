@@ -18,9 +18,19 @@
 ## 下载安装
 
 - 从 GitHub [Releases](https://github.com/YangtseSu/HearWrite/releases) 下载 `app-release.apk` 安装（需允许安装未知来源应用）。
-- 也可以自行构建签名包，见 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)。
+- 也可以自行构建，见下「从源码构建」。
 
 要求 Android 16（API 36）及以上。
+
+### 从源码构建
+
+```bash
+git clone https://github.com/YangtseSu/HearWrite.git && cd HearWrite
+./gradlew :app:assembleDebug       # Debug APK → app/build/outputs/apk/debug/
+./gradlew :app:testDebugUnitTest   # 单元测试（domain 逻辑门禁）
+```
+
+前置条件：**JDK 21+** 与 **Android SDK**（含 `platforms;android-37`；环境搭建见 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §1）。签名材料不入库：无 `keystore.properties` 时 Debug 包用默认调试签名，Release 构建保持未签名（签名与发布流程见 DEVELOPMENT.md §4）。
 
 ## 快速上手
 
@@ -64,12 +74,11 @@ you're = you are         ← 只朗读左侧
 
 ## 数据来源
 
-内置词表来自教材整理；英汉释义基于 [ECDICT](https://github.com/skywind3000/ECDICT)（MIT）；组词数据由《现代汉语常用词表（草案）》频率表生成；提示音与完成音效为自行合成。详见 [`docs/PHASES.md`](docs/PHASES.md) Phase 0。
+内置词表来自教材整理；英汉释义基于 [ECDICT](https://github.com/skywind3000/ECDICT)（MIT）；组词数据由《现代汉语常用词表（草案）》频率表生成；提示音与完成音效为自行合成。各资产格式与来源细节见 [`AGENTS.md`](AGENTS.md) 的 Data Assets 一节。
 
 ## 相关文档
 
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — 开发者：环境搭建、构建、**签名与打包发布**
-- [`docs/PHASES.md`](docs/PHASES.md) — 分阶段开发日志（10 个阶段全部完成）
 - [`AGENTS.md`](AGENTS.md) — 架构、工具链版本与行为契约（开发者）
 
 ## 许可证
