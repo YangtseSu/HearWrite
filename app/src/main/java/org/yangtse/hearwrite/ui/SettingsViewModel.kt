@@ -175,7 +175,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
         viewModelScope.launch {
             val activeId = settings.ocrActivePresetId.first()
-            if (activeId.isNotBlank()) {
+            // Restore only presets still selectable — an id of a preset
+            // removed from the list must not become an invisible active
+            // slot with no chip to return to.
+            if (activeId.isNotBlank() && OCR_PROVIDER_PRESETS.any { it.id == activeId }) {
                 _ocrPresetId.value = activeId
                 _ocrForm.value =
                     ocrDraftFor(ocrPresetById(activeId), settings.ocrProviderConfigs.first()[activeId])

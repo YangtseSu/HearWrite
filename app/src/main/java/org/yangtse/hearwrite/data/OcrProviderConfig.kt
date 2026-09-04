@@ -26,7 +26,7 @@ data class OcrProviderConfig(
         get() = baseUrl.isNotBlank() && apiKey.isNotBlank() && model.isNotBlank()
 }
 
-/** One selectable provider preset; mirror of alice's `OCR_PROVIDER_PRESETS`. */
+/** One selectable provider preset (label shown in the picker chips). */
 data class OcrProviderPreset(
     val id: String,
     val label: String,
@@ -37,7 +37,9 @@ data class OcrProviderPreset(
 /**
  * OpenAI-compatible vision providers — all expose `/chat/completions` with
  * `image_url` content parts, so only base URL / key / model differ. The
- * default preset is Zhipu GLM-4V-Flash (free), the AGENTS.md default.
+ * default preset is Zhipu GLM-4V-Flash (free), the AGENTS.md default. The
+ * RN predecessor's OpenAI / 通义千问 / Kimi / 硅基流动 / Ollama presets were
+ * dropped by the author's choice — 自定义 covers any remaining endpoint.
  */
 val OCR_PROVIDER_PRESETS: List<OcrProviderPreset> = listOf(
     OcrProviderPreset(
@@ -47,40 +49,28 @@ val OCR_PROVIDER_PRESETS: List<OcrProviderPreset> = listOf(
         model = "glm-4v-flash",
     ),
     OcrProviderPreset(
-        id = "openai",
-        label = "OpenAI",
-        baseUrl = "https://api.openai.com/v1",
-        model = "gpt-4o-mini",
+        id = "zen",
+        label = "OpenCode Zen",
+        baseUrl = "https://opencode.ai/zen/v1",
+        model = "mimo-v2.5-free",
     ),
     OcrProviderPreset(
-        id = "qwen",
-        label = "通义千问 VL",
-        baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        model = "qwen-vl-plus",
+        id = "vercel",
+        label = "Vercel",
+        baseUrl = "https://ai-gateway.vercel.sh/v1",
+        model = "xiaomi/mimo-v2.5",
     ),
     OcrProviderPreset(
-        id = "moonshot",
-        label = "Kimi (Moonshot)",
-        baseUrl = "https://api.moonshot.cn/v1",
-        model = "moonshot-v1-8k-vision-preview",
-    ),
-    OcrProviderPreset(
-        id = "siliconflow",
-        label = "硅基流动",
-        baseUrl = "https://api.siliconflow.cn/v1",
-        model = "Qwen/Qwen2-VL-7B-Instruct",
+        id = "commandcode",
+        label = "Command Code",
+        baseUrl = "https://api.commandcode.ai/provider/v1",
+        model = "xiaomi/mimo-v2.5",
     ),
     OcrProviderPreset(
         id = "openrouter",
         label = "OpenRouter",
         baseUrl = "https://openrouter.ai/api/v1",
-        model = "google/gemini-flash-1.5",
-    ),
-    OcrProviderPreset(
-        id = "ollama",
-        label = "Ollama (本地)",
-        baseUrl = "http://localhost:11434/v1",
-        model = "llama3.2-vision",
+        model = "qwen/qwen3.8-flash",
     ),
     OcrProviderPreset(id = "custom", label = "自定义", baseUrl = "", model = ""),
 )
