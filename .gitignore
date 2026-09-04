@@ -24,3 +24,6 @@ captures/
 keystore.properties
 *.jks
 *.keystore
+
+# Script download cache (ECDICT csv)
+.cache/
