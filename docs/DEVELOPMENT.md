@@ -67,7 +67,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | `./gradlew :app:testDebugUnitTest` | 单元测试（domain 逻辑门禁） |
 | `./gradlew :app:lintDebug` | Android lint |
 | `./gradlew :app:assembleRelease` | 构建签名 Release APK（见下节） |
-| `node scripts/generate-compounds.ts` | 重新生成 `compounds/compounds.json`（输入：`scripts/data/` 频率表 + `app/src/main/assets/人教版小学语文/`） |
+| `python3 scripts/generate-compounds.py` | 重新生成 `compounds/compounds.json`（输入：`scripts/data/` 频率表 + `app/src/main/assets/人教版小学语文/`） |
 | `python3 scripts/build-ecdict-meta.py` | 重新生成 `dict/ecdict-meta.json`（首次自动下载 ECDICT csv 到 `.cache/`） |
 
 ## 3. 仓库结构
@@ -76,7 +76,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | --- | --- |
 | `app/` | Android 应用（单一 `:app` 模块：`ui/` Compose 界面、`domain/` 纯 Kotlin 逻辑、`data/` 仓库与网络）；词表与内置资源本体在 `app/src/main/assets/`（原样打包，**只读**，禁止手工重新生成） |
 | `docs/` | 阶段日志归档（`PHASES.md`，冻结于 Phase 10）、本指南、README 截图（按需）；图标设计源 `hearwrite.svg`（自适应图标各层由它生成到 `app/src/main/res/`） |
-| `scripts/` | 数据再生成工具与源：`generate-compounds.ts`（组词表，Node ≥ 23.6 零依赖）、`build-ecdict-meta.py`（词典表，Python 标准库）、`scripts/data/` 频率表（均不随 APK 打包） |
+| `scripts/` | 数据再生成工具与源：`generate-compounds.py`（组词表）、`build-ecdict-meta.py`（词典表，均为 Python 标准库零依赖）、`scripts/data/` 频率表（均不随 APK 打包） |
 
 ## 4. 签名与打包发布
 

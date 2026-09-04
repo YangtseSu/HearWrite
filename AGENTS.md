@@ -38,7 +38,7 @@ State: `ViewModel` + `StateFlow` + `collectAsStateWithLifecycle`. **No DI framew
 
 ### Built-in library (data assets in APK)
 
-- `app/src/main/assets/` ships **verbatim** into the APK — the standard AGP assets dir, no custom `sourceSets`/aapt wiring. Asset paths: `"<category>/<label>.txt"`, plus `dict/ecdict-meta.json`, `compounds/compounds.json`, `audio/tick.wav`, `audio/chime.wav`. The compounds generator and its regeneration source live in `scripts/` (outside the assets dir) and are never packaged: `node scripts/generate-compounds.ts` (stock Node ≥ 23.6, zero npm deps) rewrites `compounds/compounds.json` from `scripts/data/xiandaihanyuchangyongcibiao.txt` + `app/src/main/assets/人教版小学语文/`.
+- `app/src/main/assets/` ships **verbatim** into the APK — the standard AGP assets dir, no custom `sourceSets`/aapt wiring. Asset paths: `"<category>/<label>.txt"`, plus `dict/ecdict-meta.json`, `compounds/compounds.json`, `audio/tick.wav`, `audio/chime.wav`. The compounds generator and its regeneration source live in `scripts/` (outside the assets dir) and are never packaged: `python3 scripts/generate-compounds.py` (stdlib) rewrites `compounds/compounds.json` from `scripts/data/xiandaihanyuchangyongcibiao.txt` + `app/src/main/assets/人教版小学语文/`.
 - Categories = the 10 textbook dirs (`中考1600`, `高考3500`, `初中2182`, `人教版初中`, `人教版小学`, `人教版初中语文`, `人教版小学语文`, `外研版初中`, `闽教版小学`, `仁爱版初中`). Built-in entry id = `default_<category>_<label>` where `<label>` = filename sans `.txt`. **Labels are stable storage keys** — renaming a file orphans persisted history/favorite ids; never rename.
 - List order in the library browser (category dirs; labels within a category): `compareLabels` — grade rank 一→九, 上/下/全, Unit/Module number, 第X册. CJK runs compare pinyin syllable → stroke count → code point — the JDK `Collator` disagrees with ICU zh-Hans on 同音字 (仁 before 人 vs 人 before 仁), so it serves Latin runs only; no plain natural-compare fallback for CJK. Implemented in `domain/` (`LabelOrder.kt`), locked by unit tests against the golden `library-label-order.json` fixture (`app/src/test/resources/`).
 - **Dictionary/compound asset loading**: `dict/ecdict-meta.json` (3.3 MB → ~53k-entry map) is parsed **lazily on first lookup** on `Dispatchers.IO` and kept in a memory singleton; `compounds/compounds.json` likewise. **Never parse them on the startup path** (Application init / first frame). Cost ≈ 15–25 MB heap + hundreds of ms — acceptable on minSdk 36, but it is the one real weak spot of the raw-assets approach: if measured cold start exceeds 500 ms (PROGRESS Phase 10 item), move the **dictionary alone** to a prebuilt SQLite (Room `createFromAsset`); word lists stay as assets. Do not pre-optimize before measuring.
@@ -120,7 +120,7 @@ UI: countdown ring (last-second tick; `clearAndSetSemantics` announcing remainin
 | Path | Purpose |
 | --- | --- |
 | `app/` | The Android application (Compose UI, domain, data); bundled assets under `app/src/main/assets/` ship verbatim into the APK |
-| `scripts/` | `generate-compounds.ts` — compounds.json generator (stock Node ≥ 23.6, zero npm deps) + `build-ecdict-meta.py` — dict asset builder (Python stdlib; downloads ECDICT to `.cache/` on first run) + `scripts/data/` regeneration sources (frequency table) — never shipped |
+| `scripts/` | `generate-compounds.py` — compounds.json generator (Python stdlib) + `build-ecdict-meta.py` — dict asset builder (Python stdlib; downloads ECDICT to `.cache/` on first run) + `scripts/data/` regeneration sources (frequency table) — never shipped |
 | `docs/` | `DEVELOPMENT.md` build/signing/packaging guide (maintained); `PHASES.md` phase log — **frozen archive** through Phase 10, no longer updated |
 
 ## Data Assets (formats & provenance — never hand-edit derived files)
@@ -129,8 +129,8 @@ UI: countdown ring (last-second tick; `clearAndSetSemantics` announcing remainin
 | --- | --- | --- |
 | `app/src/main/assets/<category>/<label>.txt` | word lines, see *Word-line format* | Original alice word lists (user's own extraction from textbooks) |
 | `app/src/main/assets/dict/ecdict-meta.json` | flat `{word: "pos.|gloss"}` (senses `；`-split) | Regenerable via `scripts/build-ecdict-meta.py` from [ECDICT](https://github.com/skywind3000/ECDICT) (MIT) csv (auto-downloaded to `.cache/` on first run). Offline EN→ZH lookup: POS, senses, exam tags |
-| `app/src/main/assets/compounds/compounds.json` | `{compounds: {char: [[word, syllable], …]}, learned: {…}}`; syllable = tone digits, `ü=v`, neutral unmarked | Regenerated in-repo by `scripts/generate-compounds.ts` from the frequency table + 人教版小学语文 lists (ported from the author's RN-predecessor generator). 4724 + 524 char keys |
-| `scripts/data/xiandaihanyuchangyongcibiao.txt` | `word\tpinyin\tlevel` | 《现代汉语常用词表（草案）》(教育部), 56008 words — regeneration source for `scripts/generate-compounds.ts`, never shipped |
+| `app/src/main/assets/compounds/compounds.json` | `{compounds: {char: [[word, syllable], …]}, learned: {…}}`; syllable = tone digits, `ü=v`, neutral unmarked | Regenerated in-repo by `scripts/generate-compounds.py` from the frequency table + 人教版小学语文 lists (ported from the author's RN-predecessor generator). 4724 + 524 char keys |
+| `scripts/data/xiandaihanyuchangyongcibiao.txt` | `word\tpinyin\tlevel` | 《现代汉语常用词表（草案）》(教育部), 56008 words — regeneration source for `scripts/generate-compounds.py`, never shipped |
 | `app/src/main/assets/audio/tick.wav`, `chime.wav` | countdown tick (last second, vol 0.5), session-finish chime (vol 0.6) | Synthesized in-house |
 
 The RN predecessor's `assets/silent.wav` (iOS background-audio keep-alive) is deliberately **not** ported — Android has no need.
