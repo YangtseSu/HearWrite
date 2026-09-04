@@ -12,9 +12,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** Real 组词 tables (read-only fixture from `data/`, parsed once per class). */
+/** Real 组词 tables (read-only fixture from `app/src/main/assets/`, parsed once per class). */
 private val REAL_COMPOUNDS: CompoundTables by lazy {
-    parseCompoundTables(File("../data/compounds/compounds.json").readText())
+    parseCompoundTables(File("src/main/assets/compounds/compounds.json").readText())
 }
 
 /** Records every speak attempt (success or failure) on the virtual clock. */

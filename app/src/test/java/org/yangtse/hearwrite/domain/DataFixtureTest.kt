@@ -7,14 +7,14 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Parses read-only fixtures from the bundled library (`data/` at repo root,
+ * Parses read-only fixtures from the bundled library (`app/src/main/assets/`,
  * unit tests run with the `app/` module as working directory). These lock the
  * parser against the real shipped lists — see AGENTS.md "Testing & QA".
  */
 class DataFixtureTest {
 
     private fun listFile(relative: String): File =
-        File("../data", relative).also {
+        File("src/main/assets", relative).also {
             assertTrue("fixture missing: ${it.path}", it.isFile)
         }
 

@@ -5,8 +5,9 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Locks [cjkWordSpeech] against the REAL shipped tables (`data/compounds/compounds.json`,
- * read-only fixture — unit tests run with the `app/` module as working directory).
+ * Locks [cjkWordSpeech] against the REAL shipped tables (asset
+ * `compounds/compounds.json` in `app/src/main/assets/`, read-only fixture — unit
+ * tests run with the `app/` module as working directory).
  * Cases cover the AGENTS.md behavioral contract: meaning-column authority, the
  * learned-first ranking, polyphone syllable matching over the raw pool walk,
  * and the no-word-dedupe rule (澄|dèng would lose its only candidate if 澄清
@@ -16,7 +17,7 @@ class CjkWordSpeechTest {
 
     private companion object {
         val TABLES: CompoundTables = parseCompoundTables(
-            File("../data/compounds/compounds.json").readText(),
+            File("src/main/assets/compounds/compounds.json").readText(),
         )
     }
 

@@ -9,7 +9,7 @@ import org.yangtse.hearwrite.domain.compareLabels
 import org.yangtse.hearwrite.domain.parseWordEntries
 import java.util.concurrent.ConcurrentHashMap
 
-/** A built-in library list at asset path `data/<category>/<label>.txt`. */
+/** A built-in library list at packaged asset path `<category>/<label>.txt`. */
 data class LibraryList(val category: String, val label: String) {
     /** Stable storage key (`default_<category>_<label>`, AGENTS.md "Built-in library"). */
     val id: String get() = builtinListId(category, label)
@@ -27,15 +27,15 @@ data class LibrarySearchResult(
 )
 
 /**
- * Asset-backed access to the built-in library (`data/` shipped as APK assets).
- * Content is read from assets on demand and cached in memory for the process
- * lifetime — never persisted (AGENTS.md). Asset enumeration, parsing and
+ * Asset-backed access to the built-in library (`app/src/main/assets/` shipped as
+ * APK assets). Content is read from assets on demand and cached in memory for the
+ * process lifetime — never persisted (AGENTS.md). Asset enumeration, parsing and
  * sorting all run on [Dispatchers.IO].
  */
 class BuiltinLibraryRepository(private val assets: AssetManager) {
 
-    /** Asset top-level dirs that are not library categories (dict/audio live there too). */
-    private val nonLibrary = setOf("meta", "dict", "compounds", "audio")
+    /** Asset top-level dirs that are not library categories (non-.txt siblings). */
+    private val nonLibrary = setOf("dict", "compounds", "audio")
 
     private val entriesCache = ConcurrentHashMap<String, List<WordEntry>>()
 

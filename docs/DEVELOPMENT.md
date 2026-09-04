@@ -73,7 +73,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | 路径 | 用途 |
 | --- | --- |
 | `app/` | Android 应用（单一 `:app` 模块：`ui/` Compose 界面、`domain/` 纯 Kotlin 逻辑、`data/` 仓库与网络） |
-| `data/` | 原始词表 + 内置数据资源（原样打包进 APK assets；**只读**，禁止手工重新生成） |
+| `data/` | 再生源数据 `meta/`（频率表，**不随 APK 打包**）；词表与内置资源本体在 `app/src/main/assets/`（**只读**，禁止手工重新生成） |
 | `docs/` | 阶段日志归档（`PHASES.md`，冻结于 Phase 10）、本指南、README 截图（按需）；图标设计源 `hearwrite.svg`（自适应图标各层由它生成到 `app/src/main/res/`） |
 | `scripts/` | 数据处理脚本（Python 3），按需添加 |
 
