@@ -27,3 +27,6 @@ keystore.properties
 
 # Script download cache (ECDICT csv)
 .cache/
+
+# Python bytecode
+__pycache__/
