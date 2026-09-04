@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Icon background from the design source hearwrite.svg (full-bleed rect color). -->
+    <!-- Icon background from the design source docs/hearwrite.svg (full-bleed rect color). -->
     <color name="ic_launcher_background">#EFF6FD</color>
 </resources>
