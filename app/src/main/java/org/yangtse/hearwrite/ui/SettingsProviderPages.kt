@@ -85,6 +85,8 @@ fun VoiceSourceSettingsPage(
     val ttsStoredConfigs by viewModel.ttsStoredConfigs.collectAsStateWithLifecycle()
     val ttsActive by viewModel.ttsActive.collectAsStateWithLifecycle()
     val ttsTestState by viewModel.ttsTestState.collectAsStateWithLifecycle()
+    val youdaoPreviewState by viewModel.youdaoPreviewState.collectAsStateWithLifecycle()
+    val systemPreviewState by viewModel.systemPreviewState.collectAsStateWithLifecycle()
     var showTtsKey by remember { mutableStateOf(false) }
     val ttsFormComplete =
         ttsForm.baseUrl.isNotBlank() && ttsForm.apiKey.isNotBlank() && ttsForm.model.isNotBlank()
@@ -153,6 +155,23 @@ fun VoiceSourceSettingsPage(
                 }
             }
         }
+        if (ttsSource == TtsSource.YOUDAO) {
+            SourcePreviewSection(
+                state = youdaoPreviewState,
+                testingText = "试听生成中…",
+                okText = "已播放试听",
+                onPreview = viewModel::previewYoudaoVoice,
+            )
+        }
+
+        if (ttsSource == TtsSource.SYSTEM) {
+            SourcePreviewSection(
+                state = systemPreviewState,
+                testingText = "试听播放中…",
+                okText = "已播放试听",
+                onPreview = viewModel::previewSystemVoice,
+            )
+        }
 
         // 微软 Edge 音色: one default voice (zh-CN, speaks Chinese + English)
         // plus an optional dedicated English voice behind 英文使用默认音色.
@@ -170,7 +189,6 @@ fun VoiceSourceSettingsPage(
                 onPreview = viewModel::previewEdgeVoice,
             )
         }
-
         if (ttsSource == TtsSource.CUSTOM) {
             SettingsSectionHeader("服务商预设")
             SettingsCard {
@@ -343,42 +361,44 @@ fun VoiceSourceSettingsPage(
                                 .padding(top = 4.dp),
                         )
                     }
-                    OutlinedButton(
-                        onClick = viewModel::testTtsVoice,
-                        enabled = ttsFormComplete && ttsTestState != TtsTestState.Testing,
-                        modifier = Modifier.padding(top = 16.dp),
-                    ) {
-                        Text("测试并试听")
-                    }
-                    when (val state = ttsTestState) {
-                        TtsTestState.Idle -> Unit
-                        TtsTestState.Testing -> Row(
-                            modifier = Modifier.padding(top = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                    if (ttsPresetId != "mimo") {
+                        OutlinedButton(
+                            onClick = viewModel::testTtsVoice,
+                            enabled = ttsFormComplete && ttsTestState != TtsTestState.Testing,
+                            modifier = Modifier.padding(top = 16.dp),
                         ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(14.dp),
-                                strokeWidth = 2.dp,
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "生成试听中…",
+                            Text("测试并试听")
+                        }
+                        when (val state = ttsTestState) {
+                            TtsTestState.Idle -> Unit
+                            TtsTestState.Testing -> Row(
+                                modifier = Modifier.padding(top = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "生成试听中…",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            TtsTestState.Ok -> Text(
+                                "连接成功，已播放试听",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                            is TtsTestState.Failed -> Text(
+                                state.message,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(top = 8.dp),
                             )
                         }
-                        TtsTestState.Ok -> Text(
-                            "连接成功，已播放试听",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                        is TtsTestState.Failed -> Text(
-                            state.message,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
                     }
                     Row(
                         modifier = Modifier
@@ -916,6 +936,61 @@ private fun EdgeVoiceDropdown(
                 contentDescription = "试听 ${effective?.friendlyName ?: label}",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+/**
+ * 测试并试听 button + status line for the 有道词典 / 系统语音 sources (no
+ * config form to test — just plays the word samples in that source's voice).
+ */
+@Composable
+private fun SourcePreviewSection(
+    state: TtsTestState,
+    testingText: String,
+    okText: String,
+    onPreview: () -> Unit,
+) {
+    SettingsCard {
+        Column(
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
+        ) {
+            OutlinedButton(
+                onClick = onPreview,
+                enabled = state != TtsTestState.Testing,
+            ) {
+                Text("测试并试听")
+            }
+            when (val s = state) {
+                TtsTestState.Idle -> Unit
+                TtsTestState.Testing -> Row(
+                    modifier = Modifier.padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        testingText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TtsTestState.Ok -> Text(
+                    okText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                is TtsTestState.Failed -> Text(
+                    s.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
         }
     }
 }

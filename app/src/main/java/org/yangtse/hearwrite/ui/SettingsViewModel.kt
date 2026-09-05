@@ -3,6 +3,7 @@ package org.yangtse.hearwrite.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -83,6 +84,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val ocrService = (application as HearWriteApplication).ocrService
     private val ttsChain = (application as HearWriteApplication).ttsChain
     private val openAiTts = (application as HearWriteApplication).openAiCompatibleTts
+    private val youdaoTts = (application as HearWriteApplication).youdaoTts
     private val edgeTts = (application as HearWriteApplication).edgeTts
 
     private val _speechRate = MutableStateFlow(MIN_SPEECH_RATE)
@@ -167,6 +169,20 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _edgePreviewState = MutableStateFlow<TtsTestState>(TtsTestState.Idle)
     val edgePreviewState: StateFlow<TtsTestState> = _edgePreviewState.asStateFlow()
 
+    /**
+     * Preview state for the 有道词典 source's 测试并试听 button (plays the
+     * word samples through the Youdao → system chain).
+     */
+    private val _youdaoPreviewState = MutableStateFlow<TtsTestState>(TtsTestState.Idle)
+    val youdaoPreviewState: StateFlow<TtsTestState> = _youdaoPreviewState.asStateFlow()
+
+    /**
+     * Preview state for the 系统语音 source's 测试并试听 button (speaks the
+     * samples straight through the system engine).
+     */
+    private val _systemPreviewState = MutableStateFlow<TtsTestState>(TtsTestState.Idle)
+    val systemPreviewState: StateFlow<TtsTestState> = _systemPreviewState.asStateFlow()
+
     init {
         // Edge 音色: default voice + optional dedicated English voice
         // (blank stored voice = the built-in default) live-follow the
@@ -248,6 +264,66 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 "网络请求失败，请检查网络"
             }
             _edgePreviewState.value =
+                if (error == null) TtsTestState.Ok else TtsTestState.Failed(error)
+        }
+    }
+
+    /**
+     * 测试并试听 the 有道词典 source: play one English + one Chinese word
+     * through the Youdao → system chain (single words only — the dict voice
+     * refuses sentences outright). A word missing from Youdao falls back to
+     * the system voice per word, same as dictation.
+     */
+    fun previewYoudaoVoice() {
+        if (_youdaoPreviewState.value is TtsTestState.Testing) return
+        _youdaoPreviewState.value = TtsTestState.Testing
+        viewModelScope.launch(Dispatchers.IO) {
+            val error = try {
+                var played = false
+                for ((sample, lang) in listOf("apple" to "en-US", "苹果" to "zh-CN")) {
+                    val clip = if (youdaoTts.prefetch(sample, lang)) {
+                        youdaoTts.cachedClip(sample, lang)
+                    } else {
+                        null
+                    }
+                    val ok = if (clip != null) ttsChain.playTestClip(clip) else speaker.speak(sample, lang)
+                    if (ok) played = true
+                }
+                if (played) null else "音频生成失败，请检查网络"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                "网络请求失败，请检查网络"
+            }
+            _youdaoPreviewState.value =
+                if (error == null) TtsTestState.Ok else TtsTestState.Failed(error)
+        }
+    }
+
+    /**
+     * 测试并试听 the 系统语音 source: speak one English + one Chinese sample
+     * straight through the system engine (current 语速 applies).
+     */
+    fun previewSystemVoice() {
+        if (_systemPreviewState.value is TtsTestState.Testing) return
+        _systemPreviewState.value = TtsTestState.Testing
+        // System engine calls stay on the main thread (same as dictation).
+        viewModelScope.launch {
+            val error = try {
+                var played = false
+                for ((sample, lang) in listOf(
+                    "Apple, a very common fruit." to "en-US",
+                    "苹果，一种很常见的水果。" to "zh-CN",
+                )) {
+                    if (speaker.speak(sample, lang)) played = true
+                }
+                if (played) null else "系统语音播放失败，请检查系统语音设置"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                "系统语音播放失败，请检查系统语音设置"
+            }
+            _systemPreviewState.value =
                 if (error == null) TtsTestState.Ok else TtsTestState.Failed(error)
         }
     }
