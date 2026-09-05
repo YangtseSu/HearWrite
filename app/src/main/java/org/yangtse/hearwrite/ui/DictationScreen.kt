@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -511,23 +512,32 @@ private fun WatchDial(
         }
 
         // Seconds readout; clearAndSetSemantics re-announces on each whole
-        // second so TalkBack reports the shrinking countdown.
-        if (counting) {
-            Text(
-                "$seconds 秒",
-                style = MaterialTheme.typography.displaySmall,
-                color = ringColor,
-                modifier = Modifier.clearAndSetSemantics {
-                    contentDescription = "剩余 $seconds 秒"
-                    liveRegion = LiveRegionMode.Polite
-                },
-            )
-        } else {
-            Text(
-                "—",
-                style = MaterialTheme.typography.headlineSmall,
-                color = trackColor,
-            )
+        // second so TalkBack reports the shrinking countdown. The slot keeps
+        // a FIXED height in both branches so the row never changes size when
+        // the countdown appears/disappears (no layout jump): a min-height
+        // alone cannot lock it because large system font scales can push the
+        // real line height past any reasonable min.
+        Box(
+            modifier = Modifier.height(56.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (counting) {
+                Text(
+                    "$seconds 秒",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = ringColor,
+                    modifier = Modifier.clearAndSetSemantics {
+                        contentDescription = "剩余 $seconds 秒"
+                        liveRegion = LiveRegionMode.Polite
+                    },
+                )
+            } else {
+                Text(
+                    "—",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = trackColor,
+                )
+            }
         }
     }
 }
