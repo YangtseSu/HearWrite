@@ -132,16 +132,17 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 
 在 `app/build.gradle.kts` 的 `defaultConfig` 中维护：
 
-- **`versionName`**：语义化版本 `MAJOR.MINOR.PATCH`；公开发布前处于 `0.x.y`（当前 `0.1.0`）。
-- **`versionCode`**：单调递增整数，**每出一个签名发布包 +1，永不复用、不回退**（当前 `1`）。升级安装以它为准。
+- **`versionName`**：语义化版本 `MAJOR.MINOR.PATCH`；公开发布前处于 `0.x.y`（当前 `0.2.0`）。
+- **`versionCode`**：单调递增整数，**每出一个签名发布包 +1，永不复用、不回退**（当前 `2`）。升级安装以它为准。
 
 ### 4.6 发布检查清单
 
 1. `./gradlew :app:testDebugUnitTest :app:lintDebug` 全绿。
 2. 按 4.5 提升 `versionCode`（发新版则同时改 `versionName`）。
-3. `./gradlew :app:assembleRelease` → `apksigner verify` 确认签名。
-4. 真机安装冒烟：导入词表 → 完整听写一轮 → 复习错词；切换深色主题检查无违和。
-5. 归档 APK + `mapping.txt`，提交版本号改动，打 tag。
+3. 在 `CHANGELOG.md` 追加本版中文小节（`## [x.y.z]` 与 tag 对应）——仓库走 direct-to-main、无 PR，GitHub 自动 notes 只剩空 compare 链接，Release 正文靠此小节生成，缺失则 workflow hard fail。
+4. `./gradlew :app:assembleRelease` → `apksigner verify` 确认签名。
+5. 真机安装冒烟：导入词表 → 完整听写一轮 → 复习错词；切换深色主题检查无违和。
+6. 归档 APK + `mapping.txt`，提交版本号改动，打 tag。
 
 ## 5. 开发约定
 

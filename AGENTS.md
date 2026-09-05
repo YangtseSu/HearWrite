@@ -162,7 +162,7 @@ No emulator is guaranteed — verify on a connected device or emulator via `adb`
 - **Style**: official Kotlin coding conventions (4-space indent, LF, UTF-8); `ktlint`/`detekt` not configured yet — do not add tooling mid-phase without noting it in the commit message. No `!!`; use `require`/`check` for programmer errors, and defensive catch-to-fallback only at network/audio boundaries.
 - **Naming**: `*Screen.kt` composables, `*ViewModel.kt`, `*Repository.kt`, `*Dao.kt`; pure functions in `domain/` are top-level and testable.
 - **Errors**: user-facing failures become Chinese message strings; network/audio layers never throw into UI — they degrade (TTS chain, OCR retry).
-- **Commit discipline**: one thing per commit (`feat: …`, `fix: …`, `docs: …`, `data: …`, `chore: …`); **every commit must compile**. Verification evidence (device demo, measurements) goes in the commit message body.
+- **Commit discipline**: one thing per commit (`feat: …`, `fix: …`, `docs: …`, `data: …`, `chore: …`); **every commit must compile**. Verification evidence (device demo, measurements) goes in the commit message body. Before tagging a release, append a user-facing Chinese section to `CHANGELOG.md` (`## [x.y.z]` matching the tag) — the release workflow builds the GitHub Release body from it and fails without it.
 
 ## Testing & QA
 

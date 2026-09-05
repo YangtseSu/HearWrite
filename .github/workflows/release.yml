@@ -22,7 +22,9 @@ jobs:
       KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v7
-
+        with:
+          # Full history: the notes step resolves the previous tag for the compare link.
+          fetch-depth: 0
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -79,6 +81,31 @@ jobs:
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/mapping/release/mapping.txt
 
+      - name: Build release notes from CHANGELOG.md
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          # The repo ships direct-to-main (no PRs), so GitHub's auto-generated
+          # notes would be an empty compare link — the body comes from the
+          # matching CHANGELOG.md section instead. Missing section = hard fail.
+          VER="${GITHUB_REF_NAME#v}"
+          NOTES="$(awk -v ver="$VER" '
+            $0 == "## [" ver "]" || $0 ~ "^## \\[" ver "\\]" { in_sec = 1; next }
+            in_sec && /^## \[/ { exit }
+            in_sec { print }
+          ' CHANGELOG.md)"
+          if [ -z "$(echo "$NOTES" | tr -d '[:space:]')" ]; then
+            echo "::error::CHANGELOG.md has no section for [$VER] — add it before tagging."
+            exit 1
+          fi
+          {
+            echo "$NOTES"
+            echo ""
+            PREV="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+            if [ -n "$PREV" ]; then
+              echo "**完整提交记录**：https://github.com/${{ github.repository }}/compare/${PREV}...${GITHUB_REF_NAME}"
+            fi
+          } > release-notes.md
+
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v3
@@ -86,6 +113,6 @@ jobs:
           files: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/mapping/release/mapping.txt
-          generate_release_notes: true
+          body_path: release-notes.md
           # 0.x.y is pre-release until the first stable bump (AGENTS.md versioning).
           prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
