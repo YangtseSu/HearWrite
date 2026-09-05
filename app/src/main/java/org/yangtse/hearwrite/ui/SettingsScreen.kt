@@ -48,7 +48,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import org.yangtse.hearwrite.data.EDGE_VOICE_CATALOG
 import org.yangtse.hearwrite.data.OCR_PROVIDER_PRESETS
 import org.yangtse.hearwrite.domain.MAX_SPEECH_RATE
 import org.yangtse.hearwrite.domain.MIN_SPEECH_RATE
@@ -116,8 +115,8 @@ private fun SettingsHub(
     val ocrPresetLabel = OCR_PROVIDER_PRESETS
         .firstOrNull { it.id == ocrActiveId }?.label ?: "自定义"
     val cacheCleared by viewModel.ttsCacheCleared.collectAsStateWithLifecycle()
-    val edgeVoiceZh by viewModel.edgeVoiceZh.collectAsStateWithLifecycle()
-    val edgeVoiceEn by viewModel.edgeVoiceEn.collectAsStateWithLifecycle()
+    // Edge voices live only on the 发音来源 page (VoiceSourceSettingsPage)
+    // when 微软 Edge is selected — never as rows on this hub.
 
     var showClearCacheDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -283,30 +282,6 @@ private fun SettingsHub(
                     },
                     onClick = { onOpen(SettingsSubPage.VOICE_SOURCE) },
                 )
-                if (ttsSource == TtsSource.EDGE) {
-                    // Compact summary of the currently selected Edge voices;
-                    // tapping goes to the same 发音来源 page where the picker lives.
-                    val zhLabel = EDGE_VOICE_CATALOG
-                        .firstOrNull { it.shortName == edgeVoiceZh }
-                        ?.friendlyName?.substringBefore("（")
-                    val enLabel = EDGE_VOICE_CATALOG
-                        .firstOrNull { it.shortName == edgeVoiceEn }
-                        ?.friendlyName?.substringBefore("（")
-                    SettingsRow(
-                        title = "Edge 音色",
-                        supporting = "中文：${zhLabel ?: "晓晓"} · 英文：${enLabel ?: "Aria"}",
-                        leading = {
-                            Icon(
-                                Icons.Outlined.RecordVoiceOver,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        },
-                        trailing = { SettingsChevronTrailing() },
-                        onClick = { onOpen(SettingsSubPage.VOICE_SOURCE) },
-                    )
-                }
                 SettingsRow(
                     title = "提示音",
                     leading = { Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
