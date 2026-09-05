@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
@@ -446,36 +448,56 @@ fun OcrProviderSettingsPage(
     val ocrStoredConfigs by viewModel.ocrStoredConfigs.collectAsStateWithLifecycle()
     val ocrTestState by viewModel.ocrTestState.collectAsStateWithLifecycle()
     var showApiKey by remember { mutableStateOf(false) }
+    var showClearOcrConfirm by remember { mutableStateOf(false) }
+    // A seeded-but-untouched key counts as present (the secret stays stored);
+    // only a dirty empty field blocks 测试连接/保存并启用.
+    val ocrKeyPresent = ocrForm.apiKey.isNotBlank() ||
+        (!ocrForm.apiKeyDirty && ocrForm.apiKeySavedHint.isNotEmpty())
     val ocrComplete =
-        ocrForm.baseUrl.isNotBlank() && ocrForm.apiKey.isNotBlank() && ocrForm.model.isNotBlank()
+        ocrForm.baseUrl.isNotBlank() && ocrKeyPresent && ocrForm.model.isNotBlank()
 
     SettingsSubPage(title = "拍照识词", onBack = onBack) {
         SettingsSectionHeader("服务商")
         SettingsCard {
-            FlowRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                OCR_PROVIDER_PRESETS.forEach { preset ->
-                    FilterChip(
-                        selected = ocrPresetId == preset.id,
-                        onClick = { viewModel.onOcrPresetChange(preset) },
-                        leadingIcon = if (ocrStoredConfigs.containsKey(preset.id)) {
-                            {
-                                Icon(
-                                    Icons.Filled.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                        } else {
-                            null
-                        },
-                        label = { Text(preset.label, style = MaterialTheme.typography.bodyLarge) },
-                    )
+                OCR_PROVIDER_PRESETS.chunked(2).forEach { row ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        row.forEach { preset ->
+                            FilterChip(
+                                selected = ocrPresetId == preset.id,
+                                onClick = { viewModel.onOcrPresetChange(preset) },
+                                leadingIcon = if (ocrStoredConfigs.containsKey(preset.id)) {
+                                    {
+                                        Icon(
+                                            Icons.Filled.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
+                                label = {
+                                    Text(
+                                        preset.label,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        maxLines = 1,
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        // Keep two-column alignment on the odd tail row.
+                        if (row.size == 1) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
                 }
             }
         }
@@ -493,10 +515,19 @@ fun OcrProviderSettingsPage(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
-                    value = ocrForm.apiKey,
+                    value = if (ocrForm.apiKeyDirty) ocrForm.apiKey else "",
                     onValueChange = viewModel::onOcrApiKeyChange,
                     label = { Text("API Key") },
-                    supportingText = { Text("Key 仅保存在本机，仅用于拍照识词请求") },
+                    supportingText = {
+                        if (!ocrForm.apiKeyDirty && ocrForm.apiKeySavedHint.isNotEmpty()) {
+                            // An empty value keeps the label docked inside the
+                            // field, which covers placeholder — so the saved-key
+                            // hint lives here where it is always visible.
+                            Text("已保存 ••••${ocrForm.apiKeySavedHint}（输入即替换）· Key 仅保存在本机")
+                        } else {
+                            Text("Key 仅保存在本机，仅用于拍照识词请求")
+                        }
+                    },
                     singleLine = true,
                     visualTransformation = if (showApiKey) {
                         VisualTransformation.None
@@ -550,7 +581,7 @@ fun OcrProviderSettingsPage(
                         )
                     }
                     OcrTestState.Ok -> Text(
-                        "连接成功",
+                        "连接成功，模型 ${ocrForm.model.trim()} 可用",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(top = 8.dp),
@@ -569,7 +600,7 @@ fun OcrProviderSettingsPage(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     if (ocrStoredConfigs.containsKey(ocrPresetId)) {
-                        OutlinedButton(onClick = viewModel::clearOcrConfig) {
+                        OutlinedButton(onClick = { showClearOcrConfirm = true }) {
                             Text("清除配置")
                         }
                     }
@@ -593,6 +624,24 @@ fun OcrProviderSettingsPage(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 16.dp, top = 12.dp),
+        )
+    }
+    if (showClearOcrConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearOcrConfirm = false },
+            title = { Text("清除该服务商的配置？") },
+            text = { Text("将删除已保存的接口地址、Key 与模型，草稿恢复为预设默认值。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showClearOcrConfirm = false
+                    viewModel.clearOcrConfig()
+                }) {
+                    Text("清除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearOcrConfirm = false }) { Text("取消") }
+            },
         )
     }
 }

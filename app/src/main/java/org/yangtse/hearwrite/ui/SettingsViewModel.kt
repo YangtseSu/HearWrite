@@ -62,6 +62,15 @@ data class OcrFormDraft(
     val baseUrl: String,
     val apiKey: String,
     val model: String,
+    /**
+     * True once the user edits the key field after it was seeded from a
+     * stored config. A seeded (non-dirty) key is never shown in full —
+     * the UI renders [apiKeySavedHint] instead — and saving reuses the
+     * stored key instead of persisting a mask.
+     */
+    val apiKeyDirty: Boolean = true,
+    /** Last-4 hint of the seeded stored key ("abcd"), "" when none saved. */
+    val apiKeySavedHint: String = "",
 )
 
 /**
@@ -599,30 +608,47 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private fun ocrPresetById(id: String): OcrProviderPreset =
         OCR_PROVIDER_PRESETS.firstOrNull { it.id == id } ?: DEFAULT_OCR_PRESET
 
-    /** Seed a preset's draft: its stored config, else preset defaults + blank key. */
+    /** Seed a preset's draft: stored config masked (key never shown in full), else preset defaults + blank key. */
     private fun ocrDraftFor(preset: OcrProviderPreset, cfg: OcrProviderConfig?): OcrFormDraft =
-        cfg?.let { OcrFormDraft(baseUrl = it.baseUrl, apiKey = it.apiKey, model = it.model) }
-            ?: OcrFormDraft(baseUrl = preset.baseUrl, apiKey = "", model = preset.model)
-
-    /** Switch chips: stash this form's draft, load the target provider's own. */
+        cfg?.let {
+            OcrFormDraft(
+                baseUrl = it.baseUrl,
+                apiKey = "",
+                model = it.model,
+                apiKeyDirty = false,
+                apiKeySavedHint = it.apiKey.takeLast(4),
+            )
+        } ?: OcrFormDraft(baseUrl = preset.baseUrl, apiKey = "", model = preset.model)
     fun onOcrPresetChange(preset: OcrProviderPreset) {
         if (preset.id == _ocrPresetId.value) return
         ocrDrafts[_ocrPresetId.value] = _ocrForm.value
         _ocrPresetId.value = preset.id
         _ocrForm.value = ocrDrafts[preset.id]
             ?: ocrDraftFor(preset, _ocrStored.value[preset.id])
+        // A result belongs to the previous preset's fields — never carry it over.
+        _ocrTestState.value = OcrTestState.Idle
+    }
+
+    /** Any field edit invalidates a previous test result (it tested older text). */
+    private fun invalidateOcrTest() {
+        if (_ocrTestState.value is OcrTestState.Ok || _ocrTestState.value is OcrTestState.Failed) {
+            _ocrTestState.value = OcrTestState.Idle
+        }
     }
 
     fun onOcrBaseUrlChange(value: String) {
         _ocrForm.value = _ocrForm.value.copy(baseUrl = value)
+        invalidateOcrTest()
     }
 
     fun onOcrApiKeyChange(value: String) {
-        _ocrForm.value = _ocrForm.value.copy(apiKey = value)
+        _ocrForm.value = _ocrForm.value.copy(apiKey = value, apiKeyDirty = true)
+        invalidateOcrTest()
     }
 
     fun onOcrModelChange(value: String) {
         _ocrForm.value = _ocrForm.value.copy(model = value)
+        invalidateOcrTest()
     }
 
     /** True when every field is non-blank (enables 测试连接/保存). */
@@ -707,11 +733,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private fun currentOcrConfig(): OcrProviderConfig? = _ocrForm.value.let {
+    private fun currentOcrConfig(): OcrProviderConfig? = _ocrForm.value.let { form ->
+        // A seeded-but-untouched key resolves to the stored secret; the mask
+        // itself ("" + hint) must never be tested or persisted.
+        val key = if (form.apiKeyDirty) {
+            form.apiKey.trim()
+        } else {
+            _ocrStored.value[_ocrPresetId.value]?.apiKey.orEmpty()
+        }
         OcrProviderConfig(
-            baseUrl = it.baseUrl.trim(),
-            apiKey = it.apiKey.trim(),
-            model = it.model.trim(),
+            baseUrl = form.baseUrl.trim(),
+            apiKey = key,
+            model = form.model.trim(),
         )
     }.takeIf { it.isComplete }
 }
