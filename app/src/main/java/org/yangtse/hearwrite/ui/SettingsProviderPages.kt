@@ -3,10 +3,7 @@ package org.yangtse.hearwrite.ui
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,7 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -27,7 +23,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -68,13 +63,12 @@ import org.yangtse.hearwrite.data.TtsApiKind
 import org.yangtse.hearwrite.domain.TtsSource
 
 /**
- * 设置 → 发音来源. Top: the source chip row (有道词典 / TTS API /
- * 系统语音). When TTS API is active the page grows the provider
+ * 设置 → 发音来源. Top: the source radio list (有道词典 / 微软 Edge /
+ * TTS API / 系统语音). When TTS API is active the page grows the provider
  * configuration form (kelivo-style API-provider setup): preset picker,
  * optional wire-shape choice, base URL / key / model / voices / format,
  * 测试并试听 and 保存并启用.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VoiceSourceSettingsPage(
     viewModel: SettingsViewModel,
@@ -98,69 +92,39 @@ fun VoiceSourceSettingsPage(
     val ttsFormComplete =
         ttsForm.baseUrl.isNotBlank() && ttsKeyPresent && ttsForm.model.isNotBlank()
 
+    val active = ttsActive
+
     SettingsSubPage(title = "发音来源", onBack = onBack) {
         SettingsCard {
-            FlowRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                FilterChip(
-                    selected = ttsSource == TtsSource.YOUDAO,
-                    onClick = { viewModel.onTtsSourceChange(TtsSource.YOUDAO) },
-                    label = { Text("有道词典", style = MaterialTheme.typography.bodyLarge) },
-                )
-                FilterChip(
-                    selected = ttsSource == TtsSource.EDGE,
-                    onClick = { viewModel.onTtsSourceChange(TtsSource.EDGE) },
-                    label = { Text("微软 Edge", style = MaterialTheme.typography.bodyLarge) },
-                )
-                FilterChip(
-                    selected = ttsSource == TtsSource.CUSTOM,
-                    onClick = { viewModel.onTtsSourceChange(TtsSource.CUSTOM) },
-                    label = { Text("TTS API", style = MaterialTheme.typography.bodyLarge) },
-                )
-                FilterChip(
-                    selected = ttsSource == TtsSource.SYSTEM,
-                    onClick = { viewModel.onTtsSourceChange(TtsSource.SYSTEM) },
-                    label = { Text("系统语音", style = MaterialTheme.typography.bodyLarge) },
-                )
-            }
-            when (ttsSource) {
-                TtsSource.YOUDAO -> Text(
-                    "真人词典发音，需要网络；断网或失败时自动改用系统语音",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                )
-                TtsSource.EDGE -> Text(
-                    "微软在线神经网络语音，免费无需 API Key；需要网络，失败时自动降级。下方选择默认音色（中英文通用）并试听；英文可单独选用美式或英式音色。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                )
-                TtsSource.SYSTEM -> Text(
-                    "全部使用系统内置语音，无需网络",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                )
-                TtsSource.CUSTOM -> {
-                    val active = ttsActive
-                    Text(
-                        if (active != null) {
-                            "当前使用：${active.model.trim()}"
-                        } else {
-                            "尚未保存可用配置，暂用系统语音；选好服务商、填完配置后点「保存并启用」"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                    )
-                }
-            }
+            SettingsRadioRow(
+                title = "有道词典",
+                supporting = "真人词典发音，需要网络；断网或失败时自动改用系统语音",
+                selected = ttsSource == TtsSource.YOUDAO,
+                onClick = { viewModel.onTtsSourceChange(TtsSource.YOUDAO) },
+            )
+            SettingsRadioRow(
+                title = "微软 Edge",
+                supporting = "微软在线神经网络语音，免费无需 API Key；需要网络，失败时自动降级。下方选择默认音色（中英文通用）并试听；英文可单独选用美式或英式音色。",
+                selected = ttsSource == TtsSource.EDGE,
+                onClick = { viewModel.onTtsSourceChange(TtsSource.EDGE) },
+            )
+            SettingsRadioRow(
+                title = "TTS API",
+                supporting = if (active != null) {
+                    "当前使用：${active.model.trim()}"
+                } else {
+                    "尚未保存可用配置，暂用系统语音；选好服务商、填完配置后点「保存并启用」"
+                },
+                selected = ttsSource == TtsSource.CUSTOM,
+                onClick = { viewModel.onTtsSourceChange(TtsSource.CUSTOM) },
+            )
+            SettingsRadioRow(
+                title = "系统语音",
+                supporting = "全部使用系统内置语音，无需网络",
+                selected = ttsSource == TtsSource.SYSTEM,
+                divider = false,
+                onClick = { viewModel.onTtsSourceChange(TtsSource.SYSTEM) },
+            )
         }
         if (ttsSource == TtsSource.YOUDAO) {
             SourcePreviewSection(
@@ -199,45 +163,16 @@ fun VoiceSourceSettingsPage(
         if (ttsSource == TtsSource.CUSTOM) {
             SettingsSectionHeader("服务商预设")
             SettingsCard {
-                FlowRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            start = 16.dp,
-                            end = 16.dp,
-                            top = 12.dp,
-                            bottom = if (ttsPresetId == "mimo") 0.dp else 12.dp,
-                        ),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    TTS_PROVIDER_PRESETS.forEach { preset ->
-                        FilterChip(
-                            selected = ttsPresetId == preset.id,
-                            onClick = { viewModel.onTtsPresetChange(preset) },
-                            leadingIcon = if (ttsStoredConfigs.containsKey(preset.id)) {
-                                {
-                                    Icon(
-                                        Icons.Filled.Check,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                    )
-                                }
-                            } else {
-                                null
-                            },
-                            label = {
-                                Text(preset.label, style = MaterialTheme.typography.bodyLarge)
-                            },
-                        )
-                    }
-                }
-                if (ttsPresetId == "mimo") {
-                    Text(
-                        "限时免费，需自备 API Key（小米 MiMo 开放平台申请）",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                TTS_PROVIDER_PRESETS.forEachIndexed { index, preset ->
+                    SettingsRadioRow(
+                        title = preset.label,
+                        supporting = listOfNotNull(
+                            if (preset.id == "mimo") "限时免费，需自备 API Key（小米 MiMo 开放平台申请）" else null,
+                            if (ttsStoredConfigs.containsKey(preset.id)) "已保存" else null,
+                        ).joinToString(" · ").ifEmpty { null },
+                        selected = ttsPresetId == preset.id,
+                        divider = index < TTS_PROVIDER_PRESETS.lastIndex,
+                        onClick = { viewModel.onTtsPresetChange(preset) },
                     )
                 }
             }
@@ -444,7 +379,6 @@ fun VoiceSourceSettingsPage(
  * 设置 → 拍照识词: the BYOK OpenAI-compatible vision provider form (preset
  * picker + base URL / key / model), 测试连接 and 保存并启用.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun OcrProviderSettingsPage(
     viewModel: SettingsViewModel,
@@ -467,46 +401,17 @@ fun OcrProviderSettingsPage(
     SettingsSubPage(title = "拍照识词", onBack = onBack) {
         SettingsSectionHeader("服务商")
         SettingsCard {
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OCR_PROVIDER_PRESETS.chunked(2).forEach { row ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        row.forEach { preset ->
-                            FilterChip(
-                                selected = ocrPresetId == preset.id,
-                                onClick = { viewModel.onOcrPresetChange(preset) },
-                                leadingIcon = if (ocrStoredConfigs.containsKey(preset.id)) {
-                                    {
-                                        Icon(
-                                            Icons.Filled.Check,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
-                                        )
-                                    }
-                                } else {
-                                    null
-                                },
-                                label = {
-                                    Text(
-                                        preset.label,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        maxLines = 1,
-                                    )
-                                },
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        // Keep two-column alignment on the odd tail row.
-                        if (row.size == 1) {
-                            Spacer(Modifier.weight(1f))
-                        }
-                    }
-                }
+            OCR_PROVIDER_PRESETS.forEachIndexed { index, preset ->
+                SettingsRadioRow(
+                    title = preset.label,
+                    supporting = listOfNotNull(
+                        preset.model.ifBlank { null },
+                        if (ocrStoredConfigs.containsKey(preset.id)) "已保存" else null,
+                    ).joinToString(" · ").ifEmpty { null },
+                    selected = ocrPresetId == preset.id,
+                    divider = index < OCR_PROVIDER_PRESETS.lastIndex,
+                    onClick = { viewModel.onOcrPresetChange(preset) },
+                )
             }
         }
 
@@ -715,14 +620,9 @@ private fun EdgeVoiceSection(
                 )
             }
             if (!useDefaultEn) {
-                FlowRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    FilterChip(
+                Column(modifier = Modifier.padding(top = 8.dp)) {
+                    SettingsRadioRow(
+                        title = "美式英语",
                         selected = region != EDGE_EN_REGION_GB,
                         onClick = {
                             // Switching region selects that region's default
@@ -731,12 +631,12 @@ private fun EdgeVoiceSection(
                             // back as US and bounce the picker off en-GB).
                             onEnglishVoiceChange(EDGE_VOICE_EN)
                         },
-                        label = { Text("美式英语", style = MaterialTheme.typography.bodyLarge) },
                     )
-                    FilterChip(
+                    SettingsRadioRow(
+                        title = "英式英语",
                         selected = region == EDGE_EN_REGION_GB,
+                        divider = false,
                         onClick = { onEnglishVoiceChange(EDGE_VOICE_EN_GB) },
-                        label = { Text("英式英语", style = MaterialTheme.typography.bodyLarge) },
                     )
                 }
                 val regionVoices = EDGE_VOICE_CATALOG.filter {
