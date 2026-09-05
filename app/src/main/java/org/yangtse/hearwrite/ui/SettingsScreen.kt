@@ -269,7 +269,7 @@ private fun SettingsHub(
                                 TtsSource.YOUDAO -> "有道词典"
                                 TtsSource.EDGE -> "微软 Edge"
                                 TtsSource.SYSTEM -> "系统语音"
-                                TtsSource.CUSTOM -> "TTS API"
+                                TtsSource.CUSTOM -> "OpenAI 兼容语音"
                             },
                         )
                     },

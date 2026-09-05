@@ -1,6 +1,5 @@
 package org.yangtse.hearwrite.ui
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -10,7 +9,8 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -26,7 +26,7 @@ import org.yangtse.hearwrite.data.OcrLang
 
 /**
  * 拍照识词 scan sheet (alice's camera sheet, minus the credits/paid-model
- * stack — BYOK only): recognition language chips (英文/中文 pick the vision
+ * stack — BYOK only): recognition language tabs (英文/中文 pick the vision
  * prompt), a provider-config row (goes to 设置), the camera/album actions and
  * the AI disclaimer. Actions are disabled while an OCR run is in flight.
  */
@@ -58,16 +58,16 @@ fun OcrScanSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
+            TabRow(selectedTabIndex = if (lang == OcrLang.ENGLISH) 0 else 1) {
+                Tab(
                     selected = lang == OcrLang.ENGLISH,
                     onClick = { onLangChange(OcrLang.ENGLISH) },
-                    label = { Text("英文") },
+                    text = { Text("英文") },
                 )
-                FilterChip(
+                Tab(
                     selected = lang == OcrLang.CHINESE,
                     onClick = { onLangChange(OcrLang.CHINESE) },
-                    label = { Text("中文") },
+                    text = { Text("中文") },
                 )
             }
 

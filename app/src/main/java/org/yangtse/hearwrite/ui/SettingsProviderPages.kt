@@ -83,6 +83,10 @@ fun VoiceSourceSettingsPage(
     val ttsTestState by viewModel.ttsTestState.collectAsStateWithLifecycle()
     val youdaoPreviewState by viewModel.youdaoPreviewState.collectAsStateWithLifecycle()
     val systemPreviewState by viewModel.systemPreviewState.collectAsStateWithLifecycle()
+    val edgeVoiceZh by viewModel.edgeVoiceZh.collectAsStateWithLifecycle()
+    val edgeUseDefaultEn by viewModel.edgeUseDefaultEn.collectAsStateWithLifecycle()
+    val edgeVoiceEn by viewModel.edgeVoiceEn.collectAsStateWithLifecycle()
+    val edgePreviewState by viewModel.edgePreviewState.collectAsStateWithLifecycle()
     var showTtsKey by remember { mutableStateOf(false) }
     var showClearTtsConfirm by remember { mutableStateOf(false) }
     // A seeded-but-untouched key counts as present (the secret stays stored);
@@ -101,109 +105,98 @@ fun VoiceSourceSettingsPage(
                 supporting = "真人词典发音，需要网络；断网或失败时自动改用系统语音",
                 selected = ttsSource == TtsSource.YOUDAO,
                 onClick = { viewModel.onTtsSourceChange(TtsSource.YOUDAO) },
+                expanded = ttsSource == TtsSource.YOUDAO,
+                expandedContent = {
+                    SourcePreviewSection(
+                        state = youdaoPreviewState,
+                        testingText = "试听生成中…",
+                        okText = "已播放试听",
+                        onPreview = viewModel::previewYoudaoVoice,
+                    )
+                },
+            )
+            SettingsRadioRow(
+                title = "系统语音",
+                supporting = "全部使用系统内置语音，无需网络",
+                selected = ttsSource == TtsSource.SYSTEM,
+                onClick = { viewModel.onTtsSourceChange(TtsSource.SYSTEM) },
+                expanded = ttsSource == TtsSource.SYSTEM,
+                expandedContent = {
+                    SourcePreviewSection(
+                        state = systemPreviewState,
+                        testingText = "试听播放中…",
+                        okText = "已播放试听",
+                        onPreview = viewModel::previewSystemVoice,
+                    )
+                },
             )
             SettingsRadioRow(
                 title = "微软 Edge",
-                supporting = "微软在线神经网络语音，免费无需 API Key；需要网络，失败时自动降级。下方选择默认音色（中英文通用）并试听；英文可单独选用美式或英式音色。",
+                supporting = "微软在线神经网络语音，免费无需 API Key；需要网络，失败时自动降级",
                 selected = ttsSource == TtsSource.EDGE,
                 onClick = { viewModel.onTtsSourceChange(TtsSource.EDGE) },
+                expanded = ttsSource == TtsSource.EDGE,
+                expandedContent = {
+                    // 微软 Edge 音色: one default voice (zh-CN, speaks Chinese
+                    // + English) plus an optional dedicated English voice
+                    // behind 英文使用默认音色. A voice switch takes effect
+                    // immediately (the clip cache keys bind voice+rate).
+                    EdgeVoiceSection(
+                        defaultVoice = edgeVoiceZh,
+                        useDefaultEn = edgeUseDefaultEn,
+                        englishVoice = edgeVoiceEn,
+                        previewState = edgePreviewState,
+                        onDefaultVoiceChange = viewModel::onEdgeVoiceZhChange,
+                        onUseDefaultEnChange = viewModel::onEdgeUseDefaultEnChange,
+                        onEnglishVoiceChange = viewModel::onEdgeVoiceEnChange,
+                        onPreview = viewModel::previewEdgeVoice,
+                    )
+                },
             )
             SettingsRadioRow(
-                title = "TTS API",
+                title = "OpenAI 兼容语音",
                 supporting = if (active != null) {
                     "当前使用：${active.model.trim()}"
                 } else {
                     "尚未保存可用配置，暂用系统语音；选好服务商、填完配置后点「保存并启用」"
                 },
                 selected = ttsSource == TtsSource.CUSTOM,
-                onClick = { viewModel.onTtsSourceChange(TtsSource.CUSTOM) },
-            )
-            SettingsRadioRow(
-                title = "系统语音",
-                supporting = "全部使用系统内置语音，无需网络",
-                selected = ttsSource == TtsSource.SYSTEM,
                 divider = false,
-                onClick = { viewModel.onTtsSourceChange(TtsSource.SYSTEM) },
-            )
-        }
-        if (ttsSource == TtsSource.YOUDAO) {
-            SourcePreviewSection(
-                state = youdaoPreviewState,
-                testingText = "试听生成中…",
-                okText = "已播放试听",
-                onPreview = viewModel::previewYoudaoVoice,
-            )
-        }
-
-        if (ttsSource == TtsSource.SYSTEM) {
-            SourcePreviewSection(
-                state = systemPreviewState,
-                testingText = "试听播放中…",
-                okText = "已播放试听",
-                onPreview = viewModel::previewSystemVoice,
-            )
-        }
-
-        // 微软 Edge 音色: one default voice (zh-CN, speaks Chinese + English)
-        // plus an optional dedicated English voice behind 英文使用默认音色.
-        // A voice switch takes effect immediately (the clip cache keys bind
-        // voice + rate).
-        if (ttsSource == TtsSource.EDGE) {
-            EdgeVoiceSection(
-                defaultVoice = viewModel.edgeVoiceZh.collectAsStateWithLifecycle().value,
-                useDefaultEn = viewModel.edgeUseDefaultEn.collectAsStateWithLifecycle().value,
-                englishVoice = viewModel.edgeVoiceEn.collectAsStateWithLifecycle().value,
-                previewState = viewModel.edgePreviewState.collectAsStateWithLifecycle().value,
-                onDefaultVoiceChange = viewModel::onEdgeVoiceZhChange,
-                onUseDefaultEnChange = viewModel::onEdgeUseDefaultEnChange,
-                onEnglishVoiceChange = viewModel::onEdgeVoiceEnChange,
-                onPreview = viewModel::previewEdgeVoice,
+                onClick = { viewModel.onTtsSourceChange(TtsSource.CUSTOM) },
+                expanded = ttsSource == TtsSource.CUSTOM,
+                expandedContent = {
+                    Column {
+                        TTS_PROVIDER_PRESETS.forEachIndexed { index, preset ->
+                            SettingsRadioRow(
+                                title = preset.label,
+                                supporting = listOfNotNull(
+                                    if (preset.id == "mimo") "限时免费，需自备 API Key" else null,
+                                    if (ttsStoredConfigs.containsKey(preset.id)) "已保存" else null,
+                                ).joinToString(" · ").ifEmpty { null },
+                                selected = ttsPresetId == preset.id,
+                                divider = index < TTS_PROVIDER_PRESETS.lastIndex,
+                                onClick = { viewModel.onTtsPresetChange(preset) },
+                            )
+                        }
+                    }
+                },
             )
         }
         if (ttsSource == TtsSource.CUSTOM) {
-            SettingsSectionHeader("服务商预设")
-            SettingsCard {
-                TTS_PROVIDER_PRESETS.forEachIndexed { index, preset ->
-                    SettingsRadioRow(
-                        title = preset.label,
-                        supporting = listOfNotNull(
-                            if (preset.id == "mimo") "限时免费，需自备 API Key（小米 MiMo 开放平台申请）" else null,
-                            if (ttsStoredConfigs.containsKey(preset.id)) "已保存" else null,
-                        ).joinToString(" · ").ifEmpty { null },
-                        selected = ttsPresetId == preset.id,
-                        divider = index < TTS_PROVIDER_PRESETS.lastIndex,
-                        onClick = { viewModel.onTtsPresetChange(preset) },
-                    )
-                }
-            }
-
-            // 接口类型 only matters for the hand-rolled preset; the named
-            // presets fix the wire shape.
-            if (ttsPresetId == "custom") {
-                SettingsSectionHeader("接口类型")
-                SettingsCard {
-                    SettingsRadioRow(
-                        title = "/audio/speech",
-                        supporting = "标准 OpenAI TTS 兼容接口",
-                        selected = ttsForm.api == TtsApiKind.SPEECH,
-                        divider = true,
-                        onClick = { viewModel.onTtsApiChange(TtsApiKind.SPEECH) },
-                    )
-                    SettingsRadioRow(
-                        title = "Chat Completions",
-                        supporting = "经对话接口合成（如小米 MiMo）",
-                        selected = ttsForm.api == TtsApiKind.CHAT,
-                        divider = false,
-                        onClick = { viewModel.onTtsApiChange(TtsApiKind.CHAT) },
-                    )
-                }
-            }
-
-            SettingsSectionHeader("接口设置")
+            SettingsSectionHeader("OpenAI 兼容语音接口设置")
             SettingsCard {
                 Column(
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
                 ) {
+                    // 接口类型 only matters for the hand-rolled preset; the named
+                    // presets fix the wire shape.
+                    if (ttsPresetId == "custom") {
+                        TtsApiKindDropdown(
+                            selected = ttsForm.api,
+                            onSelect = viewModel::onTtsApiChange,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                     OutlinedTextField(
                         value = ttsForm.baseUrl,
                         onValueChange = viewModel::onTtsBaseUrlChange,
@@ -588,84 +581,78 @@ private fun EdgeVoiceSection(
     val region = edgeEnRegionOf(englishVoice.ifBlank { edgeDefaultEnVoice(EDGE_EN_REGION_US) })
     val previewing = previewState is TtsTestState.Testing
 
-    SettingsSectionHeader("Edge 音色")
-    SettingsCard {
-        Column(
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
+    Column {
+        EdgeVoiceDropdown(
+            label = "默认音色",
+            lang = "zh",
+            voices = zhVoices,
+            selectedShortName = defaultVoice,
+            previewing = previewing,
+            onSelect = onDefaultVoiceChange,
+            onPreview = onPreview,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            EdgeVoiceDropdown(
-                label = "默认音色",
-                lang = "zh",
-                voices = zhVoices,
-                selectedShortName = defaultVoice,
-                previewing = previewing,
-                onSelect = onDefaultVoiceChange,
-                onPreview = onPreview,
+            Text(
+                "英文使用默认音色",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
             )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "英文使用默认音色",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = useDefaultEn,
-                    onCheckedChange = onUseDefaultEnChange,
-                    modifier = Modifier.semantics { contentDescription = "英文使用默认音色" },
-                )
-            }
-            if (!useDefaultEn) {
-                Column(modifier = Modifier.padding(top = 8.dp)) {
-                    SettingsRadioRow(
-                        title = "美式英语",
-                        selected = region != EDGE_EN_REGION_GB,
-                        onClick = {
-                            // Switching region selects that region's default
-                            // voice explicitly: a blank stored value cannot
-                            // remember its region (Sonia blanked would read
-                            // back as US and bounce the picker off en-GB).
-                            onEnglishVoiceChange(EDGE_VOICE_EN)
-                        },
-                    )
-                    SettingsRadioRow(
-                        title = "英式英语",
-                        selected = region == EDGE_EN_REGION_GB,
-                        divider = false,
-                        onClick = { onEnglishVoiceChange(EDGE_VOICE_EN_GB) },
-                    )
-                }
-                val regionVoices = EDGE_VOICE_CATALOG.filter {
-                    it.locale == if (region == EDGE_EN_REGION_GB) "en-GB" else "en-US"
-                }
-                val regionDefault = edgeDefaultEnVoice(region)
-                EdgeVoiceDropdown(
-                    label = "英文音色",
-                    lang = "en",
-                    voices = regionVoices,
-                    selectedShortName = englishVoice.ifBlank { regionDefault },
-                    defaultShortName = regionDefault,
-                    previewing = previewing,
-                    onSelect = onEnglishVoiceChange,
-                    onPreview = onPreview,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
+            Switch(
+                checked = useDefaultEn,
+                onCheckedChange = onUseDefaultEnChange,
+                modifier = Modifier.semantics { contentDescription = "英文使用默认音色" },
+            )
         }
+        if (!useDefaultEn) {
+            Column(modifier = Modifier.padding(top = 8.dp)) {
+                SettingsRadioRow(
+                    title = "美式英语",
+                    selected = region != EDGE_EN_REGION_GB,
+                    onClick = {
+                        // Switching region selects that region's default
+                        // voice explicitly: a blank stored value cannot
+                        // remember its region (Sonia blanked would read
+                        // back as US and bounce the picker off en-GB).
+                        onEnglishVoiceChange(EDGE_VOICE_EN)
+                    },
+                )
+                SettingsRadioRow(
+                    title = "英式英语",
+                    selected = region == EDGE_EN_REGION_GB,
+                    divider = false,
+                    onClick = { onEnglishVoiceChange(EDGE_VOICE_EN_GB) },
+                )
+            }
+            val regionVoices = EDGE_VOICE_CATALOG.filter {
+                it.locale == if (region == EDGE_EN_REGION_GB) "en-GB" else "en-US"
+            }
+            val regionDefault = edgeDefaultEnVoice(region)
+            EdgeVoiceDropdown(
+                label = "英文音色",
+                lang = "en",
+                voices = regionVoices,
+                selectedShortName = englishVoice.ifBlank { regionDefault },
+                defaultShortName = regionDefault,
+                previewing = previewing,
+                onSelect = onEnglishVoiceChange,
+                onPreview = onPreview,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        // Preview status lives under the dropdowns; a transient per-voice
+        // result is shown once here (the dropdowns re-render but state is a
+        // single shared flow).
+        TtsTestStatusLine(
+            state = previewState,
+            testingText = "试听生成中…",
+            okText = "已播放试听",
+        )
     }
-    // Preview status lives under the group card; a transient per-voice
-    // result is shown once here (the dropdowns re-render but state is a
-    // single shared flow).
-    TtsTestStatusLine(
-        state = previewState,
-        testingText = "试听生成中…",
-        okText = "已播放试听",
-        modifier = Modifier.padding(start = 16.dp, top = 8.dp),
-    )
 }
 /**
  * 小米 MiMo 音色 picker: 默认音色 dropdown (8 个官方音色, 均支持中英文),
@@ -730,6 +717,79 @@ private fun MimoVoiceSection(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 2.dp),
     )
+}
+/**
+ * 接口类型 dropdown (TTS API form, 自定义 preset only): /audio/speech vs
+ * Chat Completions. The menu descriptions carry the old radio supporting
+ * lines so the wire-shape choice stays explained.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TtsApiKindDropdown(
+    selected: TtsApiKind,
+    onSelect: (TtsApiKind) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val label = when (selected) {
+        TtsApiKind.SPEECH -> "/audio/speech"
+        TtsApiKind.CHAT -> "Chat Completions"
+    }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = modifier,
+    ) {
+        OutlinedTextField(
+            value = label,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("接口类型") },
+            singleLine = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth(),
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            DropdownMenuItem(
+                text = {
+                    Column {
+                        Text("/audio/speech")
+                        Text(
+                            "标准 OpenAI TTS 兼容接口",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                onClick = {
+                    onSelect(TtsApiKind.SPEECH)
+                    expanded = false
+                },
+            )
+            DropdownMenuItem(
+                text = {
+                    Column {
+                        Text("Chat Completions")
+                        Text(
+                            "经对话接口合成",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                onClick = {
+                    onSelect(TtsApiKind.CHAT)
+                    expanded = false
+                },
+            )
+        }
+    }
 }
 
 /**
@@ -938,21 +998,17 @@ private fun SourcePreviewSection(
     okText: String,
     onPreview: () -> Unit,
 ) {
-    SettingsCard {
-        Column(
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
+    Column {
+        OutlinedButton(
+            onClick = onPreview,
+            enabled = state != TtsTestState.Testing,
         ) {
-            OutlinedButton(
-                onClick = onPreview,
-                enabled = state != TtsTestState.Testing,
-            ) {
-                Text("测试并试听")
-            }
-            TtsTestStatusLine(
-                state = state,
-                testingText = testingText,
-                okText = okText,
-            )
+            Text("测试并试听")
         }
+        TtsTestStatusLine(
+            state = state,
+            testingText = testingText,
+            okText = okText,
+        )
     }
 }

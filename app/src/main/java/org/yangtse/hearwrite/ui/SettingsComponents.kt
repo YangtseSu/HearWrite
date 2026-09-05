@@ -133,6 +133,10 @@ fun SettingsRow(
  * One selectable radio row (Android settings choice list). The whole row is
  * the radio-button hit target via [selectable]; the trailing indicator is
  * purely visual.
+ *
+ * [expandedContent] renders inline under the row (same card, no rounded
+ * break) when [expanded] is true — for per-option config that belongs to
+ * this row so the ownership needs no guessing.
  */
 @Composable
 fun SettingsRadioRow(
@@ -141,6 +145,8 @@ fun SettingsRadioRow(
     selected: Boolean,
     divider: Boolean = true,
     onClick: () -> Unit,
+    expanded: Boolean = false,
+    expandedContent: (@Composable () -> Unit)? = null,
 ) {
     Column {
         Row(
@@ -164,6 +170,15 @@ fun SettingsRadioRow(
             }
             Spacer(Modifier.width(16.dp))
             RadioButton(selected = selected, onClick = null)
+        }
+        if (expanded && expandedContent != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+            ) {
+                expandedContent()
+            }
         }
         if (divider) {
             HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
