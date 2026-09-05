@@ -246,7 +246,8 @@ fun VoiceSourceSettingsPage(
                 ) {
                     OutlinedTextField(
                         value = ttsForm.baseUrl,
-                        onValueChange = viewModel::onTtsBaseUrlChange,
+                        onValueChange = {},
+                        readOnly = ttsPresetId == "mimo",
                         label = { Text("接口地址（Base URL）") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -278,7 +279,8 @@ fun VoiceSourceSettingsPage(
                     )
                     OutlinedTextField(
                         value = ttsForm.model,
-                        onValueChange = viewModel::onTtsModelChange,
+                        onValueChange = {},
+                        readOnly = ttsPresetId == "mimo",
                         label = { Text("模型") },
                         singleLine = true,
                         modifier = Modifier
