@@ -363,8 +363,11 @@ class EdgeTts(
      * that is not yet selected. Any failure returns null.
      */
     suspend fun previewVoice(voice: String, sample: String): ByteArray? = try {
-        synthLock.withLock {
-            withTimeout(SYNTH_TIMEOUT_MS) {
+        // Timeout outside the lock: the bound covers the whole preview
+        // (queueing + synthesis), so a stuck turn ahead cannot pin this one
+        // past the watchdog.
+        withTimeout(SYNTH_TIMEOUT_MS) {
+            synthLock.withLock {
                 client.synthesize(sample, EdgeClient.Config(voice = voice))
             }
         }
@@ -380,8 +383,9 @@ class EdgeTts(
 
     /** One full synthesis of [trimmed] in [voice] at [r]; null on any failure. */
     private suspend fun synthOnce(trimmed: String, voice: String, r: Float): ByteArray? = try {
-        synthLock.withLock {
-            withTimeout(SYNTH_TIMEOUT_MS) {
+        // Timeout outside the lock, same as [previewVoice].
+        withTimeout(SYNTH_TIMEOUT_MS) {
+            synthLock.withLock {
                 client.synthesize(
                     trimmed,
                     EdgeClient.Config(

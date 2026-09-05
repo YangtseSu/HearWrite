@@ -241,14 +241,16 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
      * The default (zh) voice speaks both languages, so its sample is the
      * mixed Chinese+English sentence (TTS API 测试并试听 parity);
      * the dedicated English voices use an English sample. Plays through
-     * the chain's [ttsChain.playTestClip] on the caller's thread (the clip
-     * is written to a temp file first).
+     * the chain's [ttsChain.playTestClip] (the clip is written to a temp
+     * file first). Runs on the main thread like dictation and the other
+     * previews — network/file work suspends inside the data layer.
      */
     fun previewEdgeVoice(shortName: String, lang: String) {
         if (_edgePreviewState.value is TtsTestState.Testing) return
         val sample = if (lang.startsWith("zh", ignoreCase = true)) "Apple，苹果，一种很常见的水果。" else "Apple, a very common fruit."
         _edgePreviewState.value = TtsTestState.Testing
-        viewModelScope.launch(Dispatchers.IO) {
+        // Main thread, same as dictation and the other previews.
+        viewModelScope.launch {
             val error = try {
                 val mp3 = edgeTts.previewVoice(shortName, sample)
                 if (mp3 == null) {
@@ -277,7 +279,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun previewYoudaoVoice() {
         if (_youdaoPreviewState.value is TtsTestState.Testing) return
         _youdaoPreviewState.value = TtsTestState.Testing
-        viewModelScope.launch(Dispatchers.IO) {
+        // Main thread, same as dictation and the other previews.
+        viewModelScope.launch {
             val error = try {
                 var played = false
                 for ((sample, lang) in listOf("apple" to "en-US", "苹果" to "zh-CN")) {

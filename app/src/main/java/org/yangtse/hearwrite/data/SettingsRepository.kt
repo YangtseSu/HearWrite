@@ -195,8 +195,6 @@ class SettingsRepository(private val context: Context) {
         dataStore.edit { it[KEY_EDGE_USE_DEFAULT_EN] = useDefault }
     }
 
-
-
     suspend fun setSoundEnabled(on: Boolean) {
         dataStore.edit { it[KEY_SOUND_ENABLED] = on }
     }

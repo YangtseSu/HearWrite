@@ -101,7 +101,7 @@ val TTS_PROVIDER_PRESETS: List<TtsProviderPreset> = listOf(
     TtsProviderPreset(id = "custom", label = "自定义", api = TtsApiKind.SPEECH, baseUrl = "", model = ""),
 )
 
-/** The default preset shown for a fresh form (小米 MiMo, alice default). */
+/** The default preset shown for a fresh form (小米 MiMo). */
 val DEFAULT_TTS_PRESET: TtsProviderPreset = TTS_PROVIDER_PRESETS.first()
 
 /**

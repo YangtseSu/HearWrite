@@ -76,9 +76,9 @@ class HearWriteApplication : Application() {
     val edgeTts: EdgeTts by lazy { EdgeTts(this, settingsRepository) }
 
     /**
-     * The word-pass voice chain: (Edge / custom provider ready-cache →)
-     * Youdao ready-cache → system TTS, chosen by the persisted source
-     * (AGENTS.md "TTS priority chain").
+     * The word-pass voice chain: the persisted source's own clips (Youdao /
+     * Edge / custom provider) with a bounded cold-start fetch, system TTS as
+     * the sole fallback (AGENTS.md "TTS priority chain").
      */
     val ttsChain: TtsChainSpeaker by lazy {
         TtsChainSpeaker(youdaoTts, openAiCompatibleTts, edgeTts, systemSpeaker)
