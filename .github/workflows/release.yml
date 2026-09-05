@@ -89,7 +89,7 @@ jobs:
           # matching CHANGELOG.md section instead. Missing section = hard fail.
           VER="${GITHUB_REF_NAME#v}"
           NOTES="$(awk -v ver="$VER" '
-            $0 == "## [" ver "]" || $0 ~ "^## \\[" ver "\\]" { in_sec = 1; next }
+            $0 == "## [" ver "]" || $0 ~ "^## \\[" ver "\\]( |$)" { in_sec = 1; next }
             in_sec && /^## \[/ { exit }
             in_sec { print }
           ' CHANGELOG.md)"

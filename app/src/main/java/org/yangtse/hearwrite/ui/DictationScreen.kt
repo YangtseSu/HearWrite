@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -64,6 +63,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import org.yangtse.hearwrite.ui.theme.hearWriteSemantics
@@ -98,10 +98,11 @@ private fun toast(context: Context, message: String) {
 
 /**
  * The dictation surface: countdown ring with the current word hidden by
- * default (tap to reveal), POS/meaning hints, 标记错词, prev/pause/next/stop,
- * and the live interval slider + auto-next toggle. Leaving mid-session asks
- * for confirmation; a finished session shows the score card with the 错词本
- * (复习错词 / 导出错词 / 移除 / 清空) and exits directly.
+ * default (revealed with the 显示词语 button below the dial), POS/meaning
+ * hints, 标记错词, prev/pause/next/stop, and the live interval stepper +
+ * auto-next toggle. Leaving mid-session asks for confirmation; a finished
+ * session shows the score card with the 错词本 (复习错词 / 导出错词 / 移除 /
+ * 清空) and exits directly.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -344,6 +345,7 @@ private fun DictationContent(
             onIntervalChange = { viewModel.onIntervalChange(it.toDouble()) },
             onAutoNextChange = viewModel::onAutoNextChange,
             onPlayToggle = viewModel::togglePlay,
+            onStop = onRequestStop,
             onPrevious = viewModel::goToPrevious,
             onNext = viewModel::skipToNext,
         )
@@ -469,9 +471,9 @@ private fun FinishCard(
 }
 
 /**
- * The ring + reveal zone. Word hidden by default: dots and a hint; tapping
- * the dial (or the eye button) reveals word, pinyin/POS and meaning. The
- * border flashes red while a wrong-word mark is in flight.
+ * The ring + reveal zone. Word hidden by default: a hearing icon and a hint;
+ * the 显示词语 button below the dial reveals word, pinyin/POS and meaning.
+ * The border flashes red while a wrong-word mark is in flight.
  */
 @Composable
 private fun WatchDial(
@@ -512,15 +514,24 @@ private fun WatchDial(
         }
 
         // Seconds readout; clearAndSetSemantics re-announces on each whole
-        // second so TalkBack reports the shrinking countdown. The slot keeps
-        // a FIXED height in both branches so the row never changes size when
-        // the countdown appears/disappears (no layout jump): a min-height
-        // alone cannot lock it because large system font scales can push the
-        // real line height past any reasonable min.
+        // second so TalkBack reports the shrinking countdown. An invisible
+        // sizer reserves the slot: same style AND same script mix (digit +
+        // CJK) as the live text, so the same fallback fonts measure and the
+        // row never changes size when the countdown appears/disappears. No
+        // fixed dp: the slot grows with the system font scale instead of
+        // clipping (a min-height cannot cover every scale; a fixed height
+        // clips the text once the scale outgrows it). The sizer is cleared
+        // from semantics — alpha(0f) hides it visually but not from TalkBack.
         Box(
-            modifier = Modifier.height(56.dp),
             contentAlignment = Alignment.Center,
         ) {
+            Text(
+                "8 秒",
+                style = MaterialTheme.typography.displaySmall,
+                modifier = Modifier
+                    .alpha(0f)
+                    .clearAndSetSemantics {},
+            )
             if (counting) {
                 Text(
                     "$seconds 秒",
@@ -536,13 +547,14 @@ private fun WatchDial(
                     "—",
                     style = MaterialTheme.typography.displaySmall,
                     color = trackColor,
+                    modifier = Modifier.clearAndSetSemantics {},
                 )
             }
         }
     }
 }
 
-/** Inner tap zone of the dial: word/dots + hints (reveal state) + flash border. */
+/** Inner display zone of the dial: word + hints (reveal state), or the hidden-state icon + flash border. */
 @Composable
 private fun DialCenter(
     entry: WordEntry?,
@@ -633,13 +645,14 @@ private fun DialCenter(
     }
 }
 
-/** Bottom panel: live interval slider + auto-next + transport buttons. */
+/** Bottom panel: live interval stepper + auto-next + transport buttons (stop/prev/play/next). */
 @Composable
 private fun PlaybackPanel(
     ui: DictationUiState,
     onIntervalChange: (Float) -> Unit,
     onAutoNextChange: (Boolean) -> Unit,
     onPlayToggle: () -> Unit,
+    onStop: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
 ) {
@@ -709,6 +722,13 @@ private fun PlaybackPanel(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                IconButton(onClick = onStop, enabled = active) {
+                    Icon(
+                        Icons.Filled.Stop,
+                        contentDescription = "结束",
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                }
                 IconButton(onClick = onPrevious, enabled = active && ui.index > 0) {
                     Icon(Icons.Filled.SkipPrevious, contentDescription = "上一个")
                 }

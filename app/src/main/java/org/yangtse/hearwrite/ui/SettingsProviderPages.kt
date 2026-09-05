@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -63,11 +64,12 @@ import org.yangtse.hearwrite.data.TtsApiKind
 import org.yangtse.hearwrite.domain.TtsSource
 
 /**
- * 设置 → 发音来源. Top: the source radio list (有道词典 / 微软 Edge /
- * TTS API / 系统语音). When TTS API is active the page grows the provider
- * configuration form (kelivo-style API-provider setup): preset picker,
- * optional wire-shape choice, base URL / key / model / voices / format,
- * 测试并试听 and 保存并启用.
+ * 设置 → 发音来源. Top: the source radio list (有道词典 / 系统语音 /
+ * 微软 Edge / OpenAI 兼容语音), each expanding inline with its own config —
+ * 有道/系统试听, Edge voices, TTS presets. When OpenAI 兼容语音 is active the
+ * page grows the provider configuration form below: preset picker, optional
+ * wire-shape choice, base URL / key / model / voices / format, 测试并试听
+ * and 保存并启用.
  */
 @Composable
 fun VoiceSourceSettingsPage(
@@ -91,10 +93,10 @@ fun VoiceSourceSettingsPage(
     var showClearTtsConfirm by remember { mutableStateOf(false) }
     // A seeded-but-untouched key counts as present (the secret stays stored);
     // only a dirty empty field blocks 测试并试听/保存并启用.
-    val ttsKeyPresent = ttsForm.apiKey.isNotBlank() ||
+    val ttsKeyPresent = ttsForm.apiKey.trim().isNotBlank() ||
         (!ttsForm.apiKeyDirty && ttsForm.apiKeySavedHint.isNotEmpty())
     val ttsFormComplete =
-        ttsForm.baseUrl.isNotBlank() && ttsKeyPresent && ttsForm.model.isNotBlank()
+        ttsForm.baseUrl.trim().isNotBlank() && ttsKeyPresent && ttsForm.model.trim().isNotBlank()
 
     val active = ttsActive
 
@@ -386,10 +388,10 @@ fun OcrProviderSettingsPage(
     var showClearOcrConfirm by remember { mutableStateOf(false) }
     // A seeded-but-untouched key counts as present (the secret stays stored);
     // only a dirty empty field blocks 测试连接/保存并启用.
-    val ocrKeyPresent = ocrForm.apiKey.isNotBlank() ||
+    val ocrKeyPresent = ocrForm.apiKey.trim().isNotBlank() ||
         (!ocrForm.apiKeyDirty && ocrForm.apiKeySavedHint.isNotEmpty())
     val ocrComplete =
-        ocrForm.baseUrl.isNotBlank() && ocrKeyPresent && ocrForm.model.isNotBlank()
+        ocrForm.baseUrl.trim().isNotBlank() && ocrKeyPresent && ocrForm.model.trim().isNotBlank()
 
     SettingsSubPage(title = "拍照识词", onBack = onBack) {
         SettingsSectionHeader("服务商")
@@ -610,6 +612,12 @@ private fun EdgeVoiceSection(
         }
         if (!useDefaultEn) {
             Column(modifier = Modifier.padding(top = 8.dp)) {
+                Text(
+                    "英文地区",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.semantics { heading() },
+                )
                 SettingsRadioRow(
                     title = "美式英语",
                     selected = region != EDGE_EN_REGION_GB,

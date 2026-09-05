@@ -216,9 +216,19 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /**
+     * A preview result belongs to the previous voice selection — never carry
+     * it over. Preserved while Testing (same as the OCR/TTS forms): the
+     * in-flight run still owns the spinner and its completion lands once.
+     */
+    private fun invalidateEdgePreview() {
+        invalidatePreviewState(_edgePreviewState)
+    }
+
     /** Change the Edge default (zh) voice ("" = built-in default) and persist it. */
     fun onEdgeVoiceZhChange(shortName: String) {
         val value = shortName.trim()
+        invalidateEdgePreview()
         viewModelScope.launch {
             try {
                 _edgeVoiceZh.value = value
@@ -232,6 +242,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     /** Change the dedicated Edge English voice ("" = its region default) and persist it. */
     fun onEdgeVoiceEnChange(shortName: String) {
         val value = shortName.trim()
+        invalidateEdgePreview()
         viewModelScope.launch {
             try {
                 _edgeVoiceEn.value = value
@@ -244,6 +255,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     /** Toggle 英文使用默认音色 and persist it. */
     fun onEdgeUseDefaultEnChange(useDefault: Boolean) {
+        invalidateEdgePreview()
         viewModelScope.launch {
             try {
                 _edgeUseDefaultEn.value = useDefault
@@ -430,12 +442,20 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun onTtsSourceChange(source: TtsSource) {
         _ttsSource.value = source
-        // A result belongs to the previous source's fields — never carry it over.
-        _ttsTestState.value = TtsTestState.Idle
-        _youdaoPreviewState.value = TtsTestState.Idle
-        _systemPreviewState.value = TtsTestState.Idle
-        _edgePreviewState.value = TtsTestState.Idle
+        // A result belongs to the previous source's fields — never carry it
+        // over. Preserved while Testing: the in-flight run owns its spinner.
+        invalidateTtsTest()
+        invalidatePreviewState(_youdaoPreviewState)
+        invalidatePreviewState(_systemPreviewState)
+        invalidatePreviewState(_edgePreviewState)
         viewModelScope.launch { settings.setTtsSource(source) }
+    }
+
+    /** Reset a preview result, preserving an in-flight Testing run. */
+    private fun invalidatePreviewState(state: MutableStateFlow<TtsTestState>) {
+        if (state.value is TtsTestState.Ok || state.value is TtsTestState.Failed) {
+            state.value = TtsTestState.Idle
+        }
     }
 
     fun onSoundEnabledChange(on: Boolean) {
@@ -479,16 +499,20 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _ttsPresetId.value = preset.id
         _ttsForm.value = ttsDrafts[preset.id]
             ?: ttsDraftFor(preset, _ttsStored.value[preset.id])
-        _ttsTestState.value = TtsTestState.Idle
+        invalidateTtsTest()
+    }
+
+    /** Any field edit invalidates a previous test result (it tested older text). */
+    private fun invalidateTtsTest() {
+        invalidatePreviewState(_ttsTestState)
     }
 
     private fun updateTtsForm(transform: (TtsFormDraft) -> TtsFormDraft) {
         _ttsForm.value = transform(_ttsForm.value)
-        _ttsTestState.value = TtsTestState.Idle
+        invalidateTtsTest()
     }
 
     fun onTtsApiChange(kind: TtsApiKind) = updateTtsForm { it.copy(api = kind) }
-
     fun onTtsBaseUrlChange(value: String) = updateTtsForm { it.copy(baseUrl = value) }
 
     fun onTtsApiKeyChange(value: String) = updateTtsForm { it.copy(apiKey = value, apiKeyDirty = true) }
@@ -515,8 +539,19 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             try {
                 settings.setTtsProviderConfig(presetId, cfg)
+                // Mirror optimistically: the form resolves a seeded key from
+                // this map, and the DataStore flow lags a beat behind the
+                // write — an immediate retest must see the just-saved secret.
+                _ttsStored.value = _ttsStored.value + (presetId to cfg)
                 _ttsSource.value = TtsSource.CUSTOM
                 settings.setTtsSource(TtsSource.CUSTOM)
+                // The key is stored — drop it from the form so the saved secret
+                // never stays on screen in full (masked hint takes over).
+                _ttsForm.value = _ttsForm.value.copy(
+                    apiKey = "",
+                    apiKeyDirty = false,
+                    apiKeySavedHint = cfg.apiKey.takeLast(4),
+                )
             } catch (e: Exception) {
                 // DataStore failures must never crash the screen (AGENTS.md).
             }
@@ -649,7 +684,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _ocrForm.value = ocrDrafts[preset.id]
             ?: ocrDraftFor(preset, _ocrStored.value[preset.id])
         // A result belongs to the previous preset's fields — never carry it over.
-        _ocrTestState.value = OcrTestState.Idle
+        invalidateOcrTest()
     }
 
     /** Any field edit invalidates a previous test result (it tested older text). */
@@ -668,7 +703,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         _ocrForm.value = _ocrForm.value.copy(apiKey = value, apiKeyDirty = true)
         invalidateOcrTest()
     }
-
     fun onOcrModelChange(value: String) {
         _ocrForm.value = _ocrForm.value.copy(model = value)
         invalidateOcrTest()
@@ -701,6 +735,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             try {
                 settings.setOcrProviderConfig(presetId, cfg)
+                // Mirror optimistically (same reason as the TTS save path).
+                _ocrStored.value = _ocrStored.value + (presetId to cfg)
+                // The key is stored — drop it from the form so the saved secret
+                // never stays on screen in full (masked hint takes over).
+                _ocrForm.value = _ocrForm.value.copy(
+                    apiKey = "",
+                    apiKeyDirty = false,
+                    apiKeySavedHint = cfg.apiKey.takeLast(4),
+                )
             } catch (e: Exception) {
                 // DataStore failures must never crash the screen (AGENTS.md).
             }
