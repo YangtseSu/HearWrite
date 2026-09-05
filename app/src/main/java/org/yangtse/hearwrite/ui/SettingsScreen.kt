@@ -260,7 +260,7 @@ private fun SettingsHub(
                         TtsSource.SYSTEM -> "系统内置语音，完全离线"
                         TtsSource.CUSTOM -> ttsActive?.let {
                             "当前使用：${it.model.trim()}"
-                        } ?: "自备 API Key；选好服务商、填完配置后点「保存并启用」"
+                        } ?: "尚未保存可用配置，暂用系统语音"
                     },
                     leading = { Icon(Icons.Outlined.RecordVoiceOver, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     trailing = {

@@ -90,8 +90,13 @@ fun VoiceSourceSettingsPage(
     val youdaoPreviewState by viewModel.youdaoPreviewState.collectAsStateWithLifecycle()
     val systemPreviewState by viewModel.systemPreviewState.collectAsStateWithLifecycle()
     var showTtsKey by remember { mutableStateOf(false) }
+    var showClearTtsConfirm by remember { mutableStateOf(false) }
+    // A seeded-but-untouched key counts as present (the secret stays stored);
+    // only a dirty empty field blocks 测试并试听/保存并启用.
+    val ttsKeyPresent = ttsForm.apiKey.isNotBlank() ||
+        (!ttsForm.apiKeyDirty && ttsForm.apiKeySavedHint.isNotEmpty())
     val ttsFormComplete =
-        ttsForm.baseUrl.isNotBlank() && ttsForm.apiKey.isNotBlank() && ttsForm.model.isNotBlank()
+        ttsForm.baseUrl.isNotBlank() && ttsKeyPresent && ttsForm.model.isNotBlank()
 
     SettingsSubPage(title = "发音来源", onBack = onBack) {
         SettingsCard {
@@ -148,7 +153,7 @@ fun VoiceSourceSettingsPage(
                         if (active != null) {
                             "当前使用：${active.model.trim()}"
                         } else {
-                            "自备 API Key；选好服务商、填完配置后点「保存并启用」"
+                            "尚未保存可用配置，暂用系统语音；选好服务商、填完配置后点「保存并启用」"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -229,7 +234,7 @@ fun VoiceSourceSettingsPage(
                 }
                 if (ttsPresetId == "mimo") {
                     Text(
-                        "限时免费",
+                        "限时免费，需自备 API Key（小米 MiMo 开放平台申请）",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
@@ -266,7 +271,7 @@ fun VoiceSourceSettingsPage(
                 ) {
                     OutlinedTextField(
                         value = ttsForm.baseUrl,
-                        onValueChange = {},
+                        onValueChange = viewModel::onTtsBaseUrlChange,
                         readOnly = ttsPresetId == "mimo",
                         label = { Text("接口地址（Base URL）") },
                         singleLine = true,
@@ -274,11 +279,16 @@ fun VoiceSourceSettingsPage(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
-                        value = ttsForm.apiKey,
+                        value = if (ttsForm.apiKeyDirty) ttsForm.apiKey else "",
                         onValueChange = viewModel::onTtsApiKeyChange,
                         label = { Text("API Key") },
-                        supportingText = { Text("Key 仅保存在本机，仅用于发音请求") },
-                        singleLine = true,
+                        supportingText = {
+                            if (!ttsForm.apiKeyDirty && ttsForm.apiKeySavedHint.isNotEmpty()) {
+                                Text("已保存 ••••${ttsForm.apiKeySavedHint}（输入即替换）· Key 仅保存在本机")
+                            } else {
+                                Text("Key 仅保存在本机，仅用于发音请求")
+                            }
+                        },
                         visualTransformation = if (showTtsKey) {
                             VisualTransformation.None
                         } else {
@@ -299,7 +309,7 @@ fun VoiceSourceSettingsPage(
                     )
                     OutlinedTextField(
                         value = ttsForm.model,
-                        onValueChange = {},
+                        onValueChange = viewModel::onTtsModelChange,
                         readOnly = ttsPresetId == "mimo",
                         label = { Text("模型") },
                         singleLine = true,
@@ -318,6 +328,11 @@ fun VoiceSourceSettingsPage(
                             onUseDefaultEnChange = viewModel::onTtsUseDefaultEnChange,
                             onEnglishVoiceChange = viewModel::onTtsVoiceEnChange,
                             onPreview = viewModel::previewTtsVoice,
+                        )
+                        TtsTestStatusLine(
+                            state = ttsTestState,
+                            testingText = "生成试听中…",
+                            okText = "连接成功，已播放试听",
                         )
                     } else {
                         Row(
@@ -371,36 +386,11 @@ fun VoiceSourceSettingsPage(
                         ) {
                             Text("测试并试听")
                         }
-                        when (val state = ttsTestState) {
-                            TtsTestState.Idle -> Unit
-                            TtsTestState.Testing -> Row(
-                                modifier = Modifier.padding(top = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    strokeWidth = 2.dp,
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    "生成试听中…",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            TtsTestState.Ok -> Text(
-                                "连接成功，已播放试听",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(top = 8.dp),
-                            )
-                            is TtsTestState.Failed -> Text(
-                                state.message,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(top = 8.dp),
-                            )
-                        }
+                        TtsTestStatusLine(
+                            state = ttsTestState,
+                            testingText = "生成试听中…",
+                            okText = "连接成功，已播放试听",
+                        )
                     }
                     Row(
                         modifier = Modifier
@@ -409,7 +399,7 @@ fun VoiceSourceSettingsPage(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         if (ttsStoredConfigs.containsKey(ttsPresetId)) {
-                            OutlinedButton(onClick = viewModel::clearTtsConfig) {
+                            OutlinedButton(onClick = { showClearTtsConfirm = true }) {
                                 Text("清除配置")
                             }
                         }
@@ -417,7 +407,7 @@ fun VoiceSourceSettingsPage(
                             onClick = {
                                 viewModel.saveTtsConfig()
                                 Toast.makeText(
-                                    context, "已保存自定义发音配置", Toast.LENGTH_SHORT,
+                                    context, "已保存发音配置", Toast.LENGTH_SHORT,
                                 ).show()
                             },
                             enabled = ttsFormComplete,
@@ -429,6 +419,24 @@ fun VoiceSourceSettingsPage(
                 }
             }
         }
+    }
+    if (showClearTtsConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearTtsConfirm = false },
+            title = { Text("清除该服务商的配置？") },
+            text = { Text("将删除已保存的接口地址、Key 与模型，草稿恢复为预设默认值。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showClearTtsConfirm = false
+                    viewModel.clearTtsConfig()
+                }) {
+                    Text("清除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearTtsConfirm = false }) { Text("取消") }
+            },
+        )
     }
 }
 
@@ -655,9 +663,9 @@ fun OcrProviderSettingsPage(
  * current selection without changing it (the default voice previews a
  * mixed Chinese+English sample; English voices an English sample).
  * Selections apply immediately (cache keys bind voice+rate so clips
- * regenerate). There is no separate 默认 entry: the catalog already contains
- * the built-in defaults (晓晓 / Aria / Sonia) and picking one persists as
- * blank (= built-in default).
+ * regenerate) and persist as explicit shortNames: a blank stored value only
+ * survives from older versions and resolves to the built-in default for
+ * display.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -752,27 +760,12 @@ private fun EdgeVoiceSection(
     // Preview status lives under the group card; a transient per-voice
     // result is shown once here (the dropdowns re-render but state is a
     // single shared flow).
-    when (val state = previewState) {
-        TtsTestState.Idle -> Unit
-        TtsTestState.Testing -> Text(
-            "试听生成中…",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 16.dp, top = 8.dp),
-        )
-        TtsTestState.Ok -> Text(
-            "已播放试听",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 16.dp, top = 8.dp),
-        )
-        is TtsTestState.Failed -> Text(
-            state.message,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error,
-            modifier = Modifier.padding(start = 16.dp, top = 8.dp),
-        )
-    }
+    TtsTestStatusLine(
+        state = previewState,
+        testingText = "试听生成中…",
+        okText = "已播放试听",
+        modifier = Modifier.padding(start = 16.dp, top = 8.dp),
+    )
 }
 /**
  * 小米 MiMo 音色 picker: 默认音色 dropdown (8 个官方音色, 均支持中英文),
@@ -990,6 +983,51 @@ private fun EdgeVoiceDropdown(
 }
 
 /**
+ * One shared Testing/Ok/Failed status line for every TTS 试听 button
+ * (MiMo/Edge dropdown previews, the custom-form 测试并试听, and the
+ * 有道/系统 preview sections). The OCR form keeps its own block:
+ * [OcrTestState] is a different type and its copy mentions the model name.
+ */
+@Composable
+private fun TtsTestStatusLine(
+    state: TtsTestState,
+    testingText: String,
+    okText: String,
+    modifier: Modifier = Modifier.padding(top = 8.dp),
+) {
+    when (state) {
+        TtsTestState.Idle -> Unit
+        TtsTestState.Testing -> Row(
+            modifier = modifier,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(14.dp),
+                strokeWidth = 2.dp,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                testingText,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TtsTestState.Ok -> Text(
+            okText,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = modifier,
+        )
+        is TtsTestState.Failed -> Text(
+            state.message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+            modifier = modifier,
+        )
+    }
+}
+
+/**
  * 测试并试听 button + status line for the 有道词典 / 系统语音 sources (no
  * config form to test — just plays the word samples in that source's voice).
  */
@@ -1010,36 +1048,11 @@ private fun SourcePreviewSection(
             ) {
                 Text("测试并试听")
             }
-            when (val s = state) {
-                TtsTestState.Idle -> Unit
-                TtsTestState.Testing -> Row(
-                    modifier = Modifier.padding(top = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(14.dp),
-                        strokeWidth = 2.dp,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        testingText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                TtsTestState.Ok -> Text(
-                    okText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-                is TtsTestState.Failed -> Text(
-                    s.message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
+            TtsTestStatusLine(
+                state = state,
+                testingText = testingText,
+                okText = okText,
+            )
         }
     }
 }

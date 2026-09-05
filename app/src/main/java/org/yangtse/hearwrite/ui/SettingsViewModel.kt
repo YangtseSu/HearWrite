@@ -55,6 +55,15 @@ data class TtsFormDraft(
     val voiceZh: String,
     val useDefaultEn: Boolean = true,
     val responseFormat: String,
+    /**
+     * True once the user edits the key field after it was seeded from a
+     * stored config. A seeded (non-dirty) key is never shown in full —
+     * the UI renders [apiKeySavedHint] instead — and saving/testing reuses
+     * the stored key instead of persisting a mask.
+     */
+    val apiKeyDirty: Boolean = true,
+    /** Last-4 hint of the seeded stored key ("abcd"), "" when none saved. */
+    val apiKeySavedHint: String = "",
 )
 
 /** Editable OCR provider form for the selected preset (draft per chip). */
@@ -414,8 +423,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { settings.setReadTranslation(on) }
     }
 
+    fun onThemeChange(mode: ThemeMode) {
+        _theme.value = mode
+        viewModelScope.launch { settings.setTheme(mode) }
+    }
+
     fun onTtsSourceChange(source: TtsSource) {
         _ttsSource.value = source
+        // A result belongs to the previous source's fields — never carry it over.
+        _ttsTestState.value = TtsTestState.Idle
+        _youdaoPreviewState.value = TtsTestState.Idle
+        _systemPreviewState.value = TtsTestState.Idle
+        _edgePreviewState.value = TtsTestState.Idle
         viewModelScope.launch { settings.setTtsSource(source) }
     }
 
@@ -424,25 +443,23 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { settings.setSoundEnabled(on) }
     }
 
-    fun onThemeChange(mode: ThemeMode) {
-        _theme.value = mode
-        viewModelScope.launch { settings.setTheme(mode) }
-    }
-
     private fun ttsPresetById(id: String): TtsProviderPreset =
         TTS_PROVIDER_PRESETS.firstOrNull { it.id == id } ?: DEFAULT_TTS_PRESET
-    /** Seed a preset's draft: its stored config, else preset defaults + blank key. */
+
+    /** Seed a preset's draft: stored config masked (key never shown in full), else preset defaults + blank key. */
     private fun ttsDraftFor(preset: TtsProviderPreset, cfg: TtsProviderConfig?): TtsFormDraft =
         cfg?.let {
             TtsFormDraft(
                 api = it.api,
                 baseUrl = it.baseUrl,
-                apiKey = it.apiKey,
+                apiKey = "",
                 model = it.model,
                 voiceEn = it.voiceEn,
                 voiceZh = it.voiceZh,
                 useDefaultEn = it.useDefaultEn,
                 responseFormat = it.responseFormat.orEmpty(),
+                apiKeyDirty = false,
+                apiKeySavedHint = it.apiKey.takeLast(4),
             )
         } ?: TtsFormDraft(
             api = preset.api,
@@ -474,7 +491,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun onTtsBaseUrlChange(value: String) = updateTtsForm { it.copy(baseUrl = value) }
 
-    fun onTtsApiKeyChange(value: String) = updateTtsForm { it.copy(apiKey = value) }
+    fun onTtsApiKeyChange(value: String) = updateTtsForm { it.copy(apiKey = value, apiKeyDirty = true) }
 
     fun onTtsModelChange(value: String) = updateTtsForm { it.copy(model = value) }
 
@@ -589,17 +606,23 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** The selected preset's entered config (trimmed), null when incomplete. */
-    private fun currentTtsConfig(): TtsProviderConfig? = _ttsForm.value.let {
+    private fun currentTtsConfig(): TtsProviderConfig? = _ttsForm.value.let { form ->
+        // A seeded-but-untouched key resolves to the stored secret; the mask
+        // itself ("" + hint) must never be tested or persisted.
+        val key = if (form.apiKeyDirty) {
+            form.apiKey.trim()
+        } else {
+            _ttsStored.value[_ttsPresetId.value]?.apiKey.orEmpty()
+        }
         TtsProviderConfig(
-            api = it.api,
-            baseUrl = it.baseUrl.trim(),
-            apiKey = it.apiKey.trim(),
-            model = it.model.trim(),
-            voiceEn = it.voiceEn.trim(),
-            voiceZh = it.voiceZh.trim(),
-            useDefaultEn = it.useDefaultEn,
-            responseFormat = it.responseFormat.trim().ifEmpty { null },
+            api = form.api,
+            baseUrl = form.baseUrl.trim(),
+            apiKey = key,
+            model = form.model.trim(),
+            voiceEn = form.voiceEn.trim(),
+            voiceZh = form.voiceZh.trim(),
+            useDefaultEn = form.useDefaultEn,
+            responseFormat = form.responseFormat.trim().ifEmpty { null },
         )
     }.takeIf { it.isComplete }
 
