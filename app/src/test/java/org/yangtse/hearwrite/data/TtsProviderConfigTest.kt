@@ -103,16 +103,33 @@ class TtsProviderConfigTest {
     // ------------------------------------------------------ voice + format
 
     @Test
-    fun `voice follows the text language - cjk to voiceZh ascii to voiceEn`() {
-        assertEquals("Chloe", ttsProviderVoiceFor(chatCfg, "apple"))
+    fun `mimo catalog holds the 8 official voices with labels`() {
+        assertEquals(
+            listOf("冰糖", "茉莉", "苏打", "白桦", "Mia", "Chloe", "Milo", "Dean"),
+            MIMO_VOICES.map { it.first },
+        )
+        MIMO_VOICES.forEach { (id, label) ->
+            assertTrue(label.startsWith(id))
+            assertTrue(label.contains("女声") || label.contains("男声"))
+        }
+    }
+
+    @Test
+    fun `english text uses the default voice unless useDefaultEn is off`() {
+        // Default on: one voice serves the whole list.
+        assertEquals("冰糖", ttsProviderVoiceFor(chatCfg, "apple"))
         assertEquals("冰糖", ttsProviderVoiceFor(chatCfg, "苹果"))
         assertEquals("冰糖", ttsProviderVoiceFor(chatCfg, "苹果的英语怎么说"))
+        val split = chatCfg.copy(useDefaultEn = false)
+        assertEquals("Chloe", ttsProviderVoiceFor(split, "apple"))
+        assertEquals("冰糖", ttsProviderVoiceFor(split, "苹果"))
+        assertEquals("冰糖", ttsProviderVoiceFor(split, "苹果的英语怎么说"))
     }
 
     @Test
     fun `empty voice fields mean the provider default`() {
         val cfg = chatCfg.copy(voiceEn = "  ", voiceZh = "")
-        assertEquals("", ttsProviderVoiceFor(cfg, "apple"))
+        assertEquals("", ttsProviderVoiceFor(cfg.copy(useDefaultEn = false), "apple"))
         assertEquals("", ttsProviderVoiceFor(cfg, "苹果"))
     }
 
@@ -142,7 +159,8 @@ class TtsProviderConfigTest {
 
     @Test
     fun `clip hash changes when any seed component changes`() {
-        fun hash(cfg: TtsProviderConfig = chatCfg, text: String = "apple", rate: Float = 0.9f) =
+        // useDefaultEn off so the English text exercises voiceEn.
+        fun hash(cfg: TtsProviderConfig = chatCfg.copy(useDefaultEn = false), text: String = "apple", rate: Float = 0.9f) =
             ttsProviderClipHash(cfg, text, rate)
 
         val base = hash()
@@ -151,10 +169,10 @@ class TtsProviderConfigTest {
         // baseUrl/responseFormat (chat ignores it) do not either. voiceZh
         // only enters CJK-text seeds (asserted in the next test).
         val alternatives = listOf(
-            hash(cfg = chatCfg.copy(api = TtsApiKind.SPEECH)),
-            hash(cfg = chatCfg.copy(model = "mimo-v1-tts")),
-            hash(cfg = chatCfg.copy(voiceEn = "Aria")),
-            hash(cfg = chatCfg.copy(voiceEn = "")),
+            hash(cfg = chatCfg.copy(useDefaultEn = false, api = TtsApiKind.SPEECH)),
+            hash(cfg = chatCfg.copy(useDefaultEn = false, model = "mimo-v1-tts")),
+            hash(cfg = chatCfg.copy(useDefaultEn = false, voiceEn = "Aria")),
+            hash(cfg = chatCfg.copy(useDefaultEn = false, voiceEn = "")),
             hash(rate = 1.0f),
         )
         assertTrue("every seed component must change the hash", alternatives.all { it != base })
@@ -165,13 +183,16 @@ class TtsProviderConfigTest {
 
     @Test
     fun `clip hash uses the language voice - same text hash differs per voice`() {
-        val cjk = ttsProviderClipHash(chatCfg, "苹果", 0.9f)
-        val en = ttsProviderClipHash(chatCfg, "apple", 0.9f)
-        val enWordZhVoice = ttsProviderClipHash(chatCfg.copy(voiceEn = "Chloe"), "apple", 0.9f)
+        val split = chatCfg.copy(useDefaultEn = false)
+        val cjk = ttsProviderClipHash(split, "苹果", 0.9f)
+        val en = ttsProviderClipHash(split, "apple", 0.9f)
+        val enWordZhVoice = ttsProviderClipHash(split.copy(voiceEn = "Chloe"), "apple", 0.9f)
         assertEquals(en, enWordZhVoice) // unchanged voice → unchanged hash
         assertNotEquals(cjk, en)
-        val cjkWithoutZhVoice = ttsProviderClipHash(chatCfg.copy(voiceZh = ""), "苹果", 0.9f)
+        val cjkWithoutZhVoice = ttsProviderClipHash(split.copy(voiceZh = ""), "苹果", 0.9f)
         assertNotEquals(cjk, cjkWithoutZhVoice) // zh voice change → CJK clip regenerates
+        // Default on: the English clip rides the default voice.
+        assertEquals(cjk, ttsProviderClipHash(chatCfg, "apple", 0.9f))
     }
 
     // -------------------------------------------------- cache file naming
@@ -288,9 +309,16 @@ class TtsProviderConfigTest {
             model = "m-1",
             voiceEn = "alice",
             voiceZh = "bob",
+            useDefaultEn = false,
             responseFormat = "wav",
         )
         assertEquals(cfg, decodeTtsProviderConfig(encodeTtsProviderConfig(cfg)))
+    }
+
+    @Test
+    fun `config codec defaults useDefaultEn on for legacy blobs`() {
+        val raw = """{"api":"chat","baseUrl":"https://x","apiKey":"k","model":"m","future":1}"""
+        assertEquals(true, decodeTtsProviderConfig(raw)!!.useDefaultEn)
     }
 
     @Test

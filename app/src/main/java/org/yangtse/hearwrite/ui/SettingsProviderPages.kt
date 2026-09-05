@@ -54,6 +54,7 @@ import org.yangtse.hearwrite.data.EDGE_EN_REGION_US
 import org.yangtse.hearwrite.data.EDGE_VOICE_CATALOG
 import org.yangtse.hearwrite.data.EDGE_VOICE_EN_GB
 import org.yangtse.hearwrite.data.EdgeVoice
+import org.yangtse.hearwrite.data.MIMO_VOICES
 import org.yangtse.hearwrite.data.edgeDefaultEnVoice
 import org.yangtse.hearwrite.data.edgeDefaultVoiceFor
 import org.yangtse.hearwrite.data.edgeEnRegionOf
@@ -283,35 +284,49 @@ fun VoiceSourceSettingsPage(
                             .fillMaxWidth()
                             .padding(top = 4.dp),
                     )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        OutlinedTextField(
-                            value = ttsForm.voiceEn,
-                            onValueChange = viewModel::onTtsVoiceEnChange,
-                            label = { Text("英文音色") },
-                            placeholder = { Text("默认") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
+                    if (ttsPresetId == "mimo") {
+                        MimoVoiceSection(
+                            defaultVoice = ttsForm.voiceZh,
+                            useDefaultEn = ttsForm.useDefaultEn,
+                            englishVoice = ttsForm.voiceEn,
+                            previewing = ttsTestState == TtsTestState.Testing,
+                            previewEnabled = ttsFormComplete,
+                            onDefaultVoiceChange = viewModel::onTtsVoiceZhChange,
+                            onUseDefaultEnChange = viewModel::onTtsUseDefaultEnChange,
+                            onEnglishVoiceChange = viewModel::onTtsVoiceEnChange,
+                            onPreview = viewModel::previewTtsVoice,
                         )
-                        OutlinedTextField(
-                            value = ttsForm.voiceZh,
-                            onValueChange = viewModel::onTtsVoiceZhChange,
-                            label = { Text("中文音色") },
-                            placeholder = { Text("默认") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            OutlinedTextField(
+                                value = ttsForm.voiceEn,
+                                onValueChange = viewModel::onTtsVoiceEnChange,
+                                label = { Text("英文音色") },
+                                placeholder = { Text("默认") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            OutlinedTextField(
+                                value = ttsForm.voiceZh,
+                                onValueChange = viewModel::onTtsVoiceZhChange,
+                                label = { Text("中文音色") },
+                                placeholder = { Text("默认") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        Text(
+                            "留空使用服务商默认音色；修改音色或语速后会重新生成发音。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
                         )
                     }
-                    Text(
-                        "留空使用服务商默认音色；修改音色或语速后会重新生成发音。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
                     if (ttsForm.api == TtsApiKind.SPEECH) {
                         OutlinedTextField(
                             value = ttsForm.responseFormat,
@@ -683,6 +698,140 @@ private fun EdgeVoiceSection(
             color = MaterialTheme.colorScheme.error,
             modifier = Modifier.padding(start = 16.dp, top = 8.dp),
         )
+    }
+}
+/**
+ * 小米 MiMo 音色 picker: 默认音色 dropdown (8 个官方音色, 均支持中英文),
+ * 英文使用默认音色 switch (default on), 关掉后出现英文音色 dropdown
+ * (同样 8 个). 每个 dropdown 右侧有试听按钮, 用当前表单配置合成
+ * (默认音色试听混合句, 英文音色试听英文句) 而不改动草稿. 自定义预设
+ * 不用此组件 (手填 voice id).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MimoVoiceSection(
+    defaultVoice: String,
+    useDefaultEn: Boolean,
+    englishVoice: String,
+    previewing: Boolean,
+    previewEnabled: Boolean,
+    onDefaultVoiceChange: (String) -> Unit,
+    onUseDefaultEnChange: (Boolean) -> Unit,
+    onEnglishVoiceChange: (String) -> Unit,
+    onPreview: (voice: String, english: Boolean) -> Unit,
+) {
+    MimoVoiceDropdown(
+        label = "默认音色",
+        selectedVoice = defaultVoice.ifBlank { "冰糖" },
+        previewing = previewing,
+        previewEnabled = previewEnabled,
+        onSelect = onDefaultVoiceChange,
+        onPreview = { onPreview(it, false) },
+        modifier = Modifier.padding(top = 4.dp),
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "英文使用默认音色",
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(
+            checked = useDefaultEn,
+            onCheckedChange = onUseDefaultEnChange,
+            modifier = Modifier.semantics { contentDescription = "英文使用默认音色" },
+        )
+    }
+    if (!useDefaultEn) {
+        MimoVoiceDropdown(
+            label = "英文音色",
+            selectedVoice = englishVoice.ifBlank { "Chloe" },
+            previewing = previewing,
+            previewEnabled = previewEnabled,
+            onSelect = onEnglishVoiceChange,
+            onPreview = { onPreview(it, true) },
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+    Text(
+        "8 个官方音色均支持中英文；修改音色或语速后会重新生成发音。",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 2.dp),
+    )
+}
+
+/**
+ * One MiMo voice dropdown: a read-only outlined field opening the 8-voice
+ * menu, plus a 试听 button synthesizing a sample in the current selection.
+ * Unknown stored ids (hand-typed before the dropdown era) fall back to the
+ * first voice for display but keep the stored value until reselected.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MimoVoiceDropdown(
+    label: String,
+    selectedVoice: String,
+    previewing: Boolean,
+    previewEnabled: Boolean,
+    onSelect: (String) -> Unit,
+    onPreview: (voice: String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val effective = MIMO_VOICES.firstOrNull { it.first == selectedVoice }
+        ?: MIMO_VOICES.first()
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = it },
+            modifier = Modifier.weight(1f),
+        ) {
+            OutlinedTextField(
+                value = effective.second,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text(label) },
+                singleLine = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+            )
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+            ) {
+                MIMO_VOICES.forEach { (id, display) ->
+                    DropdownMenuItem(
+                        text = { Text(display) },
+                        onClick = {
+                            onSelect(id)
+                            expanded = false
+                        },
+                    )
+                }
+            }
+        }
+        IconButton(
+            onClick = { onPreview(effective.first) },
+            enabled = previewEnabled && !previewing,
+        ) {
+            Icon(
+                Icons.Filled.PlayArrow,
+                contentDescription = "试听 ${effective.second}",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

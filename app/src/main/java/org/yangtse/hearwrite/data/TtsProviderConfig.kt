@@ -5,6 +5,7 @@ import kotlin.math.roundToInt
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -34,7 +35,9 @@ enum class TtsApiKind(val wire: String) {
  * This module has no kotlinx-serialization codegen, so the repository
  * encodes/decodes the blob field by field. Empty `voice*` fields mean the
  * provider default voice; `responseFormat` applies to the `speech` wire
- * shape only (default "mp3").
+ * shape only (default "mp3"). [useDefaultEn] (default on): English text
+ * uses [voiceZh] instead of [voiceEn] — the MiMo voices all speak both
+ * languages, so one default voice can serve a whole list.
  */
 data class TtsProviderConfig(
     val api: TtsApiKind = TtsApiKind.SPEECH,
@@ -43,6 +46,7 @@ data class TtsProviderConfig(
     val model: String = "",
     val voiceEn: String = "",
     val voiceZh: String = "",
+    val useDefaultEn: Boolean = true,
     val responseFormat: String? = null,
 ) {
     /** Usable only when the endpoint, key and model are non-empty (upstream `isTtsProviderConfigSet`). */
@@ -60,6 +64,22 @@ data class TtsProviderPreset(
     val voiceEn: String = "",
     val voiceZh: String = "",
     val responseFormat: String? = null,
+)
+
+/**
+ * 小米 MiMo 内置精品音色 (`mimo-v2.5-tts` 预置音色列表, 官方文档):
+ * 4 中文 + 4 英文, 实测均支持中英文合成. 显示名带语言/性别备注
+ * (Edge 音色格式). Pair = voice id to display label.
+ */
+val MIMO_VOICES: List<Pair<String, String>> = listOf(
+    "冰糖" to "冰糖（女声 · 中文）",
+    "茉莉" to "茉莉（女声 · 中文）",
+    "苏打" to "苏打（男声 · 中文）",
+    "白桦" to "白桦（男声 · 中文）",
+    "Mia" to "Mia（女声 · 英文）",
+    "Chloe" to "Chloe（女声 · 英文）",
+    "Milo" to "Milo（男声 · 英文）",
+    "Dean" to "Dean（男声 · 英文）",
 )
 
 /**
@@ -94,9 +114,10 @@ fun speechUrl(baseUrl: String): String {
     return if (trimmed.endsWith("/audio/speech")) trimmed else "$trimmed/audio/speech"
 }
 
-/** Voice field for [text]: CJK text → voiceZh, else voiceEn; "" = provider default. */
+/** Voice field for [text]: CJK text → voiceZh; English → voiceEn, or voiceZh
+ * when 英文使用默认音色 is on; "" = provider default. */
 fun ttsProviderVoiceFor(cfg: TtsProviderConfig, text: String): String =
-    (if (isCjkText(text)) cfg.voiceZh else cfg.voiceEn).trim()
+    (if (isCjkText(text) || cfg.useDefaultEn) cfg.voiceZh else cfg.voiceEn).trim()
 
 /**
  * Effective audio format for [cfg]: the `chat` wire shape always returns wav
@@ -216,6 +237,7 @@ internal fun encodeTtsProviderConfig(cfg: TtsProviderConfig): String = buildJson
     put("model", cfg.model)
     put("voiceEn", cfg.voiceEn)
     put("voiceZh", cfg.voiceZh)
+    put("useDefaultEn", cfg.useDefaultEn)
     if (cfg.responseFormat != null) put("responseFormat", cfg.responseFormat)
 }.toString()
 
@@ -242,6 +264,7 @@ internal fun decodeTtsProviderConfig(raw: String): TtsProviderConfig? = try {
         model = model,
         voiceEn = str("voiceEn")?.trim() ?: "",
         voiceZh = str("voiceZh")?.trim() ?: "",
+        useDefaultEn = (obj["useDefaultEn"] as? JsonPrimitive)?.booleanOrNull ?: true,
         responseFormat = str("responseFormat")?.trim()?.takeIf { it.isNotEmpty() },
     )
 } catch (e: Exception) {

@@ -52,6 +52,7 @@ data class TtsFormDraft(
     val model: String,
     val voiceEn: String,
     val voiceZh: String,
+    val useDefaultEn: Boolean = true,
     val responseFormat: String,
 )
 
@@ -342,7 +343,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private fun ttsPresetById(id: String): TtsProviderPreset =
         TTS_PROVIDER_PRESETS.firstOrNull { it.id == id } ?: DEFAULT_TTS_PRESET
-
     /** Seed a preset's draft: its stored config, else preset defaults + blank key. */
     private fun ttsDraftFor(preset: TtsProviderPreset, cfg: TtsProviderConfig?): TtsFormDraft =
         cfg?.let {
@@ -353,6 +353,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 model = it.model,
                 voiceEn = it.voiceEn,
                 voiceZh = it.voiceZh,
+                useDefaultEn = it.useDefaultEn,
                 responseFormat = it.responseFormat.orEmpty(),
             )
         } ?: TtsFormDraft(
@@ -362,6 +363,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             model = preset.model,
             voiceEn = preset.voiceEn,
             voiceZh = preset.voiceZh,
+            useDefaultEn = true,
             responseFormat = preset.responseFormat.orEmpty(),
         )
 
@@ -392,9 +394,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun onTtsVoiceZhChange(value: String) = updateTtsForm { it.copy(voiceZh = value) }
 
+    fun onTtsUseDefaultEnChange(useDefault: Boolean) =
+        updateTtsForm { it.copy(useDefaultEn = useDefault) }
+
     fun onTtsResponseFormatChange(value: String) =
         updateTtsForm { it.copy(responseFormat = value) }
-
     /**
      * Persist the entered config under the selected preset and activate the
      * custom source (the 保存并启用 button). Other presets' stored configs
@@ -467,6 +471,36 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /**
+     * Preview one MiMo voice (voice id) with the entered (unsaved) config:
+     * the default voice gets the mixed Chinese+English sample, the dedicated
+     * English voice an English sample. The voice overrides the form's own
+     * selection for this one clip without changing the draft.
+     */
+    fun previewTtsVoice(voice: String, english: Boolean) {
+        val base = currentTtsConfig() ?: return
+        if (_ttsTestState.value is TtsTestState.Testing) return
+        _ttsTestState.value = TtsTestState.Testing
+        val sample = if (english) "Apple, a very common fruit." else "Apple，苹果，一种很常见的水果。"
+        val cfg = base.copy(
+            voiceZh = if (english) base.voiceZh else voice,
+            voiceEn = if (english) voice else base.voiceEn,
+            useDefaultEn = if (english) false else true,
+        )
+        viewModelScope.launch {
+            val error = try {
+                val clip = openAiTts.generateClip(sample, cfg)
+                if (ttsChain.playTestClip(clip)) null else "音频已生成，但本机播放失败"
+            } catch (e: TtsProviderException) {
+                e.message ?: "无法生成试听音频，请检查接口地址、密钥和模型"
+            } catch (e: Exception) {
+                "网络请求失败，请检查 URL 与网络"
+            }
+            _ttsTestState.value =
+                if (error == null) TtsTestState.Ok else TtsTestState.Failed(error)
+        }
+    }
+
     /** The selected preset's entered config (trimmed), null when incomplete. */
     private fun currentTtsConfig(): TtsProviderConfig? = _ttsForm.value.let {
         TtsProviderConfig(
@@ -476,6 +510,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             model = it.model.trim(),
             voiceEn = it.voiceEn.trim(),
             voiceZh = it.voiceZh.trim(),
+            useDefaultEn = it.useDefaultEn,
             responseFormat = it.responseFormat.trim().ifEmpty { null },
         )
     }.takeIf { it.isComplete }
