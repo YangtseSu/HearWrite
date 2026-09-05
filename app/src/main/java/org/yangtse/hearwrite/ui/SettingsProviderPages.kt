@@ -21,17 +21,18 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,14 +42,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import org.yangtse.hearwrite.data.edgeDefaultVoiceFor
+import org.yangtse.hearwrite.data.EDGE_EN_REGION_GB
+import org.yangtse.hearwrite.data.EDGE_EN_REGION_US
 import org.yangtse.hearwrite.data.EDGE_VOICE_CATALOG
+import org.yangtse.hearwrite.data.EDGE_VOICE_EN_GB
 import org.yangtse.hearwrite.data.EdgeVoice
+import org.yangtse.hearwrite.data.edgeDefaultEnVoice
+import org.yangtse.hearwrite.data.edgeDefaultVoiceFor
+import org.yangtse.hearwrite.data.edgeEnRegionOf
 import org.yangtse.hearwrite.data.OCR_DISCLAIMER
 import org.yangtse.hearwrite.data.OCR_PROVIDER_PRESETS
 import org.yangtse.hearwrite.data.TTS_PROVIDER_PRESETS
@@ -117,7 +125,7 @@ fun VoiceSourceSettingsPage(
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
                 )
                 TtsSource.EDGE -> Text(
-                    "微软在线神经网络语音，免费无需 API Key；需要网络，失败时自动降级。下方可分别选择中文与英文音色并试听。",
+                    "微软在线神经网络语音，免费无需 API Key；需要网络，失败时自动降级。下方选择默认音色（中英文通用）并试听；英文可单独选用美式或英式音色。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
@@ -144,18 +152,19 @@ fun VoiceSourceSettingsPage(
             }
         }
 
-        // 微软 Edge 音色: the source is sentence-capable (组词 phrases ride
-        // the chain), so both dictation languages get their own voice. The
-        // picker shows the curated catalog — zh-CN voices for Chinese
-        // (simplified textbooks), en-US for English; a voice switch takes
-        // effect immediately (the clip cache keys bind voice + rate).
+        // 微软 Edge 音色: one default voice (zh-CN, speaks Chinese + English)
+        // plus an optional dedicated English voice behind 英文使用默认音色.
+        // A voice switch takes effect immediately (the clip cache keys bind
+        // voice + rate).
         if (ttsSource == TtsSource.EDGE) {
             EdgeVoiceSection(
-                voiceZh = viewModel.edgeVoiceZh.collectAsStateWithLifecycle().value,
-                voiceEn = viewModel.edgeVoiceEn.collectAsStateWithLifecycle().value,
+                defaultVoice = viewModel.edgeVoiceZh.collectAsStateWithLifecycle().value,
+                useDefaultEn = viewModel.edgeUseDefaultEn.collectAsStateWithLifecycle().value,
+                englishVoice = viewModel.edgeVoiceEn.collectAsStateWithLifecycle().value,
                 previewState = viewModel.edgePreviewState.collectAsStateWithLifecycle().value,
-                onVoiceZhChange = { viewModel.onEdgeVoiceChange("zh", it) },
-                onVoiceEnChange = { viewModel.onEdgeVoiceChange("en", it) },
+                onDefaultVoiceChange = viewModel::onEdgeVoiceZhChange,
+                onUseDefaultEnChange = viewModel::onEdgeUseDefaultEnChange,
+                onEnglishVoiceChange = viewModel::onEdgeVoiceEnChange,
                 onPreview = viewModel::previewEdgeVoice,
             )
         }
@@ -549,29 +558,34 @@ fun OcrProviderSettingsPage(
         )
     }
 }
-
 /**
  * 微软 Edge 音色 picker (shown on the 发音来源 page when the Edge source is
- * selected): one dropdown per dictation language — 中文音色 (zh-CN voices)
- * and 英文音色 (en-US) — styled like the TTS API form fields, each with a
- * 试听 button on the right that synthesizes a sample in the currently
- * selected voice without changing the selection. Selections apply
- * immediately (cache keys bind voice+rate so clips regenerate). There is no
- * separate 默认 entry: the catalog already contains the built-in defaults
- * (晓晓 / Aria) and picking one persists as blank (= built-in default).
+ * selected): the 默认音色 dropdown (zh-CN voices — bilingual, they speak
+ * both Chinese and English), an 英文使用默认音色 switch (default on), and —
+ * only when the switch is off — the dedicated English voice in two levels:
+ * 英文地区 (美式英语/英式英语) then the voice dropdown for that region.
+ * Each dropdown carries a 试听 button that synthesizes a sample in the
+ * current selection without changing it (the default voice previews a
+ * mixed Chinese+English sample; English voices an English sample).
+ * Selections apply immediately (cache keys bind voice+rate so clips
+ * regenerate). There is no separate 默认 entry: the catalog already contains
+ * the built-in defaults (晓晓 / Aria / Sonia) and picking one persists as
+ * blank (= built-in default).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EdgeVoiceSection(
-    voiceZh: String,
-    voiceEn: String,
+    defaultVoice: String,
+    useDefaultEn: Boolean,
+    englishVoice: String,
     previewState: TtsTestState,
-    onVoiceZhChange: (String) -> Unit,
-    onVoiceEnChange: (String) -> Unit,
+    onDefaultVoiceChange: (String) -> Unit,
+    onUseDefaultEnChange: (Boolean) -> Unit,
+    onEnglishVoiceChange: (String) -> Unit,
     onPreview: (shortName: String, lang: String) -> Unit,
 ) {
-    val zhVoices = EDGE_VOICE_CATALOG.filter { it.locale.startsWith("zh") }
-    val enVoices = EDGE_VOICE_CATALOG.filter { it.locale.startsWith("en") }
+    val zhVoices = EDGE_VOICE_CATALOG.filter { it.locale == "zh-CN" }
+    val region = edgeEnRegionOf(englishVoice.ifBlank { edgeDefaultEnVoice(EDGE_EN_REGION_US) })
     val previewing = previewState is TtsTestState.Testing
 
     SettingsSectionHeader("Edge 音色")
@@ -580,24 +594,70 @@ private fun EdgeVoiceSection(
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
         ) {
             EdgeVoiceDropdown(
-                label = "中文音色",
+                label = "默认音色",
                 lang = "zh",
                 voices = zhVoices,
-                selectedShortName = voiceZh,
+                selectedShortName = defaultVoice,
                 previewing = previewing,
-                onSelect = onVoiceZhChange,
+                onSelect = onDefaultVoiceChange,
                 onPreview = onPreview,
             )
-            EdgeVoiceDropdown(
-                label = "英文音色",
-                lang = "en",
-                voices = enVoices,
-                selectedShortName = voiceEn,
-                previewing = previewing,
-                onSelect = onVoiceEnChange,
-                onPreview = onPreview,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "英文使用默认音色",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = useDefaultEn,
+                    onCheckedChange = onUseDefaultEnChange,
+                    modifier = Modifier.semantics { contentDescription = "英文使用默认音色" },
+                )
+            }
+            if (!useDefaultEn) {
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    FilterChip(
+                        selected = region != EDGE_EN_REGION_GB,
+                        onClick = {
+                            // Switching region resets the voice to that
+                            // region's default (persisted as blank).
+                            onEnglishVoiceChange("")
+                        },
+                        label = { Text("美式英语", style = MaterialTheme.typography.bodyLarge) },
+                    )
+                    FilterChip(
+                        selected = region == EDGE_EN_REGION_GB,
+                        onClick = { onEnglishVoiceChange(EDGE_VOICE_EN_GB) },
+                        label = { Text("英式英语", style = MaterialTheme.typography.bodyLarge) },
+                    )
+                }
+                val regionVoices = EDGE_VOICE_CATALOG.filter {
+                    it.locale == if (region == EDGE_EN_REGION_GB) "en-GB" else "en-US"
+                }
+                val regionDefault = edgeDefaultEnVoice(region)
+                EdgeVoiceDropdown(
+                    label = "英文音色",
+                    lang = "en",
+                    voices = regionVoices,
+                    selectedShortName = englishVoice,
+                    defaultShortName = regionDefault,
+                    previewing = previewing,
+                    onSelect = { onEnglishVoiceChange(if (it == regionDefault) "" else it) },
+                    onPreview = onPreview,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
         }
     }
     // Preview status lives under the group card; a transient per-voice
@@ -643,9 +703,9 @@ private fun EdgeVoiceDropdown(
     onSelect: (String) -> Unit,
     onPreview: (shortName: String, lang: String) -> Unit,
     modifier: Modifier = Modifier,
+    defaultShortName: String = edgeDefaultVoiceFor(lang),
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val defaultShortName = edgeDefaultVoiceFor(lang)
     val effective = voices.firstOrNull { it.shortName == selectedShortName }
         ?: voices.firstOrNull { it.shortName == defaultShortName }
         ?: voices.firstOrNull()

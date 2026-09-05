@@ -149,11 +149,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     // ---- 微软 Edge 音色 (Edge source voice picker) -------------------------
 
-    /** Currently selected voice shortName per language (zh/en), live from settings. */
+    /** Default voice shortName (zh; speaks Chinese + English), live from settings. */
     private val _edgeVoiceZh = MutableStateFlow("")
     val edgeVoiceZh: StateFlow<String> = _edgeVoiceZh.asStateFlow()
+    /** Dedicated English voice shortName, live from settings. */
     private val _edgeVoiceEn = MutableStateFlow("")
     val edgeVoiceEn: StateFlow<String> = _edgeVoiceEn.asStateFlow()
+    /** 英文使用默认音色 (default on), live from settings. */
+    private val _edgeUseDefaultEn = MutableStateFlow(true)
+    val edgeUseDefaultEn: StateFlow<Boolean> = _edgeUseDefaultEn.asStateFlow()
 
     /**
      * Preview state for one Edge voice (a single sample per voice). Reuses
@@ -163,29 +167,52 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val edgePreviewState: StateFlow<TtsTestState> = _edgePreviewState.asStateFlow()
 
     init {
-        // Edge 音色: per-language selection (blank stored voice = the app
-        // default) live-follows the DataStore settings.
+        // Edge 音色: default voice + optional dedicated English voice
+        // (blank stored voice = the built-in default) live-follow the
+        // DataStore settings.
         viewModelScope.launch {
-            combine(settings.edgeVoiceZh, settings.edgeVoiceEn) { zh, en -> zh to en }
-                .collect { (zh, en) ->
-                    _edgeVoiceZh.value = zh
-                    _edgeVoiceEn.value = en
-                }
+            combine(settings.edgeVoiceZh, settings.edgeVoiceEn, settings.edgeUseDefaultEn) { zh, en, useDefault ->
+                Triple(zh, en, useDefault)
+            }.collect { (zh, en, useDefault) ->
+                _edgeVoiceZh.value = zh
+                _edgeVoiceEn.value = en
+                _edgeUseDefaultEn.value = useDefault
+            }
         }
     }
 
-    /** Change the Edge voice for [lang] ("" = default) and persist it. */
-    fun onEdgeVoiceChange(lang: String, shortName: String) {
+    /** Change the Edge default (zh) voice ("" = built-in default) and persist it. */
+    fun onEdgeVoiceZhChange(shortName: String) {
         val value = shortName.trim()
         viewModelScope.launch {
             try {
-                if (lang.startsWith("zh", ignoreCase = true)) {
-                    _edgeVoiceZh.value = value
-                    settings.setEdgeVoiceZh(value)
-                } else {
-                    _edgeVoiceEn.value = value
-                    settings.setEdgeVoiceEn(value)
-                }
+                _edgeVoiceZh.value = value
+                settings.setEdgeVoiceZh(value)
+            } catch (e: Exception) {
+                // DataStore failures must never crash the screen (AGENTS.md).
+            }
+        }
+    }
+
+    /** Change the dedicated Edge English voice ("" = its region default) and persist it. */
+    fun onEdgeVoiceEnChange(shortName: String) {
+        val value = shortName.trim()
+        viewModelScope.launch {
+            try {
+                _edgeVoiceEn.value = value
+                settings.setEdgeVoiceEn(value)
+            } catch (e: Exception) {
+                // DataStore failures must never crash the screen (AGENTS.md).
+            }
+        }
+    }
+
+    /** Toggle 英文使用默认音色 and persist it. */
+    fun onEdgeUseDefaultEnChange(useDefault: Boolean) {
+        viewModelScope.launch {
+            try {
+                _edgeUseDefaultEn.value = useDefault
+                settings.setEdgeUseDefaultEn(useDefault)
             } catch (e: Exception) {
                 // DataStore failures must never crash the screen (AGENTS.md).
             }
@@ -194,12 +221,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     /**
      * Preview one Edge voice (shortName) with a sample in its language.
-     * Plays through the chain's [ttsChain.playTestClip] on the caller's
-     * thread (the clip is written to a temp file first).
+     * The default (zh) voice speaks both languages, so its sample is the
+     * mixed Chinese+English sentence (TTS API 测试并试听 parity);
+     * the dedicated English voices use an English sample. Plays through
+     * the chain's [ttsChain.playTestClip] on the caller's thread (the clip
+     * is written to a temp file first).
      */
     fun previewEdgeVoice(shortName: String, lang: String) {
         if (_edgePreviewState.value is TtsTestState.Testing) return
-        val sample = if (lang.startsWith("zh", ignoreCase = true)) "苹果" else "apple"
+        val sample = if (lang.startsWith("zh", ignoreCase = true)) "Apple，苹果，一种很常见的水果。" else "Apple, a very common fruit."
         _edgePreviewState.value = TtsTestState.Testing
         viewModelScope.launch(Dispatchers.IO) {
             val error = try {

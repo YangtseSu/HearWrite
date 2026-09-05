@@ -18,13 +18,53 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import org.yangtse.hearwrite.domain.DEFAULT_SPEECH_RATE
 
-/** Neural voice per text language (fixed defaults; sentence-capable). */
+/** Built-in Edge voices: the zh default speaks both Chinese and English
+ * (zh-CN voices are bilingual); the English voices are English-only.
+ */
 internal const val EDGE_VOICE_ZH = "zh-CN-XiaoxiaoNeural"
 internal const val EDGE_VOICE_EN = "en-US-AriaNeural"
+internal const val EDGE_VOICE_EN_GB = "en-GB-SoniaNeural"
 
-/** Voice per text: CJK → zh voice, else en (Youdao/provider convention). */
-internal fun edgeVoiceFor(text: String): String =
-    if (isCjkText(text)) EDGE_VOICE_ZH else EDGE_VOICE_EN
+/** English-region ids for the 英文地区 picker (美式/英式). */
+internal const val EDGE_EN_REGION_US = "us"
+internal const val EDGE_EN_REGION_GB = "gb"
+
+/** Built-in default English voice for [region] ([EDGE_EN_REGION_US]/[EDGE_EN_REGION_GB]). */
+internal fun edgeDefaultEnVoice(region: String): String =
+    if (region == EDGE_EN_REGION_GB) EDGE_VOICE_EN_GB else EDGE_VOICE_EN
+
+/** Region of a stored English voice shortName (`en-GB-*` → gb, else us). */
+internal fun edgeEnRegionOf(shortName: String): String =
+    if (shortName.startsWith("en-GB", ignoreCase = true)) EDGE_EN_REGION_GB else EDGE_EN_REGION_US
+
+/**
+ * Normalize a stored English voice shortName: blank → its region default;
+ * unknown (removed from the catalog) → its region default; otherwise kept.
+ * Region follows the stored value itself (`en-GB-*` → gb), so a stored
+ * en-GB voice keeps working whatever the picker region says.
+ */
+internal fun normalizeEnVoice(stored: String): String {
+    val trimmed = stored.trim()
+    if (trimmed.isEmpty()) return EDGE_VOICE_EN
+    if (EDGE_VOICE_CATALOG.any { it.shortName.equals(trimmed, ignoreCase = true) }) return trimmed
+    return edgeDefaultEnVoice(edgeEnRegionOf(trimmed))
+}
+
+/**
+ * Pure voice routing: CJK text always uses the default (zh) voice — zh-CN
+ * voices speak both Chinese and English (the English-only voices cannot
+ * speak Chinese). English text uses the dedicated English voice only when
+ * 英文使用默认音色 is off ([useDefaultEn] false).
+ */
+internal fun resolveEdgeVoice(
+    text: String,
+    voiceZh: String,
+    voiceEn: String,
+    useDefaultEn: Boolean,
+): String {
+    if (isCjkText(text.trim())) return voiceZh
+    return if (useDefaultEn) voiceZh else voiceEn
+}
 
 /**
  * Speech-rate → prosody percentage: 0.5–1.5 maps linearly to -50%..+50%
@@ -93,37 +133,57 @@ val EDGE_VOICE_CATALOG: List<EdgeVoice> = listOf(
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-US, AriaNeural)",
         shortName = "en-US-AriaNeural", gender = "Female", locale = "en-US",
-        friendlyName = "Aria（女声）", status = "GA",
+        friendlyName = "Aria（女声 · 自信）", status = "GA",
     ),
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-US, JennyNeural)",
         shortName = "en-US-JennyNeural", gender = "Female", locale = "en-US",
-        friendlyName = "Jenny（女声）", status = "GA",
+        friendlyName = "Jenny（女声 · 亲切）", status = "GA",
     ),
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-US, MichelleNeural)",
         shortName = "en-US-MichelleNeural", gender = "Female", locale = "en-US",
-        friendlyName = "Michelle（女声）", status = "GA",
+        friendlyName = "Michelle（女声 · 愉悦）", status = "GA",
     ),
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-US, GuyNeural)",
         shortName = "en-US-GuyNeural", gender = "Male", locale = "en-US",
-        friendlyName = "Guy（男声）", status = "GA",
+        friendlyName = "Guy（男声 · 激情）", status = "GA",
     ),
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-US, BrianNeural)",
         shortName = "en-US-BrianNeural", gender = "Male", locale = "en-US",
-        friendlyName = "Brian（男声）", status = "GA",
+        friendlyName = "Brian（男声 · 随和）", status = "GA",
     ),
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-US, ChristopherNeural)",
         shortName = "en-US-ChristopherNeural", gender = "Male", locale = "en-US",
-        friendlyName = "Christopher（男声）", status = "GA",
+        friendlyName = "Christopher（男声 · 沉稳）", status = "GA",
     ),
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-US, EricNeural)",
         shortName = "en-US-EricNeural", gender = "Male", locale = "en-US",
-        friendlyName = "Eric（男声）", status = "GA",
+        friendlyName = "Eric（男声 · 理性）", status = "GA",
+    ),
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (en-GB, SoniaNeural)",
+        shortName = "en-GB-SoniaNeural", gender = "Female", locale = "en-GB",
+        friendlyName = "Sonia（女声 · 亲切）", status = "GA",
+    ),
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (en-GB, LibbyNeural)",
+        shortName = "en-GB-LibbyNeural", gender = "Female", locale = "en-GB",
+        friendlyName = "Libby（女声 · 亲切）", status = "GA",
+    ),
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (en-GB, RyanNeural)",
+        shortName = "en-GB-RyanNeural", gender = "Male", locale = "en-GB",
+        friendlyName = "Ryan（男声 · 亲切）", status = "GA",
+    ),
+    EdgeVoice(
+        name = "Microsoft Server Speech Text to Speech Voice (en-GB, ThomasNeural)",
+        shortName = "en-GB-ThomasNeural", gender = "Male", locale = "en-GB",
+        friendlyName = "Thomas（男声 · 亲切）", status = "GA",
     ),
 )
 
@@ -131,16 +191,17 @@ val EDGE_VOICE_CATALOG: List<EdgeVoice> = listOf(
 internal fun edgeDefaultVoiceFor(lang: String): String =
     if (lang.startsWith("zh", ignoreCase = true)) EDGE_VOICE_ZH else EDGE_VOICE_EN
 
-/**
- * The curated shortNames for [lang]: zh-* → the Mainland zh-CN voices,
- * otherwise en-US.
- */
-internal fun edgeCatalogShortNames(lang: String): List<String> =
-    if (lang.startsWith("zh", ignoreCase = true)) {
-        EDGE_VOICE_CATALOG.filter { it.locale.startsWith("zh-CN") }.map { it.shortName }
+/** The curated shortNames for an English region (us → en-US, gb → en-GB). */
+internal fun edgeCatalogShortNames(region: String): List<String> =
+    if (region == EDGE_EN_REGION_GB) {
+        EDGE_VOICE_CATALOG.filter { it.locale == "en-GB" }.map { it.shortName }
     } else {
         EDGE_VOICE_CATALOG.filter { it.locale == "en-US" }.map { it.shortName }
     }
+
+/** The curated zh-CN default-voice shortNames. */
+internal fun edgeCatalogShortNamesZh(): List<String> =
+    EDGE_VOICE_CATALOG.filter { it.locale == "zh-CN" }.map { it.shortName }
 
 /**
  * Stable 8-hex cache hash binding a clip to voice + rate (djb2, provider
@@ -166,19 +227,14 @@ internal fun edgeClipFileName(text: String, voice: String, rate: Float): String 
 }
 
 /**
- * Edge Read-Aloud clip fetcher with a disk cache and per-clip single flight
- * (Youdao/provider pattern, AGENTS.md). The synthesis protocol is delegated
- * to the vendored [EdgeClient] (`io/edge/EdgeTts.kt`, the standalone
- * rany2/edge-tts-aligned client that speaks the service's current wire
- * protocol); this class only decides which voice to use, warms the cache in
- * the background and serves ready clips — the playback chain never blocks
- * on a download. Every failure degrades to "no clip"; nothing here throws
- * into the caller.
- *
- * Voice selection (设置 → Edge 音色): per-language shortNames follow the
- * persisted settings (`edge_voice_zh` / `edge_voice_en`) with the built-in
- * neural defaults as the fallback. Clip cache keys bind voice + rate, so
- * switching a voice regenerates instead of replaying stale audio.
+ * Voice selection (设置 → Edge 音色): the default (zh) voice plus an
+ * optional dedicated English voice. The zh voice speaks both languages; a
+ * stored English voice is used for English text only when 英文使用默认音色
+ * is off. Regions just filter the picker — the stored shortName decides the
+ * actual voice, so a stored en-GB voice keeps working if the region drifts.
+ * Clip cache keys bind voice + rate, so switching a voice regenerates
+ * instead of replaying stale audio. A stored English voice outside the
+ * catalog (e.g. a removed entry) falls back to its region default.
  */
 class EdgeTts(
     private val context: Context,
@@ -202,26 +258,29 @@ class EdgeTts(
     @Volatile
     private var rate: Float = DEFAULT_SPEECH_RATE
 
-    /** The persisted voice per language (zh/en shortNames); live-followed. */
+    /** The persisted default (zh) voice shortName; live-followed. */
     @Volatile
     private var voiceZh: String = EDGE_VOICE_ZH
+    /** The persisted English voice shortName; live-followed. */
     @Volatile
     private var voiceEn: String = EDGE_VOICE_EN
+    /** 英文使用默认音色 (default on); live-followed. */
+    @Volatile
+    private var useDefaultEn: Boolean = true
 
     init {
         scope.launch { settings.speechRate.collect { rate = it } }
         scope.launch { settings.edgeVoiceZh.collect { voiceZh = it.ifBlank { EDGE_VOICE_ZH } } }
-        scope.launch { settings.edgeVoiceEn.collect { voiceEn = it.ifBlank { EDGE_VOICE_EN } } }
+        scope.launch { settings.edgeVoiceEn.collect { voiceEn = normalizeEnVoice(it) } }
+        scope.launch { settings.edgeUseDefaultEn.collect { useDefaultEn = it } }
     }
 
     private val cacheDir: File
         get() = File(context.cacheDir, "tts")
 
-    /** The voice shortName currently selected for [text]'s language. */
-    fun selectedVoice(text: String): String {
-        val trimmed = text.trim()
-        return if (isCjkText(trimmed)) voiceZh else voiceEn
-    }
+    /** The voice shortName currently selected for [text]. */
+    fun selectedVoice(text: String): String =
+        resolveEdgeVoice(text, voiceZh, voiceEn, useDefaultEn)
 
     /** The ready cached clip for [text], or null when absent/too small. */
     fun cachedClip(text: String): File? {

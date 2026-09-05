@@ -25,22 +25,51 @@ class EdgeTtsTest {
     }
 
     @Test
-    fun `voice follows the text language`() {
-        assertEquals(EDGE_VOICE_ZH, edgeVoiceFor("月亮"))
-        assertEquals(EDGE_VOICE_EN, edgeVoiceFor("apple"))
-        assertEquals(EDGE_VOICE_EN, edgeVoiceFor("  hello "))
+    fun `cjk text always uses the default voice`() {
+        assertEquals("zh-CN-YunxiNeural", resolveEdgeVoice("月亮", "zh-CN-YunxiNeural", "en-US-GuyNeural", false))
+        assertEquals("zh-CN-YunxiNeural", resolveEdgeVoice("月亮", "zh-CN-YunxiNeural", "en-US-GuyNeural", true))
+        assertEquals("zh-CN-YunxiNeural", resolveEdgeVoice("  苹果 apple ", "zh-CN-YunxiNeural", "en-GB-RyanNeural", false))
     }
 
     @Test
-    fun `catalog splits voices into zh and en lists`() {
-        val zh = edgeCatalogShortNames("zh")
-        val en = edgeCatalogShortNames("en")
+    fun `english text uses the dedicated voice only when default is off`() {
+        assertEquals("en-US-GuyNeural", resolveEdgeVoice("apple", "zh-CN-XiaoxiaoNeural", "en-US-GuyNeural", false))
+        assertEquals("zh-CN-XiaoxiaoNeural", resolveEdgeVoice("apple", "zh-CN-XiaoxiaoNeural", "en-US-GuyNeural", true))
+        assertEquals("zh-CN-XiaoxiaoNeural", resolveEdgeVoice("  hello ", "zh-CN-XiaoxiaoNeural", "en-GB-RyanNeural", true))
+    }
+
+    @Test
+    fun `english region defaults and detection`() {
+        assertEquals(EDGE_VOICE_EN, edgeDefaultEnVoice(EDGE_EN_REGION_US))
+        assertEquals(EDGE_VOICE_EN_GB, edgeDefaultEnVoice(EDGE_EN_REGION_GB))
+        assertEquals(EDGE_EN_REGION_GB, edgeEnRegionOf("en-GB-RyanNeural"))
+        assertEquals(EDGE_EN_REGION_US, edgeEnRegionOf("en-US-GuyNeural"))
+        assertEquals(EDGE_EN_REGION_US, edgeEnRegionOf(""))
+    }
+
+    @Test
+    fun `stored english voice normalizes to its region default`() {
+        assertEquals("en-US-GuyNeural", normalizeEnVoice("en-US-GuyNeural"))
+        assertEquals("en-GB-RyanNeural", normalizeEnVoice("en-GB-RyanNeural"))
+        assertEquals(EDGE_VOICE_EN, normalizeEnVoice(""))
+        assertEquals(EDGE_VOICE_EN, normalizeEnVoice("en-US-RemovedNeural"))
+        assertEquals(EDGE_VOICE_EN_GB, normalizeEnVoice("en-GB-RemovedNeural"))
+    }
+
+    @Test
+    fun `catalog splits voices into zh and per-region en lists`() {
+        val zh = edgeCatalogShortNamesZh()
+        val us = edgeCatalogShortNames(EDGE_EN_REGION_US)
+        val gb = edgeCatalogShortNames(EDGE_EN_REGION_GB)
         assertTrue(zh.isNotEmpty())
-        assertTrue(en.isNotEmpty())
+        assertTrue(us.isNotEmpty())
+        assertTrue(gb.isNotEmpty())
         assertTrue(zh.none { !it.startsWith("zh-CN") })
-        assertTrue(en.none { !it.startsWith("en-US") })
+        assertTrue(us.none { !it.startsWith("en-US") })
+        assertTrue(gb.none { !it.startsWith("en-GB") })
         assertTrue(zh.contains(EDGE_VOICE_ZH))
-        assertTrue(en.contains(EDGE_VOICE_EN))
+        assertTrue(us.contains(EDGE_VOICE_EN))
+        assertTrue(gb.contains(EDGE_VOICE_EN_GB))
     }
 
     @Test
