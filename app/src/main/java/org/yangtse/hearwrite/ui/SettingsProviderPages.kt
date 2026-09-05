@@ -52,6 +52,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.yangtse.hearwrite.data.EDGE_EN_REGION_GB
 import org.yangtse.hearwrite.data.EDGE_EN_REGION_US
 import org.yangtse.hearwrite.data.EDGE_VOICE_CATALOG
+import org.yangtse.hearwrite.data.EDGE_VOICE_EN
 import org.yangtse.hearwrite.data.EDGE_VOICE_EN_GB
 import org.yangtse.hearwrite.data.EdgeVoice
 import org.yangtse.hearwrite.data.MIMO_VOICES
@@ -645,9 +646,11 @@ private fun EdgeVoiceSection(
                     FilterChip(
                         selected = region != EDGE_EN_REGION_GB,
                         onClick = {
-                            // Switching region resets the voice to that
-                            // region's default (persisted as blank).
-                            onEnglishVoiceChange("")
+                            // Switching region selects that region's default
+                            // voice explicitly: a blank stored value cannot
+                            // remember its region (Sonia blanked would read
+                            // back as US and bounce the picker off en-GB).
+                            onEnglishVoiceChange(EDGE_VOICE_EN)
                         },
                         label = { Text("美式英语", style = MaterialTheme.typography.bodyLarge) },
                     )
@@ -665,10 +668,10 @@ private fun EdgeVoiceSection(
                     label = "英文音色",
                     lang = "en",
                     voices = regionVoices,
-                    selectedShortName = englishVoice,
+                    selectedShortName = englishVoice.ifBlank { regionDefault },
                     defaultShortName = regionDefault,
                     previewing = previewing,
-                    onSelect = { onEnglishVoiceChange(if (it == regionDefault) "" else it) },
+                    onSelect = onEnglishVoiceChange,
                     onPreview = onPreview,
                     modifier = Modifier.padding(top = 4.dp),
                 )
@@ -838,8 +841,9 @@ private fun MimoVoiceDropdown(
 /**
  * One language's voice dropdown (TTS API form style): a read-only outlined
  * field opening the voice menu, plus a 试听 button on the right that plays a
- * sample in the current selection. A blank [selectedShortName] resolves to
- * the built-in default for display; picking the default persists as blank.
+ * sample in the current selection. Selections persist as explicit shortNames
+ * (a blank stored value only survives from older versions and resolves to
+ * the built-in default for display).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -888,7 +892,10 @@ private fun EdgeVoiceDropdown(
                     DropdownMenuItem(
                         text = { Text(voice.friendlyName) },
                         onClick = {
-                            onSelect(if (voice.shortName == defaultShortName) "" else voice.shortName)
+                            // Store the explicit shortName: a blank cannot
+                            // remember its region (en-GB Sonia blanked
+                            // reads back as US and bounces the picker).
+                            onSelect(voice.shortName)
                             expanded = false
                         },
                     )
