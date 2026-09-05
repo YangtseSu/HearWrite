@@ -23,7 +23,6 @@ import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Icon
@@ -60,7 +59,7 @@ private enum class SettingsSubPage { VOICE_SOURCE, OCR_PROVIDER, ABOUT }
 /**
  * 设置 — an Android-settings-style hub. Grouped cards list every setting;
  * tappable rows open sub-pages (发音来源 / 拍照识词 /
- * 关于); 外观 is an inline FilterChip row and 语速 an inline slider. System back pops the sub-page first, then leaves 设置 entirely.
+ * 关于); 外观 is an inline theme-preview row and 语速 an inline slider. System back pops the sub-page first, then leaves 设置 entirely.
  * All state lives in the single [SettingsViewModel] shared by hub and
  * sub-pages, so edits made deep in a page show up on the hub immediately.
  */
@@ -189,29 +188,23 @@ private fun SettingsHub(
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    FilterChip(
+                    ThemePreviewCard(
+                        label = "浅色",
                         selected = theme == ThemeMode.LIGHT,
                         onClick = { viewModel.onThemeChange(ThemeMode.LIGHT) },
-                        label = { Text("浅色", style = MaterialTheme.typography.bodyLarge) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp),
+                        modifier = Modifier.weight(1f),
                     )
-                    FilterChip(
+                    ThemePreviewCard(
+                        label = "深色",
                         selected = theme == ThemeMode.DARK,
                         onClick = { viewModel.onThemeChange(ThemeMode.DARK) },
-                        label = { Text("深色", style = MaterialTheme.typography.bodyLarge) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp),
+                        modifier = Modifier.weight(1f),
                     )
-                    FilterChip(
+                    ThemePreviewCard(
+                        label = "跟随系统",
                         selected = theme == ThemeMode.SYSTEM,
                         onClick = { viewModel.onThemeChange(ThemeMode.SYSTEM) },
-                        label = { Text("跟随系统", style = MaterialTheme.typography.bodyLarge) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp),
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }

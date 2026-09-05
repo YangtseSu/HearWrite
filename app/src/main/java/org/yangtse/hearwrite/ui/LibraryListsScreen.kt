@@ -24,7 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import org.yangtse.hearwrite.ui.theme.StarGold
+import org.yangtse.hearwrite.ui.theme.hearWriteSemantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 
@@ -81,7 +81,7 @@ fun LibraryListsScreen(
                                     if (favorited) Icons.Filled.Star else Icons.Filled.StarBorder,
                                     contentDescription = if (favorited) "取消收藏" else "收藏",
                                     tint = if (favorited) {
-                                        StarGold
+                                        hearWriteSemantics.star
                                     } else {
                                         MaterialTheme.colorScheme.onSurfaceVariant
                                     },

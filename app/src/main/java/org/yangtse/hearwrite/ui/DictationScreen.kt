@@ -6,8 +6,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,10 +24,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
@@ -40,6 +41,8 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,7 +50,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -63,8 +65,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import org.yangtse.hearwrite.ui.theme.DoneGreen
-import org.yangtse.hearwrite.ui.theme.DoneGreenDark
+import org.yangtse.hearwrite.ui.theme.hearWriteSemantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -72,7 +73,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -210,7 +210,7 @@ fun DictationScreen(
 
 @Composable
 private fun StatusPill(ui: DictationUiState) {
-    val doneColor = if (isSystemInDarkTheme()) DoneGreenDark else DoneGreen
+    val doneColor = hearWriteSemantics.success
     val (label, color) = when {
         ui.finished -> "已完成" to doneColor
         ui.state == PlayState.PLAYING -> "听写中" to doneColor
@@ -299,16 +299,39 @@ private fun DictationContent(
                         ui = ui,
                         line = runLines.getOrNull(ui.index),
                         showWord = showWord,
-                        onToggleWord = onToggleWord,
                         metaExpanded = metaExpanded,
                         onToggleMeta = onToggleMeta,
                     )
-                    OutlinedButton(
-                        onClick = viewModel::markCurrentWrong,
-                        enabled = ui.isActive,
-                        modifier = Modifier.padding(top = 16.dp),
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Text("标记错词")
+                        OutlinedButton(
+                            onClick = onToggleWord,
+                            enabled = ui.isActive,
+                            modifier = Modifier.weight(1f).height(52.dp),
+                        ) {
+                            Icon(
+                                if (showWord) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(if (showWord) "隐藏词语" else "显示词语")
+                        }
+                        FilledTonalButton(
+                            onClick = viewModel::markCurrentWrong,
+                            enabled = ui.isActive,
+                            modifier = Modifier.weight(1f).height(52.dp),
+                            colors = ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            ),
+                        ) {
+                            Text("标记错词")
+                        }
                     }
                 }
             }
@@ -320,7 +343,6 @@ private fun DictationContent(
             onIntervalChange = { viewModel.onIntervalChange(it.toDouble()) },
             onAutoNextChange = viewModel::onAutoNextChange,
             onPlayToggle = viewModel::togglePlay,
-            onStop = onRequestStop,
             onPrevious = viewModel::goToPrevious,
             onNext = viewModel::skipToNext,
         )
@@ -352,7 +374,7 @@ private fun FinishCard(
             .padding(horizontal = 20.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        val doneColor = if (isSystemInDarkTheme()) DoneGreenDark else DoneGreen
+        val doneColor = hearWriteSemantics.success
         Icon(
             Icons.Filled.CheckCircle,
             contentDescription = null,
@@ -455,7 +477,6 @@ private fun WatchDial(
     ui: DictationUiState,
     line: String?,
     showWord: Boolean,
-    onToggleWord: () -> Unit,
     metaExpanded: Boolean,
     onToggleMeta: () -> Unit,
 ) {
@@ -467,39 +488,26 @@ private fun WatchDial(
         (it / totalMs).coerceIn(0.0, 1.0).toFloat()
     }
     val ringColor = MaterialTheme.colorScheme.primary
-    val trackColor = MaterialTheme.colorScheme.surfaceVariant
+    val trackColor = hearWriteSemantics.ringTrack
 
     val seconds = ui.remainingMs?.let { ceil(it / 1000.0).toInt() }
     val counting = ui.isActive && seconds != null
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box {
-            CountdownRing(
-                progressFraction = fraction,
-                modifier = Modifier.size(240.dp),
-                color = ringColor,
-                trackColor = trackColor,
-            ) {
-                DialCenter(
-                    entry = entry,
-                    isCjk = isCjk,
-                    markedFlash = ui.markedFlash,
-                    showWord = showWord,
-                    onToggleWord = onToggleWord,
-                    metaExpanded = metaExpanded,
-                    onToggleMeta = onToggleMeta,
-                )
-            }
-            IconButton(
-                onClick = onToggleWord,
-                modifier = Modifier.padding(4.dp),
-            ) {
-                Icon(
-                    if (showWord) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                    contentDescription = if (showWord) "隐藏单词" else "显示单词",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        CountdownRing(
+            progressFraction = fraction,
+            modifier = Modifier.size(248.dp),
+            color = ringColor,
+            trackColor = trackColor,
+        ) {
+            DialCenter(
+                entry = entry,
+                isCjk = isCjk,
+                markedFlash = ui.markedFlash,
+                showWord = showWord,
+                metaExpanded = metaExpanded,
+                onToggleMeta = onToggleMeta,
+            )
         }
 
         // Seconds readout; clearAndSetSemantics re-announces on each whole
@@ -507,8 +515,7 @@ private fun WatchDial(
         if (counting) {
             Text(
                 "$seconds 秒",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.displaySmall,
                 color = ringColor,
                 modifier = Modifier.clearAndSetSemantics {
                     contentDescription = "剩余 $seconds 秒"
@@ -532,7 +539,6 @@ private fun DialCenter(
     isCjk: Boolean,
     markedFlash: Boolean,
     showWord: Boolean,
-    onToggleWord: () -> Unit,
     metaExpanded: Boolean,
     onToggleMeta: () -> Unit,
 ) {
@@ -546,15 +552,14 @@ private fun DialCenter(
 
     Surface(
         modifier = Modifier
-            .size(196.dp)
-            .clickable { onToggleWord() }
+            .size(204.dp)
             .border(
                 width = 2.dp,
                 color = if (markedFlash) borderColor else MaterialTheme.colorScheme.outlineVariant,
                 shape = CircleShape,
             ),
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
@@ -564,7 +569,7 @@ private fun DialCenter(
             if (showWord && entry != null) {
                 Text(
                     entry.word,
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = MaterialTheme.typography.displayMedium,
                     textAlign = TextAlign.Center,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -594,14 +599,21 @@ private fun DialCenter(
                     }
                 }
             } else {
-                Text(
-                    if (entry == null) "" else "•••••",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
+                Icon(
+                    Icons.Filled.Hearing,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(40.dp),
                 )
                 Text(
-                    "点按显示词语",
+                    "听写中",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                Text(
+                    "用下方按钮显示词语",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     modifier = Modifier.padding(top = 4.dp),
@@ -618,92 +630,96 @@ private fun PlaybackPanel(
     onIntervalChange: (Float) -> Unit,
     onAutoNextChange: (Boolean) -> Unit,
     onPlayToggle: () -> Unit,
-    onStop: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .padding(bottom = 12.dp),
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
-        // Interval slider — live: the engine restarts the countdown while
-        // dragging, so the pace changes immediately (★ acceptance).
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("间隔", style = MaterialTheme.typography.bodyMedium)
-            Slider(
-                value = ui.intervalSec.toFloat(),
-                    onValueChange = onIntervalChange,
-                    valueRange = MIN_INTERVAL_SEC.toFloat()..MAX_INTERVAL_SEC.toFloat(),
-                steps = 17, // 0.5 s steps
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp)
-                    .semantics { contentDescription = "听写间隔秒数" },
-            )
-            Text(
-                String.format(Locale.ROOT, "%.1fs", ui.intervalSec),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("自动播放", style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.width(12.dp))
-            Switch(
-                checked = ui.autoNext,
-                onCheckedChange = onAutoNextChange,
-                modifier = Modifier.semantics { contentDescription = "自动播放下一个词" },
-            )
-        }
-
-        // ---- transport ----------------------------------------------------
-        val playing = ui.state == PlayState.PLAYING
-        val paused = ui.state == PlayState.PAUSED
-        val active = ui.isActive
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
-            TransportItem(
-                label = "结束",
-                enabled = active,
-                tint = MaterialTheme.colorScheme.error,
-            ) { IconButton(onClick = onStop, enabled = active) {
-                Icon(Icons.Filled.Stop, contentDescription = "结束", tint = MaterialTheme.colorScheme.error)
-            } }
-
-            TransportItem(label = "上一个", enabled = active && ui.index > 0) {
-                IconButton(onClick = onPrevious, enabled = active && ui.index > 0) {
-                    Icon(Icons.Filled.SkipPrevious, contentDescription = "上一个")
-                }
-            }
-
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                FilledIconButton(
-                    onClick = onPlayToggle,
-                    enabled = active,
-                    modifier = Modifier.size(64.dp),
+            // Interval stepper — live: the engine restarts the countdown on
+            // change, so the pace changes immediately (★ acceptance). A
+            // stepper replaces the slider here to keep the panel one row tall.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("间隔", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.width(8.dp))
+                IconButton(
+                    onClick = {
+                        val stepped = ((ui.intervalSec - 0.5).coerceIn(
+                            MIN_INTERVAL_SEC.toDouble(),
+                            MAX_INTERVAL_SEC.toDouble(),
+                        ))
+                        onIntervalChange(stepped.toFloat())
+                    },
+                    enabled = ui.intervalSec > MIN_INTERVAL_SEC,
+                    modifier = Modifier.size(40.dp),
                 ) {
-                    Icon(
-                        if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (playing) "暂停" else "继续",
-                        modifier = Modifier.size(32.dp),
-                    )
+                    Icon(Icons.Filled.Remove, contentDescription = "减少间隔")
                 }
                 Text(
-                    if (playing) "暂停" else if (paused) "继续" else "播放",
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(top = 2.dp),
+                    String.format(Locale.ROOT, "%.1fs", ui.intervalSec),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.semantics { contentDescription = "听写间隔秒数" },
+                )
+                IconButton(
+                    onClick = {
+                        val stepped = ((ui.intervalSec + 0.5).coerceIn(
+                            MIN_INTERVAL_SEC.toDouble(),
+                            MAX_INTERVAL_SEC.toDouble(),
+                        ))
+                        onIntervalChange(stepped.toFloat())
+                    },
+                    enabled = ui.intervalSec < MAX_INTERVAL_SEC,
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = "增加间隔")
+                }
+                Spacer(Modifier.weight(1f))
+                Text("自动播放", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.width(4.dp))
+                Switch(
+                    checked = ui.autoNext,
+                    onCheckedChange = onAutoNextChange,
+                    modifier = Modifier.semantics { contentDescription = "自动播放下一个词" },
                 )
             }
 
-            TransportItem(label = "下一个", enabled = active) {
+            // ---- transport ----------------------------------------------------
+            val playing = ui.state == PlayState.PLAYING
+            val paused = ui.state == PlayState.PAUSED
+            val active = ui.isActive
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onPrevious, enabled = active && ui.index > 0) {
+                    Icon(Icons.Filled.SkipPrevious, contentDescription = "上一个")
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    FilledIconButton(
+                        onClick = onPlayToggle,
+                        enabled = active,
+                        modifier = Modifier.size(64.dp),
+                    ) {
+                        Icon(
+                            if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (playing) "暂停" else "继续",
+                            modifier = Modifier.size(32.dp),
+                        )
+                    }
+                    Text(
+                        if (playing) "暂停" else if (paused) "继续" else "播放",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
                 IconButton(onClick = onNext, enabled = active) {
                     Icon(Icons.Filled.SkipNext, contentDescription = "下一个")
                 }
@@ -712,24 +728,3 @@ private fun PlaybackPanel(
     }
 }
 
-@Composable
-private fun TransportItem(
-    label: String,
-    enabled: Boolean,
-    tint: Color = Color.Unspecified,
-    content: @Composable () -> Unit,
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        content()
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = if (enabled) {
-                tint.takeIf { it != Color.Unspecified } ?: MaterialTheme.colorScheme.onSurface
-            } else {
-                MaterialTheme.colorScheme.outline
-            },
-            modifier = Modifier.padding(top = 2.dp),
-        )
-    }
-}

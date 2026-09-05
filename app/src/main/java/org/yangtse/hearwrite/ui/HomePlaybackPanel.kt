@@ -11,12 +11,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -51,10 +53,15 @@ fun HomePlaybackPanel(
     onStart: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        HorizontalDivider()
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        tonalElevation = 2.dp,
+    ) {
         Column(
-            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 12.dp),
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 12.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -62,23 +69,37 @@ fun HomePlaybackPanel(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Slider(
-                    value = intervalSec.toFloat(),
-                    onValueChange = { onIntervalChange(it.toDouble()) },
-                    valueRange = MIN_INTERVAL_SEC.toFloat()..MAX_INTERVAL_SEC.toFloat(),
-                    steps = 17, // 0.5 s steps
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 10.dp)
-                        .semantics { contentDescription = "听写间隔秒数" },
-                )
+                Spacer(Modifier.width(4.dp))
+                IconButton(
+                    onClick = {
+                        onIntervalChange(
+                            (intervalSec - 0.5).coerceIn(MIN_INTERVAL_SEC, MAX_INTERVAL_SEC),
+                        )
+                    },
+                    enabled = intervalSec > MIN_INTERVAL_SEC,
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(Icons.Filled.Remove, contentDescription = "减少间隔")
+                }
                 Text(
                     String.format(Locale.ROOT, "%.1fs", intervalSec),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.semantics { contentDescription = "听写间隔秒数" },
                 )
+                IconButton(
+                    onClick = {
+                        onIntervalChange(
+                            (intervalSec + 0.5).coerceIn(MIN_INTERVAL_SEC, MAX_INTERVAL_SEC),
+                        )
+                    },
+                    enabled = intervalSec < MAX_INTERVAL_SEC,
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = "增加间隔")
+                }
+                Spacer(Modifier.weight(1f))
             }
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

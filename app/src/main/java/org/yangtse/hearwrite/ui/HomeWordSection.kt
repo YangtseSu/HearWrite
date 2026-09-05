@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -69,6 +70,7 @@ fun WordListSection(
     onDeleteWord: (Int) -> Unit,
     onFillSample: (String) -> Unit,
     onClear: () -> Unit,
+    onScan: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
@@ -88,6 +90,15 @@ fun WordListSection(
                 CountBadge(wordCount)
             }
             Spacer(Modifier.weight(1f))
+            TextButton(onClick = onScan) {
+                Icon(
+                    Icons.Filled.PhotoCamera,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text("拍照识词")
+            }
             if (wordCount > 0) {
                 TextButton(onClick = onToggleDisplayMode) {
                     Icon(

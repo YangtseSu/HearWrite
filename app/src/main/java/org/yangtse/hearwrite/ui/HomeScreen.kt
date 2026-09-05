@@ -3,7 +3,6 @@ package org.yangtse.hearwrite.ui
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,8 +26,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Settings
@@ -36,7 +33,6 @@ import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -192,23 +188,14 @@ fun HomeScreen(
             .statusBarsPadding()
             .imePadding(),
     ) {
-        // ---- Header: brand · OCR progress pill · menu ----------------------
+        // ---- Header: brand · OCR progress pill · library/settings shortcuts · menu --
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                Icons.Filled.RecordVoiceOver,
-                contentDescription = null,
-                tint = colors.primary,
-                modifier = Modifier.size(24.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text("HearWrite", style = MaterialTheme.typography.titleLarge, color = colors.onBackground)
-            Spacer(Modifier.width(6.dp))
-            Text("听写", style = MaterialTheme.typography.titleLarge, color = colors.primary)
+            HearWriteWordmark()
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 if (ocrBusy) {
                     Surface(
@@ -234,6 +221,20 @@ fun HomeScreen(
                         }
                     }
                 }
+            }
+            IconButton(onClick = onOpenLibrary) {
+                Icon(
+                    Icons.AutoMirrored.Filled.MenuBook,
+                    contentDescription = "词库",
+                    tint = colors.onBackground,
+                )
+            }
+            IconButton(onClick = onOpenSettings) {
+                Icon(
+                    Icons.Outlined.Settings,
+                    contentDescription = "设置",
+                    tint = colors.onBackground,
+                )
             }
             IconButton(onClick = { showMenu = true }) {
                 Icon(
@@ -271,25 +272,9 @@ fun HomeScreen(
                     onDeleteWord = viewModel::deleteWord,
                     onFillSample = viewModel::fillSample,
                     onClear = viewModel::clearDraft,
+                    onScan = { showOcrSheet = true },
                     modifier = Modifier.weight(1f),
                 )
-            }
-            if (!imeVisible) {
-                FloatingActionButton(
-                    onClick = { showOcrSheet = true },
-                    shape = CircleShape,
-                    containerColor = colors.primary,
-                    contentColor = colors.onPrimary,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(
-                            end = 4.dp,
-                            // Lift above the edit-mode footer row.
-                            bottom = if (displayMode && wordCount > 0) 12.dp else 60.dp,
-                        ),
-                ) {
-                    Icon(Icons.Filled.PhotoCamera, contentDescription = "拍照识词")
-                }
             }
         }
 
@@ -316,7 +301,9 @@ fun HomeScreen(
                         }
                     }
                 },
-                modifier = Modifier.navigationBarsPadding(),
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 12.dp),
             )
         }
     }
@@ -332,7 +319,7 @@ fun HomeScreen(
                 Text(
                     "更多",
                     style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 12.dp),
+                    modifier = Modifier.padding(bottom = 4.dp),
                 )
                 MenuRow(Icons.Outlined.StarBorder, "收藏") {
                     showMenu = false
@@ -345,14 +332,6 @@ fun HomeScreen(
                 MenuRow(Icons.Outlined.Cancel, "错词本") {
                     showMenu = false
                     showWrongWords = true
-                }
-                MenuRow(Icons.AutoMirrored.Filled.MenuBook, "词库") {
-                    showMenu = false
-                    onOpenLibrary()
-                }
-                MenuRow(Icons.Outlined.Settings, "设置") {
-                    showMenu = false
-                    onOpenSettings()
                 }
             }
         }
@@ -506,22 +485,29 @@ private fun MenuRow(
 ) {
     Surface(
         onClick = onClick,
-        shape = MaterialTheme.shapes.medium,
+        shape = MaterialTheme.shapes.small,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 8.dp),
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 52.dp)
-                .padding(horizontal = 16.dp),
+                .heightIn(min = 56.dp)
+                .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    modifier = Modifier.padding(8.dp).size(20.dp),
+                )
+            }
             Spacer(Modifier.width(14.dp))
             Text(label, style = MaterialTheme.typography.bodyLarge)
             Spacer(Modifier.weight(1f))

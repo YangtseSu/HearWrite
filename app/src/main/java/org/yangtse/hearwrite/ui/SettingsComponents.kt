@@ -1,5 +1,7 @@
 package org.yangtse.hearwrite.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -226,6 +228,82 @@ fun SettingsSubPage(
                 .padding(bottom = 32.dp),
             content = content,
         )
+    }
+}
+/**
+ * Theme preview card for the 外观 setting: a miniature paper/ink swatch over
+ * the label. 所见即所得 — the swatch shows the actual background + primary
+ * of each mode instead of a text-only chip.
+ */
+@Composable
+fun ThemePreviewCard(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = if (selected) {
+            androidx.compose.foundation.BorderStroke(
+                2.dp,
+                MaterialTheme.colorScheme.primary,
+            )
+        } else {
+            null
+        },
+        modifier = modifier,
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            ThemeSwatch(label = label)
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThemeSwatch(label: String) {
+    val (background, primary) = when (label) {
+        "深色" -> org.yangtse.hearwrite.ui.theme.BackgroundDark to
+            org.yangtse.hearwrite.ui.theme.PrimaryDark
+        "跟随系统" -> MaterialTheme.colorScheme.background to
+            MaterialTheme.colorScheme.primary
+        else -> org.yangtse.hearwrite.ui.theme.BackgroundLight to
+            org.yangtse.hearwrite.ui.theme.PrimaryLight
+    }
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = background,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 24.dp)
+                    .background(primary, androidx.compose.foundation.shape.CircleShape),
+            )
+            Box(
+                modifier = Modifier
+                    .padding(top = 6.dp)
+                    .fillMaxWidth(0.6f)
+                    .heightIn(min = 8.dp)
+                    .background(
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        androidx.compose.foundation.shape.CircleShape,
+                    ),
+            )
+        }
     }
 }
 

@@ -75,7 +75,7 @@ fun AboutSettingsPage(onBack: () -> Unit) {
                 )
             }
             Spacer(Modifier.height(16.dp))
-            Text("听写 HearWrite", style = MaterialTheme.typography.titleLarge)
+            HearWriteWordmark(tileSize = 44.dp)
             Spacer(Modifier.height(4.dp))
             Text(
                 if (versionName.isBlank()) {

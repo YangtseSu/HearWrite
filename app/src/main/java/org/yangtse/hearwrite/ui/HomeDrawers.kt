@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import org.yangtse.hearwrite.data.HistoryEntry
 import org.yangtse.hearwrite.data.WrongWordMark
 import org.yangtse.hearwrite.domain.parseWords
-import org.yangtse.hearwrite.ui.theme.StarGold
+import org.yangtse.hearwrite.ui.theme.hearWriteSemantics
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -111,7 +111,7 @@ fun HistorySheet(
                                     Icon(
                                         if (favorited) Icons.Filled.Star else Icons.Filled.StarBorder,
                                         contentDescription = if (favorited) "取消收藏" else "收藏",
-                                        tint = if (favorited) StarGold else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        tint = if (favorited) hearWriteSemantics.star else MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                                 IconButton(onClick = { onDelete(entry.id) }) {
@@ -169,7 +169,7 @@ fun FavoritesSheet(
                                     Icon(
                                         Icons.Filled.Star,
                                         contentDescription = "取消收藏",
-                                        tint = StarGold,
+                                        tint = hearWriteSemantics.star,
                                     )
                                 }
                             },

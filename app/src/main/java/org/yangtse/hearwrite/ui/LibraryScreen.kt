@@ -6,6 +6,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Surface
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -105,23 +114,50 @@ private fun CategoryList(
 ) {
     when {
         categories == null -> CenterProgress()
-        else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+        else -> LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             items(categories, key = { it.name }) { category ->
-                CategoryRow(category = category, onClick = { onOpenCategory(category.name) })
-                HorizontalDivider()
+                CategoryCard(category = category, onClick = { onOpenCategory(category.name) })
             }
         }
     }
 }
 
 @Composable
-private fun CategoryRow(category: LibraryCategory, onClick: () -> Unit) {
-    ListRow(
-        title = category.name,
-        subtitle = "${category.listCount} 个词表",
+private fun CategoryCard(category: LibraryCategory, onClick: () -> Unit) {
+    Surface(
         onClick = onClick,
-        trailing = { RowChevron() },
-    )
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                category.name,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 2,
+                minLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(8.dp))
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ) {
+                Text(
+                    "${category.listCount} 个词表",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+        }
+    }
 }
 
 @Composable
