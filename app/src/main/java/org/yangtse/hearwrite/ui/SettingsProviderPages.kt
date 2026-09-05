@@ -13,11 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Visibility
@@ -25,13 +22,16 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,12 +41,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.yangtse.hearwrite.data.edgeDefaultVoiceFor
 import org.yangtse.hearwrite.data.EDGE_VOICE_CATALOG
 import org.yangtse.hearwrite.data.EdgeVoice
 import org.yangtse.hearwrite.data.OCR_DISCLAIMER
@@ -552,12 +552,15 @@ fun OcrProviderSettingsPage(
 
 /**
  * 微软 Edge 音色 picker (shown on the 发音来源 page when the Edge source is
- * selected): one radio group per dictation language — 中文 (普通话 zh-CN
- * voices) and English (en-US) — each row with a preview (试听) button that
- * synthesizes a sample in that voice without selecting it. Selections apply
- * immediately (cache keys bind voice+rate so clips regenerate); a 恢复默认
- * appears once any voice deviates from the app default.
+ * selected): one dropdown per dictation language — 中文音色 (zh-CN voices)
+ * and 英文音色 (en-US) — styled like the TTS API form fields, each with a
+ * 试听 button on the right that synthesizes a sample in the currently
+ * selected voice without changing the selection. Selections apply
+ * immediately (cache keys bind voice+rate so clips regenerate). There is no
+ * separate 默认 entry: the catalog already contains the built-in defaults
+ * (晓晓 / Aria) and picking one persists as blank (= built-in default).
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EdgeVoiceSection(
     voiceZh: String,
@@ -569,31 +572,36 @@ private fun EdgeVoiceSection(
 ) {
     val zhVoices = EDGE_VOICE_CATALOG.filter { it.locale.startsWith("zh") }
     val enVoices = EDGE_VOICE_CATALOG.filter { it.locale.startsWith("en") }
+    val previewing = previewState is TtsTestState.Testing
 
     SettingsSectionHeader("Edge 音色")
     SettingsCard {
-        EdgeVoiceLangGroup(
-            title = "中文",
-            supporting = "用于汉字听写与组词朗读",
-            voices = zhVoices,
-            selectedShortName = voiceZh,
-            previewing = previewState is TtsTestState.Testing,
-            onSelect = onVoiceZhChange,
-            onPreview = { onPreview(it, "zh") },
-        )
-        HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
-        EdgeVoiceLangGroup(
-            title = "English",
-            supporting = "用于英文单词朗读",
-            voices = enVoices,
-            selectedShortName = voiceEn,
-            previewing = previewState is TtsTestState.Testing,
-            onSelect = onVoiceEnChange,
-            onPreview = { onPreview(it, "en") },
-        )
+        Column(
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
+        ) {
+            EdgeVoiceDropdown(
+                label = "中文音色",
+                lang = "zh",
+                voices = zhVoices,
+                selectedShortName = voiceZh,
+                previewing = previewing,
+                onSelect = onVoiceZhChange,
+                onPreview = onPreview,
+            )
+            EdgeVoiceDropdown(
+                label = "英文音色",
+                lang = "en",
+                voices = enVoices,
+                selectedShortName = voiceEn,
+                previewing = previewing,
+                onSelect = onVoiceEnChange,
+                onPreview = onPreview,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
     }
     // Preview status lives under the group card; a transient per-voice
-    // result is shown once here (the group rows re-render but state is a
+    // result is shown once here (the dropdowns re-render but state is a
     // single shared flow).
     when (val state = previewState) {
         TtsTestState.Idle -> Unit
@@ -619,91 +627,77 @@ private fun EdgeVoiceSection(
 }
 
 /**
- * One language's voice list: a 默认 (use the built-in neural default for the
- * language) radio + a row per curated voice, each with its own 试听 button.
+ * One language's voice dropdown (TTS API form style): a read-only outlined
+ * field opening the voice menu, plus a 试听 button on the right that plays a
+ * sample in the current selection. A blank [selectedShortName] resolves to
+ * the built-in default for display; picking the default persists as blank.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EdgeVoiceLangGroup(
-    title: String,
-    supporting: String,
+private fun EdgeVoiceDropdown(
+    label: String,
+    lang: String,
     voices: List<EdgeVoice>,
     selectedShortName: String,
     previewing: Boolean,
     onSelect: (String) -> Unit,
-    onPreview: (String) -> Unit,
+    onPreview: (shortName: String, lang: String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-        Text(
-            title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 2.dp),
-        )
-        Text(
-            supporting,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 16.dp, bottom = 4.dp),
-        )
-        // 默认 voice = the app's built-in neural default (blank stored value).
-        EdgeVoiceRow(
-            label = "默认（${if (voices.firstOrNull()?.locale?.startsWith("zh") == true) "晓晓" else "Aria"}）",
-            selected = selectedShortName.isBlank(),
-            enabled = true,
-            onClick = { onSelect("") },
-            onPreview = null,
-        )
-        voices.forEach { voice ->
-            EdgeVoiceRow(
-                label = voice.friendlyName,
-                selected = selectedShortName == voice.shortName,
-                enabled = !previewing,
-                onClick = { onSelect(voice.shortName) },
-                onPreview = { onPreview(voice.shortName) },
-            )
-        }
-    }
-}
+    var expanded by remember { mutableStateOf(false) }
+    val defaultShortName = edgeDefaultVoiceFor(lang)
+    val effective = voices.firstOrNull { it.shortName == selectedShortName }
+        ?: voices.firstOrNull { it.shortName == defaultShortName }
+        ?: voices.firstOrNull()
 
-/**
- * One selectable voice row: the whole row selects (radio), the trailing
- * 试听 icon plays a sample in that voice without changing the selection.
- */
-@Composable
-private fun EdgeVoiceRow(
-    label: String,
-    selected: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    onPreview: (() -> Unit)?,
-) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-            .heightIn(min = 48.dp)
-            .padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(selected = selected, onClick = null)
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyLarge,
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = it },
             modifier = Modifier.weight(1f),
-        )
-        if (onPreview != null) {
-            IconButton(
-                onClick = onPreview,
-                enabled = enabled,
-                modifier = Modifier.size(36.dp),
+        ) {
+            OutlinedTextField(
+                value = effective?.friendlyName ?: "",
+                onValueChange = {},
+                readOnly = true,
+                label = { Text(label) },
+                singleLine = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+            )
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
             ) {
-                Icon(
-                    Icons.Filled.PlayArrow,
-                    contentDescription = "试听 $label",
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                voices.forEach { voice ->
+                    DropdownMenuItem(
+                        text = { Text(voice.friendlyName) },
+                        onClick = {
+                            onSelect(if (voice.shortName == defaultShortName) "" else voice.shortName)
+                            expanded = false
+                        },
+                    )
+                }
             }
+        }
+        IconButton(
+            onClick = {
+                val voice = effective
+                if (voice != null) onPreview(voice.shortName, lang)
+            },
+            enabled = !previewing && effective != null,
+        ) {
+            Icon(
+                Icons.Filled.PlayArrow,
+                contentDescription = "试听 ${effective?.friendlyName ?: label}",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
