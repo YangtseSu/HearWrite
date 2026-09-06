@@ -8,6 +8,10 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// Captured during configuration (readable here, unlike at task-graph time under
+// configuration cache) — versionName stays authoritative in defaultConfig above.
+lateinit var releaseVersionName: String
+
 android {
     namespace = "org.yangtse.hearwrite"
     compileSdk = 37
@@ -43,6 +47,14 @@ android {
         versionName = "0.3.0"
     }
 
+    // versionName is read once here (configuration phase) so the
+    // packageVersionedRelease copy task below can name its outputs without
+    // touching the android extension at task-graph time.
+    afterEvaluate {
+        releaseVersionName = defaultConfig.versionName
+            ?: error("defaultConfig.versionName must be set before packaging a release")
+    }
+
     buildTypes {
         debug {
             if (signingConfigs.any { it.name == "release" }) {
@@ -69,6 +81,30 @@ android {
         compose = true
     }
 
+}
+
+// Versioned release artifacts for distribution/archiving (DEVELOPMENT.md §4):
+// the signed APK and its R8 mapping get convention-named copies
+// (HearWrite-<versionName>.apk / HearWrite-<versionName>-mapping.txt) while AGP's
+// default output file name stays in place — Studio and the signature-verify
+// step depend on it. CI runs this task after :app:assembleRelease
+// (.github/workflows/release.yml); the copy task only packages the release
+// buildType, so normal builds are untouched.
+tasks.register<Copy>("packageVersionedRelease") {
+    dependsOn("assembleRelease")
+    val base = "HearWrite-$releaseVersionName"
+    from(layout.buildDirectory.dir("outputs/apk/release")) {
+        include("app-release.apk")
+        rename { _ -> "$base.apk" }
+    }
+    from(layout.buildDirectory.dir("outputs/mapping/release")) {
+        include("mapping.txt")
+        rename { _ -> "$base-mapping.txt" }
+    }
+    // Separate output dir: AGP owns build/outputs/apk/release (its
+    // output-metadata.json lives there) — writing copies into it would trip
+    // Gradle's task-output-overlap validation.
+    into(layout.buildDirectory.dir("dist"))
 }
 
 dependencies {

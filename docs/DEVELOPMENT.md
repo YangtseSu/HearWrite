@@ -112,18 +112,23 @@ keyPassword=…
 
 ```bash
 ./gradlew :app:assembleRelease
-# 产物：app/build/outputs/apk/release/app-release.apk
+# 原始产物：app/build/outputs/apk/release/app-release.apk（AGP 默认名，保留不动）
+./gradlew :app:packageVersionedRelease
+# 规范命名发布件（CI 也走这一步）→ app/build/dist/：
+#   HearWrite-<versionName>.apk               # 例 HearWrite-0.3.0.apk
+#   HearWrite-<versionName>-mapping.txt       # 例 HearWrite-0.3.0-mapping.txt
 ```
 
 - Release 已开启 **R8 minify + 资源收缩**（`isMinifyEnabled` / `isShrinkResources`），零自定义 keep 规则（Room/OkHttp/Compose 的上游 consumer rules 足够）。
-- 混淆映射在 `app/build/outputs/mapping/release/mapping.txt`——**每个发布版本归档一份**，用于反混淆崩溃堆栈。
+- `packageVersionedRelease` 只是把签名 APK 与 `mapping.txt` 复制成带版本号的规范名（分发 / 归档用），输出到独立目录 `app/build/dist/`——AGP 独占 `build/outputs/`，写回会触发 Gradle 任务输出重叠校验。**分发与归档一律用 `HearWrite-<versionName>` 系列文件。**
+- 混淆映射原始文件在 `app/build/outputs/mapping/release/mapping.txt`——**每个发布版本归档一份**（即规范名 `HearWrite-<versionName>-mapping.txt`），用于反混淆崩溃堆栈。
 
 ### 4.4 验证与安装
 
 ```bash
 ~/Android/Sdk/build-tools/36.0.0/apksigner verify --print-certs \
-    app/build/outputs/apk/release/app-release.apk    # 应显示 4.1 keytool 生成密钥时填写的 CN/O
-adb install -r app/build/outputs/apk/release/app-release.apk
+    app/build/dist/HearWrite-0.3.0.apk    # 应显示 4.1 keytool 生成密钥时填写的 CN/O
+adb install -r app/build/dist/HearWrite-0.3.0.apk
 ```
 
 注意：debug 与 release 包同证书（见 4.2），`adb install -r` 可直接互相覆盖；仅当设备上的旧包由**别的证书**签出（如换过 keystore）时才需要 `adb uninstall org.yangtse.hearwrite`——卸载会清空 Room/DataStore 数据（错词本、历史、草稿）。
@@ -142,7 +147,7 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 3. 在 `CHANGELOG.md` 追加本版中文小节（`## [x.y.z]` 与 tag 对应）——仓库走 direct-to-main、无 PR，GitHub 自动 notes 只剩空 compare 链接，Release 正文靠此小节生成，缺失则 workflow hard fail。
 4. `./gradlew :app:assembleRelease` → `apksigner verify` 确认签名。
 5. 真机安装冒烟：导入词表 → 完整听写一轮 → 复习错词；切换深色主题检查无违和。
-6. 归档 APK + `mapping.txt`，提交版本号改动，打 tag。
+6. `packageVersionedRelease` 产物（`HearWrite-<versionName>.apk` + `HearWrite-<versionName>-mapping.txt`）归档，提交版本号改动，打 tag。
 
 ## 5. 开发约定
 

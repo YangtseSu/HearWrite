@@ -17,7 +17,7 @@
 
 ## 下载安装
 
-- 从 GitHub [Releases](https://github.com/YangtseSu/HearWrite/releases) 下载 `app-release.apk` 安装（需允许安装未知来源应用）。
+- 从 GitHub [Releases](https://github.com/YangtseSu/HearWrite/releases) 下载 `HearWrite-<版本号>.apk`（如 `HearWrite-0.3.0.apk`）安装（需允许安装未知来源应用）。
 - 也可以自行构建，见下「从源码构建」。
 
 要求 Android 16（API 36）及以上。
