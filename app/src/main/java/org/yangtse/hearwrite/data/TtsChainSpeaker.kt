@@ -65,7 +65,13 @@ class TtsChainSpeaker(
     @Volatile
     private var interrupted = false
 
-    /** The clip playback currently holding the audio (settled by [stop]). */
+    /**
+     * The clip playback currently holding the audio (settled by [stop]).
+     * Written on the playback coroutine and read from [stop] on any thread —
+     * engine calls can come from Main, the MediaPlayer callbacks from the
+     * player thread — so the reference must be @Volatile (review hardening).
+     */
+    @Volatile
     private var activeClip: ActiveClip? = null
 
     fun setSource(value: TtsSource) {
