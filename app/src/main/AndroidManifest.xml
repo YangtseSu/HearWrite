@@ -6,9 +6,17 @@
     <!-- Wrong-word mark vibration (alice haptics parity). -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- 拍照识词 camera capture resolves the system camera app explicitly
-         (package-visibility filtering on targetSdk 37). -->
+    <!-- System voice (TextToSpeech): targetSdk 30+ package-visibility
+         filtering hides every TTS engine without this query — onInit then
+         reports ERROR even when an engine is installed and enabled
+         (Xiaomi/HyperOS reproduced 2026-09: init failed (-1) with Google
+         TTS installed and default). -->
     <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <!-- 拍照识词 camera capture resolves the system camera app
+             explicitly (package-visibility filtering on targetSdk 37). -->
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE" />
         </intent>

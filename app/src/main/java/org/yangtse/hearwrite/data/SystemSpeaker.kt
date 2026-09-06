@@ -1,6 +1,7 @@
 package org.yangtse.hearwrite.data
 
 import android.content.Context
+import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
@@ -11,6 +12,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import org.yangtse.hearwrite.domain.DEFAULT_SPEECH_RATE
 import org.yangtse.hearwrite.domain.MAX_SPEECH_RATE
 import org.yangtse.hearwrite.domain.MIN_SPEECH_RATE
@@ -29,7 +31,8 @@ import kotlin.coroutines.resume
  * Contract details that must not regress:
  * - Async init (`onInit`) is wrapped in a suspension resumed from the init
  *   callback; the first [speak] waits for it. Init failure is reported as
- *   `false`, never thrown.
+ *   `false`, never thrown, and retried after a short cooldown on a later
+ *   [speak] (an engine installed or enabled mid-session must recover).
  * - `UtteranceProgressListener` releases the pending continuation from both
  *   `onDone` and `onError` (missing onError = permanent hang).
  * - A watchdog (`max(4000, text.length * 250)` ms, same as upstream) releases
@@ -51,8 +54,10 @@ class SystemSpeaker(context: Context) : Speaker {
 
     private val lock = Any()
     private var engine: TextToSpeech? = null
-    private var initStarted = false
-    private val initResult = CompletableDeferred<Boolean>()
+
+    /** Elapsed-realtime ms of the last failed init; 0 = never failed. */
+    private var initFailedAt = 0L
+
     private val initMutex = kotlinx.coroutines.sync.Mutex()
     private val utteranceCounter = AtomicLong(0)
 
@@ -62,37 +67,70 @@ class SystemSpeaker(context: Context) : Speaker {
     }
 
     /**
-     * Wait for the shared engine, creating it once. A failed init stays
-     * failed for the process (the chain falls back / reports false).
+     * Wait for the shared engine, creating it when needed. A failed init is
+     * retried on a later call after a short cooldown (an engine installed or
+     * enabled while the app runs must recover without a process restart —
+     * first Google TTS install on a Xiaomi reproduced 2026-09); a bound
+     * engine that never reports init is recreated only when the bind itself
+     * failed. The wait is bounded by a watchdog so playback never blocks on a
+     * hung framework bind; the engine is created on the main thread as the
+     * framework requires.
      */
     private suspend fun ensureEngine(): TextToSpeech? {
         var current = synchronized(lock) { engine }
         if (current == null) {
-            initMutex.withLock {
-                current = synchronized(lock) { engine }
-                if (current == null) {
-                    synchronized(lock) {
-                        if (!initStarted) {
-                            initStarted = true
-                            var holder: TextToSpeech? = null
-                            holder = TextToSpeech(appContext) { status ->
-                                val ok = status == TextToSpeech.SUCCESS
-                                Log.i(TAG, "init ${if (ok) "ok" else "failed ($status)"}")
-                                if (ok) {
-                                    synchronized(lock) { engine = holder }
-                                }
-                                initResult.complete(ok)
-                            }
-                        }
+            val failedRecently = synchronized(lock) {
+                initFailedAt != 0L &&
+                    SystemClock.elapsedRealtime() - initFailedAt < INIT_RETRY_COOLDOWN_MS
+            }
+            if (!failedRecently) {
+                initMutex.withLock {
+                    current = synchronized(lock) { engine }
+                    if (current == null) {
+                        current = tryInit()
                     }
                 }
             }
-            // Suspend until onInit fires (success or failure) — the init
-            // callback is the only thing that completes this.
-            initResult.await()
-            current = synchronized(lock) { engine }
         }
         return current
+    }
+
+    /**
+     * One init attempt: create the engine (framework requires the calling
+     * thread — [speak] runs on main) and wait for `onInit`. Returns the
+     * engine on success. On failure or a watchdog timeout the instance is
+     * shut down and the failure timestamp recorded so the retry cooldown in
+     * [ensureEngine] applies. Each attempt carries its own deferred — a late
+     * `onInit` from an abandoned attempt can never resume a newer attempt's
+     * wait (a shared continuation made a stale callback double-resume).
+     */
+    private suspend fun tryInit(): TextToSpeech? {
+        var holder: TextToSpeech? = null
+        val attempt = CompletableDeferred<Boolean>()
+        holder = TextToSpeech(appContext) { status ->
+            val ok = status == TextToSpeech.SUCCESS
+            Log.i(TAG, "init ${if (ok) "ok" else "failed ($status)"}")
+            if (ok) {
+                synchronized(lock) { engine = holder }
+            }
+            attempt.complete(ok)
+        }
+        val ok = withTimeoutOrNull(INIT_WATCHDOG_MS) { attempt.await() } ?: run {
+            // onInit never fired (hung bind) — playback must not block.
+            Log.w(TAG, "init timed out")
+            false
+        }
+        if (!ok) {
+            synchronized(lock) {
+                if (engine !== holder) {
+                    initFailedAt = SystemClock.elapsedRealtime()
+                    holder?.shutdown()
+                }
+                // else: a late SUCCESS onInit already claimed this instance
+                // right after the timeout — keep the live engine.
+            }
+        }
+        return synchronized(lock) { engine }
     }
 
     override suspend fun speak(text: String, lang: String): Boolean = try {
@@ -213,5 +251,13 @@ class SystemSpeaker(context: Context) : Speaker {
 
     companion object {
         private const val TAG = "SystemSpeaker"
+
+        /** Wait for onInit at most this long; a hung bind then releases the
+         *  instance and the next call retries. */
+        private const val INIT_WATCHDOG_MS = 10_000L
+
+        /** Minimum gap between init attempts after a failure — avoids a
+         *  tight retry loop when no engine is available. */
+        private const val INIT_RETRY_COOLDOWN_MS = 2_000L
     }
 }
