@@ -72,9 +72,12 @@ you're = you are         ← 只朗读左侧
 - 震动：标记错词时的震动反馈。
 - 拍照识词**不申请相机权限**：拍摄走系统相机，选图走系统相册选择器。
 
-## 数据来源
+## 鸣谢
 
-内置词表来自教材整理；英汉释义基于 [ECDICT](https://github.com/skywind3000/ECDICT)（MIT）；组词数据由《现代汉语常用词表（草案）》频率表生成；提示音与完成音效为自行合成。各资产格式与来源细节见 [`AGENTS.md`](AGENTS.md) 的 Data Assets 一节。
+- [vvenv/alice](https://github.com/vvenv/alice)
+- [rany2/edge-tts](https://github.com/rany2/edge-tts)
+- [skywind3000/ECDICT](https://github.com/skywind3000/ECDICT)
+- [liangqi/chinese-frequency-word-list](https://github.com/liangqi/chinese-frequency-word-list)
 
 ## 相关文档
 
