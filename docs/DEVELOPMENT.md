@@ -4,7 +4,7 @@
 
 ## 1. 环境搭建（新机器）
 
-工具链相关的一切（Gradle 9.7.1 wrapper、AGP 9.3.0、Kotlin 2.4.10、Compose BOM 2026.08.00）都已锁定在仓库内；只有三样东西是机器本地的：**JDK 21**、**Android SDK** 和 GitHub 认证。
+工具链相关的一切（Gradle 9.7.1 wrapper、AGP 9.3.2、Kotlin 2.4.10、Compose BOM 2026.08.00）都已锁定在仓库内；只有三样东西是机器本地的：**JDK 21**、**Android SDK** 和 GitHub 认证。
 
 ### 1.1 克隆仓库
 

@@ -19,7 +19,7 @@ This is a **from-scratch Kotlin + Jetpack Compose app** for Chinese dictation tr
 | --- | --- | --- |
 | JDK | 21+ (JDK 26 installed; daemon pinned to 21 via user-level `~/.gradle/gradle.properties`, never committed) | toolchain language level 21 |
 | Gradle | 9.7.1 (wrapper) | machine has Gradle 9.7.1 installed |
-| AGP | 9.3.0 | max API 37, needs Gradle ≥ 9.5.0 |
+| AGP | 9.3.2 | max API 37, needs Gradle ≥ 9.5.0 |
 | Kotlin | 2.4.10 | Compose compiler via `org.jetbrains.kotlin.plugin.compose` |
 | Compose BOM | 2026.08.00 | Material 3 |
 
