@@ -37,7 +37,7 @@ android {
 
     defaultConfig {
         applicationId = "org.yangtse.hearwrite"
-        minSdk = 36
+        minSdk = 33
         targetSdk = 37
         // Version scheme: versionName = MAJOR.MINOR.PATCH (semver; 0.x.y while
         // pre-release). versionCode = a monotonic integer, +1 per signed
