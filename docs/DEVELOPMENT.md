@@ -155,3 +155,13 @@ adb install -r app/build/dist/HearWrite-0.3.0.apk
 - 一次提交只做一件事（`feat:`/`fix:`/`docs:`/`data:`/`chore:`/`test:`），每个提交都必须可编译。
 - AGP 9 使用**内置 Kotlin**——不要应用 `org.jetbrains.kotlin.android`；Kotlin 版本通过 Compose 编译器插件（`org.jetbrains.kotlin.plugin.compose`）锁定，KSP 需 ≥ 2.3.6。
 - `data/` 资源只读；其余约定（架构分层、依赖清单、测试范围）以 `AGENTS.md` 为准。
+
+## 6. BYOK API Key 的加密存储（Android Keystore）
+
+TTS / OCR 服务商密钥写入 DataStore 前经 `data/KeystoreCipher.kt` 用 **Android Keystore** 里的 AES-256-GCM 密钥加密（密文格式 `v1.<iv-b64>.<ct-b64>`，每次加密随机 IV，128 位认证标签）。密钥材料在 Keystore 芯片内生成、永不导出；读取时解密。要点：
+
+- **旧数据兼容**：0.3.2 之前明文存储的 key 不是 `v1.` 形状 → 原样透传照常工作，下次「保存并启用」时自动转为密文。
+- **Keystore 失效**（恢复/迁移后 DataStore 幸存而 keystore 条目丢失、锁屏凭据变更等）：无法解密的密文解析为 `""` → 配置显示为空、重新输入即可，绝不发送乱码密钥。
+- **JVM 单测**：Android Keystore 在 JVM 上不存在，测试用内存 AES-GCM 假实现走 `SecretCipher` 接缝（`ProviderConfigSealTest`）验证封印/解封/明文透传契约。
+- **数据备份排除**：`data_extraction_rules.xml` 已排除 `datastore/` 与数据库，密钥密文不随云备份/设备迁移外流（README「所有数据只保存在本机」）。
+- 加密是尽力而为的静态防护：Keystore 由系统锁屏凭据保护，`adb backup`/root 读取 DataStore 只能拿到密文；应用进程内运行时仍需明文密钥发请求。
