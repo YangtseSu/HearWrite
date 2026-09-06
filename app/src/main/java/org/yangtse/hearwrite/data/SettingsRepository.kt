@@ -22,8 +22,17 @@ private val Context.settingsDataStore by preferencesDataStore(name = "settings")
  * DataStore-backed playback settings + the word-input draft (AGENTS.md
  * Persistence). One preferences file, typed accessors, defaults from the
  * domain constants. Built-in library content is never persisted here.
+ *
+ * BYOK provider API keys are sealed at rest with [KeystoreCipher]
+ * (AES-256-GCM, Android Keystore) before the config maps are written, and
+ * decrypted when the maps are read back; keys stored in the clear by
+ * releases before 0.3.2 are recognized and passed through untouched (they
+ * get sealed on the next save). See `KeystoreCipher` for the threat model.
  */
-class SettingsRepository(private val context: Context) {
+class SettingsRepository(
+    private val context: Context,
+    private val secretCipher: SecretCipher,
+) {
 
     private val dataStore get() = context.applicationContext.settingsDataStore
 
@@ -102,7 +111,7 @@ class SettingsRepository(private val context: Context) {
         dataStore.edit {
             it.remove(KEY_OCR_PROVIDER_CONFIG) // legacy single blob
             val map = it[KEY_OCR_PROVIDER_CONFIGS]?.let(::decodeOcrConfigMap).orEmpty()
-            it[KEY_OCR_PROVIDER_CONFIGS] = encodeOcrConfigMap(map + (presetId to cfg))
+            it[KEY_OCR_PROVIDER_CONFIGS] = encodeOcrConfigMap(map + (presetId to cfg.sealWith(secretCipher)))
             it[KEY_OCR_ACTIVE_PRESET] = presetId
         }
     }
@@ -138,7 +147,7 @@ class SettingsRepository(private val context: Context) {
         dataStore.edit {
             it.remove(KEY_TTS_PROVIDER_CONFIG) // legacy single blob
             val map = it[KEY_TTS_PROVIDER_CONFIGS]?.let(::decodeTtsConfigMap).orEmpty()
-            it[KEY_TTS_PROVIDER_CONFIGS] = encodeTtsConfigMap(map + (presetId to cfg))
+            it[KEY_TTS_PROVIDER_CONFIGS] = encodeTtsConfigMap(map + (presetId to cfg.sealWith(secretCipher)))
             it[KEY_TTS_ACTIVE_PRESET] = presetId
         }
     }
@@ -224,9 +233,10 @@ class SettingsRepository(private val context: Context) {
         prefs: Preferences,
     ): Pair<Map<String, OcrProviderConfig>, String> {
         val legacy = prefs[KEY_OCR_PROVIDER_CONFIG]?.let(::decodeOcrConfig)
-        val map = prefs[KEY_OCR_PROVIDER_CONFIGS]?.let(::decodeOcrConfigMap)
+        val decoded = prefs[KEY_OCR_PROVIDER_CONFIGS]?.let(::decodeOcrConfigMap)
             ?: legacy?.let { mapOf(legacyOcrPresetId(it) to it) }
             ?: emptyMap()
+        val map = decoded.mapValues { (_, cfg) -> cfg.revealWith(secretCipher) }
         val activeId = prefs[KEY_OCR_ACTIVE_PRESET]?.takeIf { it.isNotBlank() }
             ?: legacy?.let(::legacyOcrPresetId).orEmpty()
         return map to activeId
@@ -236,13 +246,22 @@ class SettingsRepository(private val context: Context) {
         prefs: Preferences,
     ): Pair<Map<String, TtsProviderConfig>, String> {
         val legacy = prefs[KEY_TTS_PROVIDER_CONFIG]?.let(::decodeTtsProviderConfig)
-        val map = prefs[KEY_TTS_PROVIDER_CONFIGS]?.let(::decodeTtsConfigMap)
+        val decoded = prefs[KEY_TTS_PROVIDER_CONFIGS]?.let(::decodeTtsConfigMap)
             ?: legacy?.let { mapOf(legacyTtsPresetId(it) to it) }
             ?: emptyMap()
+        val map = decoded.mapValues { (_, cfg) -> cfg.revealWith(secretCipher) }
         val activeId = prefs[KEY_TTS_ACTIVE_PRESET]?.takeIf { it.isNotBlank() }
             ?: legacy?.let(::legacyTtsPresetId).orEmpty()
         return map to activeId
     }
+
+    // ---- BYOK key sealing ------------------------------------------------
+    //
+    // apiKey is sealed with [secretCipher] before the config maps are
+    // encoded for DataStore and revealed after decoding. The seal/reveal
+    // helpers (`sealWith`/`revealWith` in `KeystoreCipher.kt`) keep
+    // already-sealed values and legacy plaintext intact across round-trips;
+    // the map codecs themselves stay secret-free and unit-testable.
 
     private companion object {
         val KEY_DRAFT = stringPreferencesKey("word_input_draft")

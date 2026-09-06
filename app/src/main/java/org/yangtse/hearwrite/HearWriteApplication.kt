@@ -13,6 +13,7 @@ import org.yangtse.hearwrite.data.EdgeTts
 import org.yangtse.hearwrite.data.FavoritesRepository
 import org.yangtse.hearwrite.data.HearWriteDatabase
 import org.yangtse.hearwrite.data.HistoryRepository
+import org.yangtse.hearwrite.data.KeystoreCipher
 import org.yangtse.hearwrite.data.OcrService
 import org.yangtse.hearwrite.data.OpenAiCompatibleTts
 import org.yangtse.hearwrite.data.SettingsRepository
@@ -48,7 +49,17 @@ class HearWriteApplication : Application() {
 
     val libraryRepository: BuiltinLibraryRepository by lazy { BuiltinLibraryRepository(assets) }
 
-    val settingsRepository: SettingsRepository by lazy { SettingsRepository(this) }
+    /**
+     * AES-256-GCM secret sealing for the persisted BYOK provider keys
+     * (Android Keystore; key never leaves the chip). First touch generates
+     * the keystore entry — off the startup path, when a config is read or
+     * saved.
+     */
+    val secretCipher: KeystoreCipher by lazy { KeystoreCipher() }
+
+    val settingsRepository: SettingsRepository by lazy {
+        SettingsRepository(this, secretCipher)
+    }
 
     /** System TTS engine; created lazily on the first utterance. */
     val systemSpeaker: SystemSpeaker by lazy { SystemSpeaker(this) }
