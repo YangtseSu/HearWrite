@@ -7,7 +7,7 @@
 - **English** (英文): word → (optional spoken Chinese meaning) → word, twice per word.
 - **Chinese** (汉字): 生字 → 组词 → 生字 (`"月" → "月，月亮的月"`), the standard classroom dictation call.
 
-This is a **from-scratch Kotlin + Jetpack Compose app** for Chinese dictation training. The author's earlier Expo/React Native app **alice** (MIT; original upstream author vvenv) is **superseded and frozen**: nothing in this repo reads, builds against, or consults the alice project, and **this file is the sole behavioral contract**. This is **not** a port or line-by-line translation: idiomatic Kotlin/Compose; predecessor behavior is reflected here **only where this file specifies it**. Data asset provenance and licenses are noted in *Data Assets*.
+This is a **from-scratch Kotlin + Jetpack Compose app** for Chinese dictation training. **[alice](https://github.com/vvenv/alice)** is a third-party Expo/React Native dictation app (MIT, original author vvenv) the author has forked and contributed to (github.com/YangtseSu/alice); it serves as the **behavioral reference only** — nothing in this repo reads, builds against, or consults the alice code, and **this file is the sole behavioral contract**. This is **not** a port or line-by-line translation: idiomatic Kotlin/Compose; predecessor behavior is reflected here **only where this file specifies it**. Data asset provena...
 
 **Non-goals (do not build):** iOS / Web / desktop; backend server; the paid-features stack of the original (Credits, Recharge, model tiers — **excluded entirely**); Expo/RN code reuse. Platform targets: `minSdk 36`, `targetSdk 37`, `compileSdk 37`. All user-facing UI strings are hardcoded Chinese.
 
@@ -131,7 +131,7 @@ UI: countdown ring (last-second tick; `clearAndSetSemantics` announcing remainin
 | --- | --- | --- |
 | `app/src/main/assets/<category>/<label>.txt` | word lines, see *Word-line format* | Original alice word lists (user's own extraction from textbooks) |
 | `app/src/main/assets/dict/ecdict-meta.json` | flat `{word: "pos.|gloss"}` (senses `；`-split) | Regenerable via `scripts/build-ecdict-meta.py` from [ECDICT](https://github.com/skywind3000/ECDICT) (MIT) csv (auto-downloaded to `.cache/` on first run). Offline EN→ZH lookup: POS, senses, exam tags |
-| `app/src/main/assets/compounds/compounds.json` | `{compounds: {char: [[word, syllable], …]}, learned: {…}}`; syllable = tone digits, `ü=v`, neutral unmarked | Regenerated in-repo by `scripts/generate-compounds.py` from the frequency table + 人教版小学语文 lists (ported from the author's RN-predecessor generator). 4724 + 524 char keys |
+| `app/src/main/assets/compounds/compounds.json` | `{compounds: {char: [[word, syllable], …]}, learned: {…}}`; syllable = tone digits, `ü=v`, neutral unmarked | Regenerated in-repo by `scripts/generate-compounds.py` from the frequency table + 人教版小学语文 lists (generator semantics follow the alice fork's script). 4724 + 524 char keys |
 | `scripts/data/xiandaihanyuchangyongcibiao.txt` | `word\tpinyin\tlevel` | 《现代汉语常用词表（草案）》(教育部, 商务印书馆 2008), 56008 words — downloaded from [`liangqi/chinese-frequency-word-list`](https://github.com/liangqi/chinese-frequency-word-list) (file `xiandaihaiyuchangyongcibiao.txt`, renamed to fix the pinyin typo); regeneration source for `scripts/generate-compounds.py`, never shipped |
 | `app/src/main/assets/audio/tick.wav`, `chime.wav` | countdown tick (last second, vol 0.5), session-finish chime (vol 0.6) | Synthesized in-house |
 
