@@ -116,6 +116,19 @@ class SettingsRepository(
         }
     }
 
+    /** True when the key just stored under [presetId] is sealed ciphertext,
+     *  false when it degraded to plaintext (keystore unavailable/failed —
+     *  best-effort at-rest protection; see `KeystoreCipher`). Call after
+     *  [setOcrProviderConfig] so the UI can warn the user. */
+    suspend fun ocrKeySealed(presetId: String): Boolean =
+        storedOcrCiphertext(presetId) != null
+
+    private suspend fun storedOcrCiphertext(presetId: String): String? =
+        dataStore.data.first()[KEY_OCR_PROVIDER_CONFIGS]
+            ?.let(::decodeOcrConfigMap)
+            ?.get(presetId)?.apiKey
+            ?.takeIf { secretCipher.isSealed(it) }
+
     /** Drop one preset's stored OCR config (explicit 清除配置; others survive). */
     suspend fun clearOcrProviderConfig(presetId: String) {
         dataStore.edit {
@@ -151,6 +164,19 @@ class SettingsRepository(
             it[KEY_TTS_ACTIVE_PRESET] = presetId
         }
     }
+
+    /** True when the key just stored under [presetId] is sealed ciphertext,
+     *  false when it degraded to plaintext (keystore unavailable/failed —
+     *  best-effort at-rest protection; see `KeystoreCipher`). Call after
+     *  [setTtsProviderConfig] so the UI can warn the user. */
+    suspend fun ttsKeySealed(presetId: String): Boolean =
+        storedTtsCiphertext(presetId) != null
+
+    private suspend fun storedTtsCiphertext(presetId: String): String? =
+        dataStore.data.first()[KEY_TTS_PROVIDER_CONFIGS]
+            ?.let(::decodeTtsConfigMap)
+            ?.get(presetId)?.apiKey
+            ?.takeIf { secretCipher.isSealed(it) }
 
     /** Drop one preset's stored TTS config (explicit 清除配置; others survive). */
     suspend fun clearTtsProviderConfig(presetId: String) {

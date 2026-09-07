@@ -373,6 +373,21 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _ttsCacheCleared = MutableStateFlow(0)
     val ttsCacheCleared: StateFlow<Int> = _ttsCacheCleared.asStateFlow()
 
+    /** Consumed-and-cleared once when the 发音来源 page returns to the hub. */
+    private val _providerKeyWarning = MutableStateFlow<String?>(null)
+    val providerKeyWarning: StateFlow<String?> = _providerKeyWarning.asStateFlow()
+
+    /**
+     * After a 保存并启用 round-trip, emit a one-shot message when the saved
+     * key was NOT sealed (keystore failed/absent — stored plaintext). The
+     * keystore itself re-reads the just-written value, so the message rides
+     * out of the save flow instead of being derived from an in-memory
+     * mirror.
+     */
+    private fun emitSaveWarningIfUnsealed(sealed: Boolean, plaintextMessage: String) {
+        _providerKeyWarning.value = if (sealed) null else plaintextMessage
+    }
+
     init {
         viewModelScope.launch { _speechRate.value = settings.speechRate.first() }
         viewModelScope.launch { _readTranslation.value = settings.readTranslation.first() }
@@ -545,6 +560,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 _ttsStored.value = _ttsStored.value + (presetId to cfg)
                 _ttsSource.value = TtsSource.CUSTOM
                 settings.setTtsSource(TtsSource.CUSTOM)
+                emitSaveWarningIfUnsealed(
+                    sealed = settings.ttsKeySealed(presetId),
+                    plaintextMessage = TTS_KEY_UNSEALED_MESSAGE,
+                )
                 // The key is stored — drop it from the form so the saved secret
                 // never stays on screen in full (masked hint takes over).
                 _ttsForm.value = _ttsForm.value.copy(
@@ -737,6 +756,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 settings.setOcrProviderConfig(presetId, cfg)
                 // Mirror optimistically (same reason as the TTS save path).
                 _ocrStored.value = _ocrStored.value + (presetId to cfg)
+                emitSaveWarningIfUnsealed(
+                    sealed = settings.ocrKeySealed(presetId),
+                    plaintextMessage = OCR_KEY_UNSEALED_MESSAGE,
+                )
                 // The key is stored — drop it from the form so the saved secret
                 // never stays on screen in full (masked hint takes over).
                 _ocrForm.value = _ocrForm.value.copy(
@@ -813,4 +836,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             model = form.model.trim(),
         )
     }.takeIf { it.isComplete }
+
+    /** Consume a pending unsealed-key warning (page shows it once). */
+    fun clearProviderKeyWarning() {
+        _providerKeyWarning.value = null
+    }
+
+    companion object {
+        /** Saved plaintext (keystore seal failed) — surfaced by the hub as a toast. */
+        const val TTS_KEY_UNSEALED_MESSAGE =
+            "发音配置已保存，但密钥未能加密保存（本机安全存储不可用），Key 将以明文保存在本机"
+        const val OCR_KEY_UNSEALED_MESSAGE =
+            "OCR 服务配置已保存，但密钥未能加密保存（本机安全存储不可用），Key 将以明文保存在本机"
+    }
 }

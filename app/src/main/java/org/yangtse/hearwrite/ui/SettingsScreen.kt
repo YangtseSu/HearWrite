@@ -117,11 +117,23 @@ private fun SettingsHub(
     // Edge voices live only on the 发音来源 page (VoiceSourceSettingsPage)
     // when 微软 Edge is selected — never as rows on this hub.
 
+    // One-shot warning from a provider 保存并启用 whose key could not be
+    // sealed (stored plaintext): shown when the sub-page pops back to the
+    // hub, consumed once so a later revisit does not replay it.
+    val providerKeyWarning by viewModel.providerKeyWarning.collectAsStateWithLifecycle()
+
     var showClearCacheDialog by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(cacheCleared) {
         if (cacheCleared > 0) {
             Toast.makeText(context, "已清空发音缓存", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LaunchedEffect(providerKeyWarning) {
+        providerKeyWarning?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearProviderKeyWarning()
         }
     }
 

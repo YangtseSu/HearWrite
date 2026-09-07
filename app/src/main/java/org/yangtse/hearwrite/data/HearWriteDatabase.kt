@@ -100,7 +100,11 @@ interface FavoritesDao {
 @androidx.room.Database(
     entities = [WrongWordEntity::class, HistoryEntity::class, FavoriteEntity::class],
     version = 1,
-    exportSchema = false,
+    // Schema JSON is exported to app/schemas (ksp arg in app/build.gradle.kts)
+    // and committed — the v1 baseline future migrations diff against. When a
+    // later version changes entities, bump `version` and add an
+    // AutoMigration/fallback migration; never change entities silently.
+    exportSchema = true,
 )
 abstract class HearWriteDatabase : androidx.room.RoomDatabase() {
     abstract fun wrongWordsDao(): WrongWordsDao

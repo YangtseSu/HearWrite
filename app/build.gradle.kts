@@ -83,6 +83,14 @@ android {
 
 }
 
+// Room schema export: checked-in baseline so future entity migrations
+// diff against a real v1 schema instead of being invented retroactively
+// (AGENTS.md Persistence). Schema JSON lands in app/schemas/ and must be
+// committed with the entity change that produced it.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 // Versioned release artifacts for distribution/archiving (DEVELOPMENT.md §4):
 // the signed APK and its R8 mapping get convention-named copies
 // (HearWrite-<versionName>.apk / HearWrite-<versionName>-mapping.txt) while AGP's

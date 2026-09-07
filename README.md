@@ -26,7 +26,7 @@
 - 从 GitHub [Releases](https://github.com/YangtseSu/HearWrite/releases) 下载 `HearWrite-<版本号>.apk`（如 `HearWrite-0.3.0.apk`）安装（需允许安装未知来源应用）。
 - 也可以自行构建，见下「从源码构建」。
 
-要求 Android 13（API 33）及以上。
+要求 Android 13（API 33）及以上：覆盖面与维护成本的平衡点——覆盖 2022 年后绝大多数在售设备，同时让新依赖与 API 不被旧版本拖累（应用无需系统升级即持续保持最新特性）。
 
 ### 从源码构建
 
@@ -70,7 +70,7 @@ you're = you are         ← 只朗读左侧
 | 清空发音缓存 | 删除已下载的发音文件，之后需要时自动重新下载 |
 | 拍照识词 | 识别服务：OpenAI 兼容视觉接口，需自备 API Key；默认预设智谱 `glm-4v-flash`（免费），另有 OpenCode Zen、Vercel、Command Code、OpenRouter 预设，或自定义任意接口（本机回环接口亦可，如 Ollama 需 `adb reverse tcp:11434`） |
 
-**API Key 只保存在本机**（应用私有存储），仅用于向对应服务商发请求；本应用没有后端服务器，不上传任何词表或听写记录。AI 识图可能存在误差，请核对识别结果。
+**API Key 只保存在本机**（应用私有存储，经 Android Keystore 加密后写入；个别设备缺少安全存储硬件时会提示并以明文降级保存），仅用于向对应服务商发请求；本应用没有后端服务器，不上传任何词表或听写记录。AI 识图可能存在误差，请核对识别结果。
 
 ## 权限说明
 

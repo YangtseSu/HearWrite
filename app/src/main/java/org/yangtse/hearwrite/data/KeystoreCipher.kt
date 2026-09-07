@@ -2,6 +2,7 @@ package org.yangtse.hearwrite.data
 
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.security.keystore.StrongBoxUnavailableException
 import android.util.Base64
 import android.util.Log
 import java.security.KeyStore
@@ -125,6 +126,21 @@ class KeystoreCipher : SecretCipher {
     /** The keystore key, generating it on first use (or after a keystore wipe). */
     private fun key(): SecretKey {
         (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        // StrongBox is not on every device. Best-effort: ask for the
+        // secure-element-backed key first — but the ask is only validated at
+        // generateKey() time, where a device without StrongBox throws
+        // StrongBoxUnavailableException. Retry without StrongBox rather than
+        // degrading to plaintext storage (the encrypt() catch-all would
+        // otherwise silently persist the just-typed key in the clear).
+        try {
+            return generateKey(strongBox = true)
+        } catch (e: StrongBoxUnavailableException) {
+            Log.w(TAG, "StrongBox unavailable; generating a non-StrongBox key", e)
+            return generateKey(strongBox = false)
+        }
+    }
+
+    private fun generateKey(strongBox: Boolean): SecretKey {
         val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE_PROVIDER)
         val spec = KeyGenParameterSpec.Builder(
             KEY_ALIAS,
@@ -133,14 +149,7 @@ class KeystoreCipher : SecretCipher {
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
-            .apply {
-                // StrongBox is not on every device; best-effort only.
-                try {
-                    setIsStrongBoxBacked(true)
-                } catch (e: Exception) {
-                    // No StrongBox hardware; proceed without it.
-                }
-            }
+            .setIsStrongBoxBacked(strongBox)
             .build()
         generator.init(spec)
         memo.clear() // keystore generation changed: prior memo entries are stale
