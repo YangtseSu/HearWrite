@@ -167,6 +167,18 @@ No emulator is guaranteed — verify on a connected device or emulator via `adb`
 - **Errors**: user-facing failures become Chinese message strings; network/audio layers never throw into UI — they degrade (TTS chain, OCR retry).
 - **Commit discipline**: one thing per commit (`feat: …`, `fix: …`, `docs: …`, `data: …`, `chore: …`); **every commit must compile**. Verification evidence (device demo, measurements) goes in the commit message body. Before tagging a release, append a user-facing Chinese section to `CHANGELOG.md` (`## [x.y.z]` matching the tag) — the release workflow builds the GitHub Release body from it and fails without it.
 
+### AI attribution emoji (vibe commits)
+
+When a commit's changes are **primarily AI-generated**, append ` 🤖` (leading space, after the last word) to the **commit subject line**:
+
+```
+fix: correct Edge voice clip cache key on voice switch 🤖
+```
+
+- **Conditional**: human-authored commits carry no 🤖. Mixed commits — the normal agent-driven case — count as AI-generated.
+- The emoji lives in the subject only; the body stays plain. Conventional-commit prefixes (`feat:` `fix:` `docs:` `data:` `chore:`) are unchanged and the emoji trails them.
+- It marks AI-generated work generically — no model name in the commit (the model can change per session; the release workflow and CHANGELOG parse plain subjects, keep the suffix out of their way).
+
 ## Testing & QA
 
 - Unit tests (JUnit4 + `kotlinx-coroutines-test`) cover the `domain/` behavioral contract — line parsing (1/3 columns, fullwidth pipe, `you're = you are`), POS normalization, CJK detection, `cjkWordSpeech` (tier order, polyphone filtering with the `朝|zhāo → 朝阳` case, learned-first), `speakableMeaning` (POS strip + sense split + width cap), `compareLabels` ordering (against the `library-label-order.json` parity fixture), and the `DictationEngine` — plus the `data/` pure logic: Youdao URL/cache-file forms, TTS/OCR provider-config codecs and wire bodies (clip hash, `speech`/`chat` bodies), OCR reply extractors and fence stripping. Engine tests use a fake `Speaker` and `runTest` virtual time: phase order, no-retry on speak failure, cancel leaves no stray speaks, auto-next hold, generation races, and ★ live interval change verified via `advanceTimeBy`.
