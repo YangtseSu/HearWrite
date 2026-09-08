@@ -20,6 +20,10 @@ import org.yangtse.hearwrite.data.OcrProviderConfig
 import org.yangtse.hearwrite.data.OcrProviderPreset
 import org.yangtse.hearwrite.data.TTS_PROVIDER_PRESETS
 import org.yangtse.hearwrite.data.TtsApiKind
+import org.yangtse.hearwrite.data.SYSTEM_EN_REGION_GB
+import org.yangtse.hearwrite.data.SYSTEM_EN_REGION_US
+import org.yangtse.hearwrite.data.SystemVoiceInfo
+import org.yangtse.hearwrite.data.systemEnRegionOf
 import org.yangtse.hearwrite.data.TtsProviderConfig
 import org.yangtse.hearwrite.data.TtsProviderException
 import org.yangtse.hearwrite.data.TtsProviderPreset
@@ -187,6 +191,34 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _edgePreviewState = MutableStateFlow<TtsTestState>(TtsTestState.Idle)
     val edgePreviewState: StateFlow<TtsTestState> = _edgePreviewState.asStateFlow()
 
+    // ---- 系统语音 音色 (system TTS source voice picker) -------------------
+
+    /** The 中文默认音色 system voice picker list (null = engine unavailable). */
+    private val _systemVoicesZh = MutableStateFlow<List<SystemVoiceInfo>?>(null)
+    val systemVoicesZh: StateFlow<List<SystemVoiceInfo>?> = _systemVoicesZh.asStateFlow()
+
+    /** The dedicated 英文 voices per region (美式 en-US / 英式 en-GB). */
+    private val _systemEnVoices = MutableStateFlow<Map<String, List<SystemVoiceInfo>>>(emptyMap())
+    val systemEnVoices: StateFlow<Map<String, List<SystemVoiceInfo>>> = _systemEnVoices.asStateFlow()
+
+    /** 英文使用默认音色 (default on): English text uses the 默认音色 voice. */
+    private val _systemUseDefaultEn = MutableStateFlow(true)
+    val systemUseDefaultEn: StateFlow<Boolean> = _systemUseDefaultEn.asStateFlow()
+
+    /** The 英文地区 of the stored dedicated English voice (美式/英式). */
+    private val _systemEnRegion = MutableStateFlow(SYSTEM_EN_REGION_US)
+    val systemEnRegion: StateFlow<String> = _systemEnRegion.asStateFlow()
+
+    /** Loading flag so the page shows a spinner while the engine enumerates. */
+    private val _systemVoicesLoading = MutableStateFlow(false)
+    val systemVoicesLoading: StateFlow<Boolean> = _systemVoicesLoading.asStateFlow()
+
+    /** Selected system voice keys ("" = the engine's locale default). */
+    private val _systemVoiceZh = MutableStateFlow("")
+    val systemVoiceZh: StateFlow<String> = _systemVoiceZh.asStateFlow()
+    private val _systemVoiceEn = MutableStateFlow("")
+    val systemVoiceEn: StateFlow<String> = _systemVoiceEn.asStateFlow()
+
     /**
      * Preview state for the 有道词典 source's 测试并试听 button (plays the
      * word samples through the Youdao → system chain).
@@ -195,8 +227,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val youdaoPreviewState: StateFlow<TtsTestState> = _youdaoPreviewState.asStateFlow()
 
     /**
-     * Preview state for the 系统语音 source's 测试并试听 button (speaks the
-     * samples straight through the system engine).
+     * Preview state for one system voice 试听 button (the 系统语音 source's
+     * per-voice preview; shared by 中文/英文 both languages).
      */
     private val _systemPreviewState = MutableStateFlow<TtsTestState>(TtsTestState.Idle)
     val systemPreviewState: StateFlow<TtsTestState> = _systemPreviewState.asStateFlow()
@@ -214,6 +246,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 _edgeUseDefaultEn.value = useDefault
             }
         }
+        // 系统语音 音色: the default voice, the dedicated English voice and
+        // 英文使用默认音色 live-follow the DataStore settings (Edge parity).
+        viewModelScope.launch { settings.systemVoiceZh.collect { _systemVoiceZh.value = it } }
+        viewModelScope.launch { settings.systemVoiceEn.collect { _systemVoiceEn.value = it } }
+        viewModelScope.launch { settings.systemUseDefaultEn.collect { _systemUseDefaultEn.value = it } }
     }
 
     /**
@@ -263,6 +300,146 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             } catch (e: Exception) {
                 // DataStore failures must never crash the screen (AGENTS.md).
             }
+        }
+    }
+
+    /**
+     * Load the 中文 list and both English region lists (美式/英式). Called
+     * when the 发音来源 page opens so the enumeration happens up front (a
+     * settings visit without any prior dictation would otherwise find the
+     * engine uninitialized); loading is guarded so double navigation cannot
+     * stack two enumerations.
+     */
+    fun loadSystemVoices() {
+        if (_systemVoicesLoading.value) return
+        _systemVoicesLoading.value = true
+        // Engine init must run on the main thread (framework requirement,
+        // same as dictation); the enumeration itself is a synchronous call.
+        viewModelScope.launch {
+            try {
+                _systemVoicesZh.value = speaker.ensureVoiceList("zh-CN")
+                _systemEnVoices.value = mapOf(
+                    SYSTEM_EN_REGION_US to (speaker.ensureEnVoicesForRegion(SYSTEM_EN_REGION_US).orEmpty()),
+                    SYSTEM_EN_REGION_GB to (speaker.ensureEnVoicesForRegion(SYSTEM_EN_REGION_GB).orEmpty()),
+                )
+            } catch (e: Exception) {
+                // Engine failures degrade to the system default voice; the
+                // picker stays empty instead of crashing the page.
+            } finally {
+                _systemVoicesLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Change the 中文 system voice selection and persist it (the raw engine
+     * [Voice.name]; "" restores the engine's locale default). The SystemSpeaker
+     * follows the persisted key live, so the next utterance uses it.
+     */
+    fun onSystemVoiceZhChange(key: String) {
+        _systemVoiceZh.value = key
+        viewModelScope.launch {
+            try {
+                settings.setSystemVoiceZh(key)
+            } catch (e: Exception) {
+                // DataStore failures must never crash the screen (AGENTS.md).
+            }
+        }
+    }
+
+    /** Change the 英文 system voice selection and persist it. */
+    fun onSystemVoiceEnChange(key: String) {
+        _systemVoiceEn.value = key
+        // The chosen voice carries its own region (en-gb-* → 英式).
+        _systemEnRegion.value = systemEnRegionOf(key)
+        viewModelScope.launch {
+            try {
+                settings.setSystemVoiceEn(key)
+            } catch (e: Exception) {
+                // DataStore failures must never crash the screen (AGENTS.md).
+            }
+        }
+    }
+
+    /** Toggle 英文使用默认音色 (系统语音) and persist it. */
+    fun onSystemUseDefaultEnChange(useDefault: Boolean) {
+        _systemUseDefaultEn.value = useDefault
+        viewModelScope.launch {
+            try {
+                settings.setSystemUseDefaultEn(useDefault)
+            } catch (e: Exception) {
+                // DataStore failures must never crash the screen (AGENTS.md).
+            }
+        }
+    }
+
+    /**
+     * Switch the 英文地区 (美式/英式), shown only when 英文使用默认音色 is
+     * off. The current dedicated English voice belongs to the other region,
+     * so switching selects that region's default voice explicitly — a blank
+     * stored value could not remember its region (an en-GB voice blanked
+     * would read back as 美式 and bounce the picker). Voices already carry
+     * the region prefix, so a stored en-GB key keeps working whatever the
+     * chip says.
+     */
+    fun onSystemEnRegionChange(region: String) {
+        if (region == _systemEnRegion.value) return
+        val currentKey = _systemVoiceEn.value
+        val enVoices = _systemEnVoices.value[region].orEmpty()
+        // "" (engine default) belongs to whichever region is selected; an
+        // explicit other-region voice carries its own region and wins.
+        val regionDefault = enVoices.firstOrNull { systemEnRegionOf(it.key) == region }
+        val key = if (currentKey.isBlank() || systemEnRegionOf(currentKey) != region) {
+            regionDefault?.key.orEmpty()
+        } else {
+            currentKey
+        }
+        _systemEnRegion.value = region
+        _systemVoiceEn.value = key
+        viewModelScope.launch {
+            try {
+                settings.setSystemVoiceEn(key)
+            } catch (e: Exception) {
+                // DataStore failures must never crash the screen (AGENTS.md).
+            }
+        }
+    }
+
+    /**
+     * Preview one 中文 system voice (key) with a Chinese sample — the
+     * per-voice 试听 button. Speaks through the live engine with that voice
+     * only ([speaker.previewVoice]); the persisted selection is untouched.
+     */
+    fun previewSystemVoiceZh(key: String) {
+        if (_systemPreviewState.value is TtsTestState.Testing) return
+        _systemPreviewState.value = TtsTestState.Testing
+        viewModelScope.launch {
+            val played = try {
+                speaker.previewVoice(key, "zh-CN", "苹果，一种很常见的水果。")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                false
+            }
+            _systemPreviewState.value =
+                if (played) TtsTestState.Ok else TtsTestState.Failed("系统语音播放失败，请检查系统语音设置")
+        }
+    }
+
+    /** Preview one 英文 system voice (key) with an English sample. */
+    fun previewSystemVoiceEn(key: String) {
+        if (_systemPreviewState.value is TtsTestState.Testing) return
+        _systemPreviewState.value = TtsTestState.Testing
+        viewModelScope.launch {
+            val played = try {
+                speaker.previewVoice(key, "en-US", "Apple, a very common fruit.")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                false
+            }
+            _systemPreviewState.value =
+                if (played) TtsTestState.Ok else TtsTestState.Failed("系统语音播放失败，请检查系统语音设置")
         }
     }
 
@@ -329,34 +506,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 "网络请求失败，请检查网络"
             }
             _youdaoPreviewState.value =
-                if (error == null) TtsTestState.Ok else TtsTestState.Failed(error)
-        }
-    }
-
-    /**
-     * 测试并试听 the 系统语音 source: speak one English + one Chinese sample
-     * straight through the system engine (current 语速 applies).
-     */
-    fun previewSystemVoice() {
-        if (_systemPreviewState.value is TtsTestState.Testing) return
-        _systemPreviewState.value = TtsTestState.Testing
-        // System engine calls stay on the main thread (same as dictation).
-        viewModelScope.launch {
-            val error = try {
-                var played = false
-                for ((sample, lang) in listOf(
-                    "Apple, a very common fruit." to "en-US",
-                    "苹果，一种很常见的水果。" to "zh-CN",
-                )) {
-                    if (speaker.speak(sample, lang)) played = true
-                }
-                if (played) null else "系统语音播放失败，请检查系统语音设置"
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                "系统语音播放失败，请检查系统语音设置"
-            }
-            _systemPreviewState.value =
                 if (error == null) TtsTestState.Ok else TtsTestState.Failed(error)
         }
     }

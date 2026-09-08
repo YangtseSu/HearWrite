@@ -61,8 +61,9 @@ class HearWriteApplication : Application() {
         SettingsRepository(this, secretCipher)
     }
 
-    /** System TTS engine; created lazily on the first utterance. */
-    val systemSpeaker: SystemSpeaker by lazy { SystemSpeaker(this) }
+    /** System TTS engine; created lazily on the first utterance. Follows the
+     *  persisted 系统语音音色 keys live (like the Edge voices). */
+    val systemSpeaker: SystemSpeaker by lazy { SystemSpeaker(this, settingsRepository) }
 
     /**
      * Youdao dict-voice downloads (disk cache + single flight); the phrase

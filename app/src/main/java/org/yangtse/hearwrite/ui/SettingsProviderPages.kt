@@ -32,6 +32,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +55,9 @@ import org.yangtse.hearwrite.data.EDGE_VOICE_EN
 import org.yangtse.hearwrite.data.EDGE_VOICE_EN_GB
 import org.yangtse.hearwrite.data.EdgeVoice
 import org.yangtse.hearwrite.data.MIMO_VOICES
+import org.yangtse.hearwrite.data.SYSTEM_EN_REGION_GB
+import org.yangtse.hearwrite.data.SYSTEM_EN_REGION_US
+import org.yangtse.hearwrite.data.SystemVoiceInfo
 import org.yangtse.hearwrite.data.edgeDefaultEnVoice
 import org.yangtse.hearwrite.data.edgeDefaultVoiceFor
 import org.yangtse.hearwrite.data.edgeEnRegionOf
@@ -89,6 +93,13 @@ fun VoiceSourceSettingsPage(
     val edgeUseDefaultEn by viewModel.edgeUseDefaultEn.collectAsStateWithLifecycle()
     val edgeVoiceEn by viewModel.edgeVoiceEn.collectAsStateWithLifecycle()
     val edgePreviewState by viewModel.edgePreviewState.collectAsStateWithLifecycle()
+    val systemVoicesLoading by viewModel.systemVoicesLoading.collectAsStateWithLifecycle()
+    val systemVoicesZh by viewModel.systemVoicesZh.collectAsStateWithLifecycle()
+    val systemEnVoices by viewModel.systemEnVoices.collectAsStateWithLifecycle()
+    val systemEnRegion by viewModel.systemEnRegion.collectAsStateWithLifecycle()
+    val systemUseDefaultEn by viewModel.systemUseDefaultEn.collectAsStateWithLifecycle()
+    val systemVoiceZh by viewModel.systemVoiceZh.collectAsStateWithLifecycle()
+    val systemVoiceEn by viewModel.systemVoiceEn.collectAsStateWithLifecycle()
     var showTtsKey by remember { mutableStateOf(false) }
     var showClearTtsConfirm by remember { mutableStateOf(false) }
     // A seeded-but-untouched key counts as present (the secret stays stored);
@@ -99,6 +110,13 @@ fun VoiceSourceSettingsPage(
         ttsForm.baseUrl.trim().isNotBlank() && ttsKeyPresent && ttsForm.model.trim().isNotBlank()
 
     val active = ttsActive
+
+    // Enumerate the engine's voices when the 系统语音 section expands (a
+    // settings visit without any prior dictation would otherwise find the
+    // engine uninitialized; nothing binds until the section is opened).
+    LaunchedEffect(ttsSource == TtsSource.SYSTEM) {
+        if (ttsSource == TtsSource.SYSTEM) viewModel.loadSystemVoices()
+    }
 
     SettingsSubPage(title = "发音来源", onBack = onBack) {
         SettingsCard {
@@ -124,11 +142,28 @@ fun VoiceSourceSettingsPage(
                 onClick = { viewModel.onTtsSourceChange(TtsSource.SYSTEM) },
                 expanded = ttsSource == TtsSource.SYSTEM,
                 expandedContent = {
-                    SourcePreviewSection(
-                        state = systemPreviewState,
-                        testingText = "试听播放中…",
-                        okText = "已播放试听",
-                        onPreview = viewModel::previewSystemVoice,
+                    // 系统语音音色: the engine's own selectable voices for
+                    // each dictation language (中文 + 英文), with a 试听
+                    // button per voice. A switch takes effect immediately.
+                    // Android exposes no voice display names — see
+                    // SystemSpeaker's naming helpers. The expandedContent Box
+                    // stacks children, so everything lives inside the one
+                    // section composable (no sibling composables here).
+                    SystemVoiceSection(
+                        loading = systemVoicesLoading,
+                        zhVoices = systemVoicesZh,
+                        enVoices = systemEnVoices,
+                        enRegion = systemEnRegion,
+                        useDefaultEn = systemUseDefaultEn,
+                        zhKey = systemVoiceZh,
+                        enKey = systemVoiceEn,
+                        onZhChange = viewModel::onSystemVoiceZhChange,
+                        onUseDefaultEnChange = viewModel::onSystemUseDefaultEnChange,
+                        onEnRegionChange = viewModel::onSystemEnRegionChange,
+                        onEnChange = viewModel::onSystemVoiceEnChange,
+                        onPreviewZh = viewModel::previewSystemVoiceZh,
+                        onPreviewEn = viewModel::previewSystemVoiceEn,
+                        previewState = systemPreviewState,
                     )
                 },
             )
@@ -662,6 +697,223 @@ private fun EdgeVoiceSection(
         )
     }
 }
+/**
+ * 系统语音音色 picker (shown on the 发音来源 page when 系统语音 is
+ * selected): the 默认音色 dropdown (zh voices — a zh-capable voice speaks
+ * both Chinese and English), an 英文使用默认音色 switch (default on) and —
+ * only when the switch is off — the dedicated English voice behind 英文地区
+ * (美式/英式). Each dropdown carries a 试听 button. Voice labels come from
+ * [SystemVoiceInfo] (a real engine name when meaningful, otherwise
+ * 中文男声1/中文女声1-style naming — engines like Google expose raw ids
+ * only). The current selection is shown in the field; a voice switch
+ * applies immediately and persists ([SystemSpeaker] live-follows). While
+ * the engine enumerates (a spinner replaces the dropdowns) the selected
+ * label stays visible so the picker never blanks mid-session. When the
+ * engine exposes no selectable voices the section shows nothing — the
+ * source still speaks with the engine's default.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SystemVoiceSection(
+    loading: Boolean,
+    zhVoices: List<SystemVoiceInfo>?,
+    enVoices: Map<String, List<SystemVoiceInfo>>,
+    enRegion: String,
+    useDefaultEn: Boolean,
+    zhKey: String,
+    enKey: String,
+    onZhChange: (String) -> Unit,
+    onUseDefaultEnChange: (Boolean) -> Unit,
+    onEnRegionChange: (String) -> Unit,
+    onEnChange: (String) -> Unit,
+    onPreviewZh: (String) -> Unit,
+    onPreviewEn: (String) -> Unit,
+    previewState: TtsTestState,
+) {
+    val zhEmpty = zhVoices.isNullOrEmpty()
+    val enEmpty = enVoices.values.all { it.isEmpty() }
+    if (!loading && zhEmpty && enEmpty && previewState == TtsTestState.Idle) return
+
+    Column {
+        if (loading) {
+            Row(
+                modifier = Modifier.padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    strokeWidth = 2.dp,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "正在读取系统音色…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        val previewing = previewState == TtsTestState.Testing
+        val zhCurrent = zhVoices?.firstOrNull { it.key == zhKey }
+        if (!zhEmpty && !loading) {
+            SystemVoiceDropdown(
+                label = "默认音色",
+                voices = zhVoices.orEmpty(),
+                selectedKey = zhKey,
+                current = zhCurrent,
+                previewing = previewing,
+                onSelect = onZhChange,
+                onPreview = onPreviewZh,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        // 英文使用默认音色: same switch semantics as the Edge source.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "英文使用默认音色",
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = useDefaultEn,
+                onCheckedChange = onUseDefaultEnChange,
+                modifier = Modifier.semantics { contentDescription = "英文使用默认音色" },
+            )
+        }
+        if (!useDefaultEn) {
+            val regionVoices = enVoices[enRegion].orEmpty()
+            val enCurrent = regionVoices.firstOrNull { it.key == enKey }
+            Column(modifier = Modifier.padding(top = 8.dp)) {
+                Text(
+                    "英文地区",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.semantics { heading() },
+                )
+                SettingsRadioRow(
+                    title = "美式英语",
+                    selected = enRegion != SYSTEM_EN_REGION_GB,
+                    onClick = { onEnRegionChange(SYSTEM_EN_REGION_US) },
+                )
+                SettingsRadioRow(
+                    title = "英式英语",
+                    selected = enRegion == SYSTEM_EN_REGION_GB,
+                    divider = false,
+                    onClick = { onEnRegionChange(SYSTEM_EN_REGION_GB) },
+                )
+            }
+            if (!enEmpty && !loading) {
+                SystemVoiceDropdown(
+                    label = "英文音色",
+                    voices = regionVoices,
+                    selectedKey = enKey,
+                    current = enCurrent,
+                    previewing = previewing,
+                    onSelect = onEnChange,
+                    onPreview = onPreviewEn,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+        if (!loading) {
+            Text(
+                "默认音色未选择时使用系统默认；音色列表因系统语音引擎而异。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        // Per-voice 试听 feedback (shared by both languages' buttons): a
+        // spinner while speaking, then 已播放试听 or the failure message.
+        TtsTestStatusLine(
+            state = previewState,
+            testingText = "试听播放中…",
+            okText = "已播放试听",
+        )
+    }
+}
+
+/**
+ * One language's system-voice dropdown: a read-only outlined field showing
+ * the current voice's label, opening the engine's voice menu, plus a 试听
+ * button on the right. The stored key is the engine [Voice.name]; a key
+ * that left the engine (voice removed) resolves to the engine default for
+ * display and the next utterance falls back to the locale voice.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SystemVoiceDropdown(
+    label: String,
+    voices: List<SystemVoiceInfo>,
+    selectedKey: String,
+    current: SystemVoiceInfo?,
+    previewing: Boolean,
+    onSelect: (String) -> Unit,
+    onPreview: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = it },
+            modifier = Modifier.weight(1f),
+        ) {
+            OutlinedTextField(
+                value = current?.label ?: "默认（引擎选择）",
+                onValueChange = {},
+                readOnly = true,
+                label = { Text(label) },
+                singleLine = true,
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                modifier = Modifier
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                    .fillMaxWidth(),
+            )
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+            ) {
+                DropdownMenuItem(
+                    text = { Text("默认（引擎选择）") },
+                    onClick = {
+                        onSelect("")
+                        expanded = false
+                    },
+                )
+                voices.forEach { voice ->
+                    DropdownMenuItem(
+                        text = { Text(voice.label) },
+                        onClick = {
+                            onSelect(voice.key)
+                            expanded = false
+                        },
+                    )
+                }
+            }
+        }
+        IconButton(
+            onClick = { current?.let { onPreview(it.key) } },
+            enabled = !previewing && current != null,
+        ) {
+            Icon(
+                Icons.Filled.PlayArrow,
+                contentDescription = "试听 ${current?.label ?: label}",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 /**
  * 小米 MiMo 音色 picker: 默认音色 dropdown (8 个官方音色, 均支持中英文),
  * 英文使用默认音色 switch (default on), 关掉后出现英文音色 dropdown

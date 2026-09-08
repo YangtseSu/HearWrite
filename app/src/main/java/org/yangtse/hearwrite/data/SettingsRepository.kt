@@ -71,6 +71,23 @@ class SettingsRepository(
     val edgeUseDefaultEn: Flow<Boolean> =
         dataStore.data.map { it[KEY_EDGE_USE_DEFAULT_EN] ?: true }
 
+    /**
+     * 系统语音 音色 (系统语音 source): the engine [Voice.name] key for
+     * Chinese text; blank = the engine's zh-CN default voice.
+     */
+    val systemVoiceZh: Flow<String> =
+        dataStore.data.map { it[KEY_SYSTEM_VOICE_ZH] ?: "" }
+    /**
+     * 系统语音 音色 (系统语音 source): the engine [Voice.name] key for
+     * English text; blank = the engine's en-US default voice. Used only
+     * when [systemUseDefaultEn] is off.
+     */
+    val systemVoiceEn: Flow<String> =
+        dataStore.data.map { it[KEY_SYSTEM_VOICE_EN] ?: "" }
+    /** 英文使用默认音色 (系统语音): default on (no dedicated English voice). */
+    val systemUseDefaultEn: Flow<Boolean> =
+        dataStore.data.map { it[KEY_SYSTEM_USE_DEFAULT_EN] ?: true }
+
     /** 提示音 (countdown tick + completion chime): default on. */
     val soundEnabled: Flow<Boolean> =
         dataStore.data.map { it[KEY_SOUND_ENABLED] ?: true }
@@ -230,6 +247,21 @@ class SettingsRepository(
         dataStore.edit { it[KEY_EDGE_USE_DEFAULT_EN] = useDefault }
     }
 
+    /** Store the selected 系统语音 voice key for Chinese text ("" = default). */
+    suspend fun setSystemVoiceZh(key: String) {
+        dataStore.edit { it[KEY_SYSTEM_VOICE_ZH] = key }
+    }
+
+    /** Store the selected 系统语音 voice key for English text ("" = default). */
+    suspend fun setSystemVoiceEn(key: String) {
+        dataStore.edit { it[KEY_SYSTEM_VOICE_EN] = key }
+    }
+
+    /** Store 英文使用默认音色 for the 系统语音 source. */
+    suspend fun setSystemUseDefaultEn(useDefault: Boolean) {
+        dataStore.edit { it[KEY_SYSTEM_USE_DEFAULT_EN] = useDefault }
+    }
+
     suspend fun setSoundEnabled(on: Boolean) {
         dataStore.edit { it[KEY_SOUND_ENABLED] = on }
     }
@@ -299,6 +331,9 @@ class SettingsRepository(
         val KEY_EDGE_VOICE_ZH = stringPreferencesKey("edge_voice_zh")
         val KEY_EDGE_VOICE_EN = stringPreferencesKey("edge_voice_en")
         val KEY_EDGE_USE_DEFAULT_EN = booleanPreferencesKey("edge_use_default_en")
+        val KEY_SYSTEM_VOICE_ZH = stringPreferencesKey("system_voice_zh")
+        val KEY_SYSTEM_VOICE_EN = stringPreferencesKey("system_voice_en")
+        val KEY_SYSTEM_USE_DEFAULT_EN = booleanPreferencesKey("system_use_default_en")
         val KEY_SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         val KEY_THEME = stringPreferencesKey("theme")
         val KEY_OCR_PROVIDER_CONFIG = stringPreferencesKey("ocr_provider_config")
