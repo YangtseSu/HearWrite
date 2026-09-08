@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.yangtse.hearwrite.domain.WordEntry
 import org.yangtse.hearwrite.domain.entryToLine
+import org.yangtse.hearwrite.domain.isCjkEntry
 
 /**
  * Word preview of one built-in list: numbered rows (headword + pos/pinyin +
@@ -274,6 +275,17 @@ private fun EntryRow(
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                )
+            }
+            // English headwords without ECDICT meta yet — a placeholder keeps
+            // the row height stable while the offline enrichment fills in
+            // (Chinese bare words are spoken as-is and never enriched).
+            if (entry.pos == null && entry.meaning == null && !isCjkEntry(entry.word)) {
+                Text(
+                    "——",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    maxLines = 1,
                 )
             }
         }

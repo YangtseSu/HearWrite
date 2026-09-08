@@ -21,6 +21,8 @@ import org.yangtse.hearwrite.data.LibraryList
 import org.yangtse.hearwrite.data.LibrarySearchResult
 import org.yangtse.hearwrite.domain.WordEntry
 import org.yangtse.hearwrite.domain.entryToLine
+import org.yangtse.hearwrite.domain.isCjkEntry
+import org.yangtse.hearwrite.domain.parseWordLine
 import org.yangtse.hearwrite.domain.prepareStartLines
 
 /** Search UI state: idle (no query), loading, or the finished result. */
@@ -107,7 +109,9 @@ class LibraryPreviewViewModel(
     handle: SavedStateHandle,
 ) : AndroidViewModel(application) {
 
-    private val repository = (application as HearWriteApplication).libraryRepository
+    private val app = application as HearWriteApplication
+    private val repository = app.libraryRepository
+    private val dictionaryRepository = app.dictionaryRepository
     val category: String = checkNotNull(handle["category"])
     val label: String = checkNotNull(handle["label"])
 
@@ -144,7 +148,25 @@ class LibraryPreviewViewModel(
 
     init {
         viewModelScope.launch {
-            _entries.value = repository.entries(LibraryList(category, label))
+            val list = LibraryList(category, label)
+            // Parsed rows first so the list renders immediately; then enrich
+            // English headwords with the offline ECDICT meta on IO (the
+            // dictionary parses lazily on first lookup — never on the startup
+            // path, AGENTS.md). Only bare English words are touched: Chinese
+            // entries keep their pinyin/组词 columns and enriched lines stay
+            // unchanged. A stale result is dropped if the list changed.
+            val parsed = repository.entries(list)
+            _entries.value = parsed
+            val needsEnrich = parsed.any { it.pos == null && it.meaning == null && !isCjkEntry(it.word) }
+            if (!needsEnrich) return@launch
+            val enriched = try {
+                dictionaryRepository.enrichLines(parsed.map(::entryToLine)).map(::parseWordLine)
+            } catch (e: Exception) {
+                // Asset/parse failure degrades to the plain list — the
+                // preview still shows the headwords (like Home's enrich).
+                parsed
+            }
+            if (_entries.value == parsed) _entries.value = enriched
         }
     }
 }
