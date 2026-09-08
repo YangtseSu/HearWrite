@@ -46,6 +46,7 @@ fun HomePlaybackPanel(
     autoNext: Boolean,
     shuffle: Boolean,
     wordCount: Int,
+    startIndex: Int,
     starting: Boolean,
     onIntervalChange: (Double) -> Unit,
     onAutoNextChange: (Boolean) -> Unit,
@@ -99,6 +100,19 @@ fun HomePlaybackPanel(
                     Icon(Icons.Filled.Add, contentDescription = "增加间隔")
                 }
                 Spacer(Modifier.weight(1f))
+                if (wordCount > 0) {
+                    // Same wording as the library preview's live start marker —
+                    // Home's 展示态 taps also move the 起始词.
+                    Text(
+                        if (startIndex == 0) "从第 1 词开始" else "从第 ${startIndex + 1} 词开始",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (startIndex == 0) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                    )
+                }
             }
             Row(
                 modifier = Modifier

@@ -293,6 +293,7 @@ fun HomeScreen(
                 autoNext = autoNext,
                 shuffle = shuffle,
                 wordCount = wordCount,
+                startIndex = startIndex,
                 starting = starting,
                 onIntervalChange = viewModel::onIntervalChange,
                 onAutoNextChange = viewModel::onAutoNextChange,
