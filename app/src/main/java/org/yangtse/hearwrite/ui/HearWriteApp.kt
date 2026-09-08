@@ -13,6 +13,7 @@ object Routes {
     const val HOME = "home"
     const val DICTATION = "dictation"
     const val SETTINGS = "settings"
+    const val SETTINGS_OCR = "settings_ocr"
     const val LIBRARY = "library"
     const val LIBRARY_LIST = "library_list/{category}"
     const val LIBRARY_PREVIEW = "library_preview/{category}/{label}"
@@ -42,6 +43,13 @@ fun HearWriteApp() {
                 onStartDictation = startDictation,
                 onOpenLibrary = { navController.navigate(Routes.LIBRARY) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                // 拍照识词 sheet 的 修改/去设置: land on the OCR provider
+                // form with the settings hub beneath it, so back walks
+                // OCR form → hub → Home like an in-hub sub-page would.
+                onOpenOcrSettings = {
+                    navController.navigate(Routes.SETTINGS)
+                    navController.navigate(Routes.SETTINGS_OCR)
+                },
             )
         }
         composable(Routes.DICTATION) {
@@ -54,6 +62,14 @@ fun HearWriteApp() {
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(onClose = { navController.popBackStack() })
+        }
+        composable(Routes.SETTINGS_OCR) {
+            // The scan sheet's 修改/去设置 lands directly on the OCR provider
+            // form; back pops to the settings hub it sits above.
+            SettingsScreen(
+                initialPage = SettingsSubPage.OCR_PROVIDER,
+                onClose = { navController.popBackStack() },
+            )
         }
         composable(Routes.LIBRARY) {
             LibraryScreen(

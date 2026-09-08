@@ -1,5 +1,6 @@
 package org.yangtse.hearwrite.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -78,6 +79,7 @@ fun HomeScreen(
     onStartDictation: (List<String>) -> Unit,
     onOpenLibrary: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenOcrSettings: () -> Unit,
     viewModel: HomeViewModel = viewModel(),
 ) {
     val context = LocalContext.current
@@ -372,7 +374,8 @@ fun HomeScreen(
             },
             onOpenSettings = {
                 showOcrSheet = false
-                onOpenSettings()
+                // 修改/去设置 lands on the OCR provider form, not the hub.
+                onOpenOcrSettings()
             },
             onDismiss = { showOcrSheet = false },
         )

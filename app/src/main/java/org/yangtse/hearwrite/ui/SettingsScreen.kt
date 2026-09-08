@@ -54,7 +54,7 @@ import org.yangtse.hearwrite.domain.ThemeMode
 import org.yangtse.hearwrite.domain.TtsSource
 
 /** One sub-page reachable from the settings hub (each draws its own top bar). */
-private enum class SettingsSubPage { VOICE_SOURCE, OCR_PROVIDER, ABOUT }
+enum class SettingsSubPage { VOICE_SOURCE, OCR_PROVIDER, ABOUT }
 
 /**
  * 设置 — an Android-settings-style hub. Grouped cards list every setting;
@@ -62,14 +62,17 @@ private enum class SettingsSubPage { VOICE_SOURCE, OCR_PROVIDER, ABOUT }
  * 关于); 外观 is an inline theme-preview row and 语速 an inline slider. System back pops the sub-page first, then leaves 设置 entirely.
  * All state lives in the single [SettingsViewModel] shared by hub and
  * sub-pages, so edits made deep in a page show up on the hub immediately.
+ * [initialPage] opens straight into that sub-page (e.g. the OCR form from
+ * the scan sheet's 修改/去设置) instead of the hub.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onClose: () -> Unit,
+    initialPage: SettingsSubPage? = null,
     viewModel: SettingsViewModel = viewModel(),
 ) {
-    var subPage by rememberSaveable { mutableStateOf<SettingsSubPage?>(null) }
+    var subPage by rememberSaveable { mutableStateOf(initialPage) }
 
     fun goHub() {
         subPage = null
