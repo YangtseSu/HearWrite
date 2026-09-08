@@ -11,6 +11,8 @@ This is a **from-scratch Kotlin + Jetpack Compose app** for Chinese dictation tr
 
 **Non-goals (do not build):** iOS / Web / desktop; backend server; the paid-features stack of the original (Credits, Recharge, model tiers — **excluded entirely**); Expo/RN code reuse. Platform targets: `minSdk 33`, `targetSdk 37`, `compileSdk 37`. All user-facing UI strings are hardcoded Chinese.
 
+**Roadmap**: feature ideas and specs live in `docs/ROADMAP.md` — status 💡 idea / 📋 spec / ✅ done.
+
 **`minSdk` policy**: `minSdk` is a compile-time floor only — never constrain new dependencies or API usage to stay above it, and never add `Build.VERSION.SDK_INT` guards or compat workarounds for it. When a new dependency or function conflicts with the current `minSdk` (manifest merger `minSdkVersion`, lint `NewApi`, or compile/runtime failures caused by the floor being too low), resolve by **raising `minSdk`**, never by substituting an older "compatible" function or dependency.
 
 ## Toolchain (latest stable at project start, 2026-09)
