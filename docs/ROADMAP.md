@@ -76,6 +76,23 @@
 
 ---
 
+## 💡 断点续播（来电 / 切后台精确恢复） 🤖
+
+现状：无生命周期与音频焦点处理（全仓无 `AudioFocusRequest` / `LifecycleEventEffect`）——切后台、来电时引擎照常推进，回前台常已跑过几个词；`pause()`/`resume()` 也只从当前词的 `speak1` 重放（`WordPhase` 是 `DictationEngine` 私有枚举，公开状态只有 `index`/`remainingMs`），停不到"第 17 个词的第 2 遍"。进程被杀则整场丢失：`DictationSessionStore` 是内存暂存且 `take()` 一次性消费，重启直接回首页。
+
+**想法**：来电/切后台自动暂停，回前台从同一词同一遍继续；进程死亡后首页提供"继续上次听写（第 17/30 词）"。
+
+**规划（spec 草稿）**：
+
+- 中断源：注册 `AudioFocusRequest`（`LOSS_TRANSIENT` → pause，`GAIN` → resume，`LOSS` → 只 pause 不自动续）+ `LifecycleEventEffect(ON_STOP)` → pause；自动续播做成设置项。
+- 精确到遍：`WordPhase` 提升为公开（或引擎暴露 `phase: StateFlow<WordPhase>`），加恢复入口 `start(lines, index, phase, remainingMs)`，从指定词的指定遍重启——恢复落点取"该遍重头"，不做遍内毫秒级续播。
+- 进程死亡恢复：进行中会话（lines、index、phase、remainingMs、随机/起始设置、开始时间、runWrong 集合）落盘（DataStore 或 Room）；首页显示续播入口，超时（如 24h）或主动结束即清除。错词已即时入库，不随会话恢复。
+- 复用：暂停/恢复沿用现有 gen 计数取消契约（不新增布尔标志）；倒计时 deadline 已是可重读的 `@Volatile`/StateFlow，恢复直接写回剩余 ms。
+- 边界：来电中 `UtteranceProgressListener` 可能不回调 `onDone`，依赖现有 watchdog / `onStop(interrupted=true)` 兜底（`SystemSpeaker` 已有该分支）；续播不再 shuffle（顺序已在会话里）；进程死亡恢复只保证词序与词序号，不保证 TTS 缓存。
+- 待定：遍内断点 vs 遍头重播（课堂口径后者更简单）；音频焦点用 `GAIN_TRANSIENT` 还是 `GAIN_TRANSIENT_MAY_DUCK`；后台自动暂停是否允许关闭。
+
+---
+
 ## 💡 反向默写模式（读释义写单词） 🤖
 
 **想法**：英文条目改为用中文语音朗读释义，学生听释义写英文词——汉译英默写训练，家长陪练常见场景。
