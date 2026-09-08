@@ -58,6 +58,16 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties   # 已被 gitignore，机�
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
+开发机另有一个本地 AVD **`HearWrite37`**（API 37 / x86_64 / google_apis，位于 `~/.android/avd/`），用于不依赖真实硬件的验证——Room 迁移 instrumentation 测试、进程死亡恢复、UI 走查：
+
+```bash
+~/Android/Sdk/emulator/emulator -avd HearWrite37 &
+adb wait-for-device
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+音频焦点 / 来电中断 / 各家 TTS 音色仍必须真机验证。
+
 ## 2. 日常命令
 
 | 命令 | 用途 |
