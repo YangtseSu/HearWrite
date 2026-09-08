@@ -54,6 +54,15 @@ class BuiltinLibraryRepository(private val assets: AssetManager) {
         listsOn(category).map { LibraryList(category, it) }
     }
 
+    /**
+     * Word count of one list. Counting reuses the entry cache (parsing a list
+     * for its count also fills it, so a later preview/start costs nothing);
+     * the first count of a category's lists parses each file once.
+     */
+    suspend fun wordCount(list: LibraryList): Int = withContext(Dispatchers.IO) {
+        entries(list).size
+    }
+
     /** Parsed entries of one list (cached after first load). */
     suspend fun entries(list: LibraryList): List<WordEntry> = withContext(Dispatchers.IO) {
         entriesCache.getOrPut(list.id) {

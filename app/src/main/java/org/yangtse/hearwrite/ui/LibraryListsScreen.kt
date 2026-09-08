@@ -39,6 +39,7 @@ fun LibraryListsScreen(
     viewModel: LibraryListsViewModel = viewModel(),
 ) {
     val lists by viewModel.lists.collectAsState()
+    val wordCounts by viewModel.wordCounts.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
 
     Scaffold(
@@ -73,7 +74,7 @@ fun LibraryListsScreen(
                     val favorited = list.id in favoriteIds
                     ListRow(
                         title = list.label,
-                        subtitle = null,
+                        subtitle = wordCounts[list.id]?.let { "$it 词" },
                         onClick = { onOpenList(list.label) },
                         trailing = {
                             IconButton(onClick = { viewModel.toggleFavorite(list.id) }) {

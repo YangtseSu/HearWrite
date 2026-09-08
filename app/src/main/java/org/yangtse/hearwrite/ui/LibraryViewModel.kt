@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.data.LibraryCategory
@@ -80,12 +81,30 @@ class LibraryListsViewModel(
     /** null = still loading. */
     val lists: StateFlow<List<LibraryList>?> = _lists.asStateFlow()
 
+    private val _wordCounts = MutableStateFlow<Map<String, Int>>(emptyMap())
+    /** Cached 词数 per list id (fills in as counts finish; rows show them as
+     *  they arrive so the screen never blocks on the file reads). */
+    val wordCounts: StateFlow<Map<String, Int>> = _wordCounts.asStateFlow()
+
     private val _favoriteIds = MutableStateFlow<Set<String>>(emptySet())
     /** Favorited entry ids of this screen (stars on list rows). */
     val favoriteIds: StateFlow<Set<String>> = _favoriteIds.asStateFlow()
 
     init {
-        viewModelScope.launch { _lists.value = repository.lists(category) }
+        viewModelScope.launch {
+            val loaded = repository.lists(category)
+            _lists.value = loaded
+            // 词数 are best-effort decoration: read in parallel off the main
+            // thread (entries() parses on Dispatchers.IO and fills the shared
+            // cache — a later preview/start costs nothing), each count lands
+            // in the map the moment it is done so the list scrolls in first.
+            loaded.forEach { list ->
+                launch {
+                    runCatching { repository.wordCount(list) }
+                        .onSuccess { count -> _wordCounts.update { it + (list.id to count) } }
+                }
+            }
+        }
         viewModelScope.launch {
             favoritesRepository.observeIds().collect { _favoriteIds.value = it }
         }
