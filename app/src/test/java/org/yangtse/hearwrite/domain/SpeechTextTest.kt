@@ -169,4 +169,31 @@ class SpeechTextTest {
         assertEquals("apple", speakTextFromEntry("\uFEFFapple | n. | 苹果"))
         assertEquals("使高兴", speakableMeaning("\uFEFFvt. 使高兴；n. 高兴"))
     }
+
+    // --- glossNeedsExpansion: the shared list-row expandability gate ---
+
+    @Test
+    fun `short single-sense gloss needs no expansion`() {
+        assertFalse(glossNeedsExpansion("苹果"))
+        assertFalse(glossNeedsExpansion("能力"))
+        assertFalse(glossNeedsExpansion(null))
+    }
+
+    @Test
+    fun `gloss over the 24-char clamp needs expansion`() {
+        val long = "一".repeat(25)
+        assertTrue(glossNeedsExpansion(long))
+    }
+
+    @Test
+    fun `exactly 24 chars fits the clamp`() {
+        val atLimit = "一".repeat(24)
+        assertFalse(glossNeedsExpansion(atLimit))
+    }
+
+    @Test
+    fun `multi-sense gloss needs expansion regardless of length`() {
+        assertTrue(glossNeedsExpansion("n. 苹果；苹果树"))
+        assertTrue(glossNeedsExpansion("高兴；愉快"))
+    }
 }

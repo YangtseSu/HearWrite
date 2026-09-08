@@ -43,11 +43,11 @@ fun HearWriteApp() {
                 onStartDictation = startDictation,
                 onOpenLibrary = { navController.navigate(Routes.LIBRARY) },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
-                // 拍照识词 sheet 的 修改/去设置: land on the OCR provider
-                // form with the settings hub beneath it, so back walks
-                // OCR form → hub → Home like an in-hub sub-page would.
+                // 拍照识词 sheet 的 修改/去设置: one entry opened on the OCR
+                // provider form. Back first lands on the in-screen hub
+                // (goHub), then pops to Home — no second hub entry beneath,
+                // which would show two consecutive identical hubs.
                 onOpenOcrSettings = {
-                    navController.navigate(Routes.SETTINGS)
                     navController.navigate(Routes.SETTINGS_OCR)
                 },
             )
@@ -65,7 +65,8 @@ fun HearWriteApp() {
         }
         composable(Routes.SETTINGS_OCR) {
             // The scan sheet's 修改/去设置 lands directly on the OCR provider
-            // form; back pops to the settings hub it sits above.
+            // form; its in-screen back shows the hub, and the hub's close
+            // pops straight to Home (no separate SETTINGS entry beneath).
             SettingsScreen(
                 initialPage = SettingsSubPage.OCR_PROVIDER,
                 onClose = { navController.popBackStack() },

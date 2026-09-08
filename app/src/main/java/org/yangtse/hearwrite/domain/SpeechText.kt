@@ -10,6 +10,17 @@ internal val MEANING_EDGE_PUNCT_RE = Regex("^[\\s，,、。.：:；;]+|[\\s，,�
 private const val SPEAK_MEANING_MAX_WIDTH = 12
 
 /**
+ * True when a gloss visibly truncates under the shared 2-line list-row clamp
+ * (Home 展示态 rows and the library preview rows): long text or multi-sense
+ * (`；;`-split) glosses offer tap-to-expand. Mirrors the display rules in the
+ * alice fork; the dictation dial uses its own tighter threshold because the
+ * circular area is small and has an explicit 展开全部 button.
+ */
+fun glossNeedsExpansion(meaning: String?): Boolean =
+    (meaning?.length ?: 0) > 24 ||
+        (meaning?.count { it == '；' || it == ';' } ?: 0) > 0
+
+/**
  * Text to speak for a list line.
  *
  * Strips the `|`-delimited pos/meaning suffix (TTS must not read them) and

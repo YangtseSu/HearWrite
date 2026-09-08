@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.yangtse.hearwrite.domain.glossNeedsExpansion
 import org.yangtse.hearwrite.domain.parseWordEntries
 
 /** 示例 content: English words with gloss columns (朗读释义 demo-able). */
@@ -199,8 +200,7 @@ private fun WordDisplayList(
                 val meta = listOfNotNull(entry.pos, entry.meaning).joinToString(" ")
                 // 2-line clamp: offer expansion for multi-sense glosses or
                 // long text that would visibly truncate.
-                val expandable = (entry.meaning?.length ?: 0) > 24 ||
-                    (entry.meaning?.count { it == '；' || it == ';' } ?: 0) > 0
+                val expandable = glossNeedsExpansion(entry.meaning)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

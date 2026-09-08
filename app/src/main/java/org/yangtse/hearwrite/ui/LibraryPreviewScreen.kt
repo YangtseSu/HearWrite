@@ -38,6 +38,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,8 +49,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import org.yangtse.hearwrite.domain.WordEntry
 import org.yangtse.hearwrite.domain.entryToLine
+import org.yangtse.hearwrite.domain.glossNeedsExpansion
 import org.yangtse.hearwrite.domain.isCjkEntry
 
 /**
@@ -73,6 +76,8 @@ fun LibraryPreviewScreen(
     val shuffle by viewModel.shuffle.collectAsState()
     val startIndex by viewModel.startIndex.collectAsState()
     val current = entries
+    // startLines awaits the lazy ECDICT enrich — launch off the click handler.
+    val startScope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
@@ -148,7 +153,13 @@ fun LibraryPreviewScreen(
                             Text("载入草稿")
                         }
                         Button(
-                            onClick = { onStartDictation(viewModel.startLines()) },
+                            onClick = {
+                                // startLines awaits the lazy ECDICT enrich; run it
+                                // off the click so the button never blocks the UI.
+                                startScope.launch {
+                                    viewModel.startLines()?.let(onStartDictation)
+                                }
+                            },
                             modifier = Modifier.weight(1f),
                         ) {
                             Text("听写本词表（共 ${current.size} 词）")
@@ -169,27 +180,45 @@ fun LibraryPreviewScreen(
             ) {
                 CircularProgressIndicator()
             }
-            else -> LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-            ) {
-                item {
-                    Text(
-                        "${viewModel.category} · 共 ${current.size} 词",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                    )
-                }
-                itemsIndexed(current) { index, entry ->
-                    EntryRow(
-                        entry = entry,
-                        index = index,
-                        selected = index == startIndex,
-                        onSelect = viewModel::selectStart,
-                    )
-                    HorizontalDivider()
+            else -> {
+                // Expansion lives at the list level so it survives rows
+                // scrolling out of the LazyColumn cache window (Home parity);
+                // resets with the entries (the parsed → enriched swap).
+                var expanded by remember(current) { mutableStateOf(setOf<Int>()) }
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                ) {
+                    item {
+                        Text(
+                            "${viewModel.category} · 共 ${current.size} 词",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        )
+                    }
+                    itemsIndexed(current) { index, entry ->
+                        EntryRow(
+                            entry = entry,
+                            index = index,
+                            selected = index == startIndex,
+                            expanded = index in expanded,
+                            onSelect = viewModel::selectStart,
+                            onToggleExpand = {
+                                // Non-expandable rows (short single-sense glosses)
+                                // only select the 起始词 — same gate as Home.
+                                if (glossNeedsExpansion(entry.meaning)) {
+                                    expanded = if (index in expanded) {
+                                        expanded - index
+                                    } else {
+                                        expanded + index
+                                    }
+                                }
+                            },
+                        )
+                        HorizontalDivider()
+                    }
                 }
             }
         }
@@ -201,14 +230,13 @@ private fun EntryRow(
     entry: WordEntry,
     index: Int,
     selected: Boolean,
+    expanded: Boolean,
     onSelect: (Int) -> Unit,
+    onToggleExpand: () -> Unit,
 ) {
     // Same anatomy as Home's 展示态 rows: word over a single meta line
     // (`pos meaning`), 2-line clamp with expansion for long glosses.
     val meta = listOfNotNull(entry.pos, entry.meaning).joinToString(" ")
-    val expandable = (entry.meaning?.length ?: 0) > 24 ||
-        (entry.meaning?.count { it == '；' || it == ';' } ?: 0) > 0
-    var expanded by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -223,7 +251,7 @@ private fun EntryRow(
             )
             .clickable {
                 onSelect(index)
-                if (expandable) expanded = !expanded
+                onToggleExpand()
             },
         verticalAlignment = Alignment.CenterVertically,
     ) {

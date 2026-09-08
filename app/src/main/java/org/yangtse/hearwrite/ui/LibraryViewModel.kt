@@ -1,9 +1,11 @@
 package org.yangtse.hearwrite.ui
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -16,6 +18,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.data.LibraryCategory
 import org.yangtse.hearwrite.data.LibraryList
@@ -100,8 +104,14 @@ class LibraryListsViewModel(
             // in the map the moment it is done so the list scrolls in first.
             loaded.forEach { list ->
                 launch {
-                    runCatching { repository.wordCount(list) }
-                        .onSuccess { count -> _wordCounts.update { it + (list.id to count) } }
+                    try {
+                        val count = repository.wordCount(list)
+                        _wordCounts.update { it + (list.id to count) }
+                    } catch (e: Exception) {
+                        // 词数 is decoration — a failed count leaves the row
+                        // without a subtitle; log so asset problems surface.
+                        Log.w("LibraryListsViewModel", "wordCount failed for ${list.id}", e)
+                    }
                 }
             }
         }
@@ -146,6 +156,15 @@ class LibraryPreviewViewModel(
     /** 起始序号: 0-based index of the tapped start word; 0 = whole list. */
     val startIndex: StateFlow<Int> = _startIndex.asStateFlow()
 
+    /** Completes once the initial enrich pass settled (done, skipped, or
+     *  failed) — [startLines] awaits it so a start in the enrich window still
+     *  ships the ECDICT meanings (朗读释义 needs them). */
+    private val enrichSettled = CompletableDeferred<Unit>()
+
+    /** Serializes starts; claimed before the first suspension (AGENTS.md
+     *  re-entry guard) so a double tap cannot queue two sessions. */
+    private val startGate = Mutex()
+
     fun onShuffleChange(value: Boolean) {
         _shuffle.value = value
     }
@@ -159,33 +178,52 @@ class LibraryPreviewViewModel(
     }
 
     /** Final lines for one start: slice from 起始序号, then 随机顺序 — the same
-     *  ordering Home applies (AGENTS.md playback engine stays dumb). */
-    fun startLines(): List<String> {
-        val current = _entries.value ?: return emptyList()
-        return prepareStartLines(current.map(::entryToLine), _startIndex.value, _shuffle.value)
+     *  ordering Home applies (AGENTS.md playback engine stays dumb). Waits
+     *  for the initial ECDICT enrich to settle so a fast start does not drop
+     *  the spoken meanings; double invocations are rejected (not queued).
+     *  Returns null when another start is already in flight. */
+    suspend fun startLines(): List<String>? {
+        if (!startGate.tryLock()) return null
+        try {
+            enrichSettled.await()
+            val current = _entries.value ?: return null
+            return prepareStartLines(current.map(::entryToLine), _startIndex.value, _shuffle.value)
+        } finally {
+            startGate.unlock()
+        }
     }
 
     init {
         viewModelScope.launch {
-            val list = LibraryList(category, label)
-            // Parsed rows first so the list renders immediately; then enrich
-            // English headwords with the offline ECDICT meta on IO (the
-            // dictionary parses lazily on first lookup — never on the startup
-            // path, AGENTS.md). Only bare English words are touched: Chinese
-            // entries keep their pinyin/组词 columns and enriched lines stay
-            // unchanged. A stale result is dropped if the list changed.
-            val parsed = repository.entries(list)
-            _entries.value = parsed
-            val needsEnrich = parsed.any { it.pos == null && it.meaning == null && !isCjkEntry(it.word) }
-            if (!needsEnrich) return@launch
-            val enriched = try {
-                dictionaryRepository.enrichLines(parsed.map(::entryToLine)).map(::parseWordLine)
+            // enrichSettled MUST complete on every path (success, skip,
+            // asset failure) — startLines() awaits it and would hang forever
+            // on an uncompleted deferred.
+            try {
+                loadAndEnrich()
             } catch (e: Exception) {
                 // Asset/parse failure degrades to the plain list — the
                 // preview still shows the headwords (like Home's enrich).
-                parsed
+                Log.w("LibraryPreviewViewModel", "preview enrich failed for $category/$label", e)
+            } finally {
+                enrichSettled.complete(Unit)
             }
-            if (_entries.value == parsed) _entries.value = enriched
         }
+    }
+
+    private suspend fun loadAndEnrich() {
+        val list = LibraryList(category, label)
+        // Parsed rows first so the list renders immediately; then enrich
+        // English headwords with the offline ECDICT meta on IO (the
+        // dictionary parses lazily on first lookup — never on the startup
+        // path, AGENTS.md). Only bare English words are touched: Chinese
+        // entries keep their pinyin/组词 columns and enriched lines stay
+        // unchanged. A stale result is dropped if the list changed.
+        val parsed = repository.entries(list)
+        _entries.value = parsed
+        val needsEnrich = parsed.any { it.pos == null && it.meaning == null && !isCjkEntry(it.word) }
+        if (!needsEnrich) return
+        val enriched = dictionaryRepository.enrichLines(parsed.map(::entryToLine))
+            .map(::parseWordLine)
+        if (_entries.value == parsed) _entries.value = enriched
     }
 }
