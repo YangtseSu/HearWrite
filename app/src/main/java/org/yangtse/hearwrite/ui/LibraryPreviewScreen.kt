@@ -36,6 +36,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -200,6 +203,12 @@ private fun EntryRow(
     selected: Boolean,
     onSelect: (Int) -> Unit,
 ) {
+    // Same anatomy as Home's 展示态 rows: word over a single meta line
+    // (`pos meaning`), 2-line clamp with expansion for long glosses.
+    val meta = listOfNotNull(entry.pos, entry.meaning).joinToString(" ")
+    val expandable = (entry.meaning?.length ?: 0) > 24 ||
+        (entry.meaning?.count { it == '；' || it == ';' } ?: 0) > 0
+    var expanded by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -212,7 +221,10 @@ private fun EntryRow(
                     Color.Transparent
                 },
             )
-            .clickable { onSelect(index) },
+            .clickable {
+                onSelect(index)
+                if (expandable) expanded = !expanded
+            },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -239,53 +251,42 @@ private fun EntryRow(
                 .padding(start = 9.dp)
                 .width(28.dp),
         )
-        Text(
-            entry.word,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            },
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .weight(1f, fill = false)
-                .padding(vertical = 8.dp),
-        )
         Column(
             modifier = Modifier
-                .weight(2f)
+                .weight(1f)
                 .padding(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            entry.pos?.let {
+            Text(
+                entry.word,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (meta.isNotEmpty()) {
                 Text(
-                    it,
-                    style = MaterialTheme.typography.bodyMedium,
+                    meta,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+                    maxLines = if (expanded) Int.MAX_VALUE else 2,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
-            }
-            entry.meaning?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            // English headwords without ECDICT meta yet — a placeholder keeps
-            // the row height stable while the offline enrichment fills in
-            // (Chinese bare words are spoken as-is and never enriched).
-            if (entry.pos == null && entry.meaning == null && !isCjkEntry(entry.word)) {
+            } else if (!isCjkEntry(entry.word)) {
+                // English headwords without ECDICT meta yet — a placeholder
+                // keeps the row height stable while the offline enrichment
+                // fills in (Chinese bare words are spoken as-is, no meta).
                 Text(
                     "——",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                     maxLines = 1,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
             }
         }
