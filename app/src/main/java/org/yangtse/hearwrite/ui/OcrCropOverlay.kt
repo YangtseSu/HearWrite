@@ -39,6 +39,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -138,6 +144,11 @@ private fun CropEditor(
                 val offX = (areaW - dispW) / 2f
                 val offY = (areaH - dispH) / 2f
 
+                // TalkBack moves the selection by a ~10% step of the image —
+                // coarse enough to cross a page region in a few swipes.
+                val stepX = (dispW * 0.1f).coerceAtLeast(1f) / dispW
+                val stepY = (dispH * 0.1f).coerceAtLeast(1f) / dispH
+
                 // Image layer: reads no drag state, so it is not redrawn
                 // while the selection moves.
                 Canvas(modifier = Modifier.fillMaxSize()) {
@@ -183,10 +194,39 @@ private fun CropEditor(
                     drawCircle(Color.White, grip, sel.bottomRight)
                 }
                 // Gesture layer: corner → edge → inside hit test; drags move
-                // or resize the normalized rect.
+                // or resize the normalized rect. The same gestures are exposed
+                // as semantics customActions so TalkBack can drive them.
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .semantics {
+                            contentDescription =
+                                "拖动选框，选定要识别的区域。当前选区：左 ${(rect.left * 100).roundToInt()}%、上 ${(rect.top * 100).roundToInt()}%、右 ${(rect.right * 100).roundToInt()}%、下 ${(rect.bottom * 100).roundToInt()}%"
+                            liveRegion = LiveRegionMode.Polite
+                            customActions = listOf(
+                                CustomAccessibilityAction("向左移动") {
+                                    rect = moveRectBy(rect, -stepX, 0f, minSideX, minSideY); true
+                                },
+                                CustomAccessibilityAction("向右移动") {
+                                    rect = moveRectBy(rect, stepX, 0f, minSideX, minSideY); true
+                                },
+                                CustomAccessibilityAction("向上移动") {
+                                    rect = moveRectBy(rect, 0f, -stepY, minSideX, minSideY); true
+                                },
+                                CustomAccessibilityAction("向下移动") {
+                                    rect = moveRectBy(rect, 0f, stepY, minSideX, minSideY); true
+                                },
+                                CustomAccessibilityAction("放大选区") {
+                                    rect = growRect(rect, stepX, stepY, minSideX, minSideY); true
+                                },
+                                CustomAccessibilityAction("缩小选区") {
+                                    rect = shrinkRect(rect, stepX, stepY, minSideX, minSideY); true
+                                },
+                                CustomAccessibilityAction("重置为整张图片") {
+                                    rect = NormalizedRect(0f, 0f, 1f, 1f); true
+                                },
+                            )
+                        }
                         .pointerInput(bitmap, areaW, areaH, dispW, dispH, offX, offY) {
                             var mode = DragMode.NONE
                             val cornerTol = 28.dp.toPx()
@@ -341,4 +381,45 @@ private fun resizeRect(
         r.right,
         (r.bottom + dy).coerceIn(r.top + minY, 1f),
     )
+}
+
+/** Translate [r] by a normalized delta, clamped to the image (size preserved). */
+private fun moveRectBy(
+    r: NormalizedRect,
+    dx: Float,
+    dy: Float,
+    minX: Float,
+    minY: Float,
+): NormalizedRect = resizeRect(r, DragMode.MOVE, dx, dy, minX, minY)
+
+/**
+ * Grow [r] outward on every side by normalized [dx]/[dy], clamped inside the
+ * image; the per-side clamps keep each side ≥ [minX]/[minY] apart.
+ */
+private fun growRect(
+    r: NormalizedRect,
+    dx: Float,
+    dy: Float,
+    minX: Float,
+    minY: Float,
+): NormalizedRect {
+    var out = resizeRect(r, DragMode.LEFT, -dx, 0f, minX, minY)
+    out = resizeRect(out, DragMode.RIGHT, dx, 0f, minX, minY)
+    out = resizeRect(out, DragMode.TOP, 0f, -dy, minX, minY)
+    return resizeRect(out, DragMode.BOTTOM, 0f, dy, minX, minY)
+}
+
+/** Shrink [r] inward on every side by normalized [dx]/[dy]; never inverts
+ *  (the drag clamps keep every side ≥ [minX]/[minY] apart). */
+private fun shrinkRect(
+    r: NormalizedRect,
+    dx: Float,
+    dy: Float,
+    minX: Float,
+    minY: Float,
+): NormalizedRect {
+    var out = resizeRect(r, DragMode.LEFT, dx, 0f, minX, minY)
+    out = resizeRect(out, DragMode.RIGHT, -dx, 0f, minX, minY)
+    out = resizeRect(out, DragMode.TOP, 0f, dy, minX, minY)
+    return resizeRect(out, DragMode.BOTTOM, 0f, -dy, minX, minY)
 }
