@@ -180,6 +180,12 @@ fun HomeScreen(
         }
     }
 
+    // Back in 编辑态 finishes the edit (switches to 展示态) instead of
+    // sending the app to the background — matching how 完成 works.
+    BackHandler(enabled = !displayMode) {
+        viewModel.setDisplayMode(true)
+    }
+
     // alice parity: the FAB and the bottom panel step aside while typing.
     val imeVisible = WindowInsets.isImeVisible
 
