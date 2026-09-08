@@ -48,19 +48,13 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import org.yangtse.hearwrite.data.EDGE_EN_REGION_GB
-import org.yangtse.hearwrite.data.EDGE_EN_REGION_US
 import org.yangtse.hearwrite.data.EDGE_VOICE_CATALOG
 import org.yangtse.hearwrite.data.EDGE_VOICE_EN
-import org.yangtse.hearwrite.data.EDGE_VOICE_EN_GB
 import org.yangtse.hearwrite.data.EdgeVoice
 import org.yangtse.hearwrite.data.MIMO_VOICES
-import org.yangtse.hearwrite.data.SYSTEM_EN_REGION_GB
-import org.yangtse.hearwrite.data.SYSTEM_EN_REGION_US
 import org.yangtse.hearwrite.data.SystemVoiceInfo
 import org.yangtse.hearwrite.data.edgeDefaultEnVoice
 import org.yangtse.hearwrite.data.edgeDefaultVoiceFor
-import org.yangtse.hearwrite.data.edgeEnRegionOf
 import org.yangtse.hearwrite.data.OCR_DISCLAIMER
 import org.yangtse.hearwrite.data.OCR_PROVIDER_PRESETS
 import org.yangtse.hearwrite.data.TTS_PROVIDER_PRESETS
@@ -96,7 +90,6 @@ fun VoiceSourceSettingsPage(
     val systemVoicesLoading by viewModel.systemVoicesLoading.collectAsStateWithLifecycle()
     val systemVoicesZh by viewModel.systemVoicesZh.collectAsStateWithLifecycle()
     val systemEnVoices by viewModel.systemEnVoices.collectAsStateWithLifecycle()
-    val systemEnRegion by viewModel.systemEnRegion.collectAsStateWithLifecycle()
     val systemUseDefaultEn by viewModel.systemUseDefaultEn.collectAsStateWithLifecycle()
     val systemVoiceZh by viewModel.systemVoiceZh.collectAsStateWithLifecycle()
     val systemVoiceEn by viewModel.systemVoiceEn.collectAsStateWithLifecycle()
@@ -153,13 +146,11 @@ fun VoiceSourceSettingsPage(
                         loading = systemVoicesLoading,
                         zhVoices = systemVoicesZh,
                         enVoices = systemEnVoices,
-                        enRegion = systemEnRegion,
                         useDefaultEn = systemUseDefaultEn,
                         zhKey = systemVoiceZh,
                         enKey = systemVoiceEn,
                         onZhChange = viewModel::onSystemVoiceZhChange,
                         onUseDefaultEnChange = viewModel::onSystemUseDefaultEnChange,
-                        onEnRegionChange = viewModel::onSystemEnRegionChange,
                         onEnChange = viewModel::onSystemVoiceEnChange,
                         onPreviewZh = viewModel::previewSystemVoiceZh,
                         onPreviewEn = viewModel::previewSystemVoiceEn,
@@ -615,7 +606,13 @@ private fun EdgeVoiceSection(
     onPreview: (shortName: String, lang: String) -> Unit,
 ) {
     val zhVoices = EDGE_VOICE_CATALOG.filter { it.locale == "zh-CN" }
-    val region = edgeEnRegionOf(englishVoice.ifBlank { edgeDefaultEnVoice(EDGE_EN_REGION_US) })
+    // One merged English list: 美式/英式 prefixes come from the friendly
+    // names (美式 Aria / 英式 Sonia…), so a single dropdown reads as one
+    // ordered choice list without a separate 英文地区 step.
+    val enVoices = EDGE_VOICE_CATALOG.filter { it.locale == "en-US" || it.locale == "en-GB" }
+    val effectiveEn = enVoices.firstOrNull { it.shortName == englishVoice }
+        ?: enVoices.firstOrNull { it.shortName == EDGE_VOICE_EN }
+        ?: enVoices.firstOrNull()
     val previewing = previewState is TtsTestState.Testing
 
     Column {
@@ -646,41 +643,12 @@ private fun EdgeVoiceSection(
             )
         }
         if (!useDefaultEn) {
-            Column(modifier = Modifier.padding(top = 8.dp)) {
-                Text(
-                    "英文地区",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.semantics { heading() },
-                )
-                SettingsRadioRow(
-                    title = "美式英语",
-                    selected = region != EDGE_EN_REGION_GB,
-                    onClick = {
-                        // Switching region selects that region's default
-                        // voice explicitly: a blank stored value cannot
-                        // remember its region (Sonia blanked would read
-                        // back as US and bounce the picker off en-GB).
-                        onEnglishVoiceChange(EDGE_VOICE_EN)
-                    },
-                )
-                SettingsRadioRow(
-                    title = "英式英语",
-                    selected = region == EDGE_EN_REGION_GB,
-                    divider = false,
-                    onClick = { onEnglishVoiceChange(EDGE_VOICE_EN_GB) },
-                )
-            }
-            val regionVoices = EDGE_VOICE_CATALOG.filter {
-                it.locale == if (region == EDGE_EN_REGION_GB) "en-GB" else "en-US"
-            }
-            val regionDefault = edgeDefaultEnVoice(region)
             EdgeVoiceDropdown(
                 label = "英文音色",
                 lang = "en",
-                voices = regionVoices,
-                selectedShortName = englishVoice.ifBlank { regionDefault },
-                defaultShortName = regionDefault,
+                voices = enVoices,
+                selectedShortName = effectiveEn?.shortName.orEmpty(),
+                defaultShortName = EDGE_VOICE_EN,
                 previewing = previewing,
                 onSelect = onEnglishVoiceChange,
                 onPreview = onPreview,
@@ -701,37 +669,36 @@ private fun EdgeVoiceSection(
  * 系统语音音色 picker (shown on the 发音来源 page when 系统语音 is
  * selected): the 默认音色 dropdown (zh voices — a zh-capable voice speaks
  * both Chinese and English), an 英文使用默认音色 switch (default on) and —
- * only when the switch is off — the dedicated English voice behind 英文地区
- * (美式/英式). Each dropdown carries a 试听 button. Voice labels come from
- * [SystemVoiceInfo] (a real engine name when meaningful, otherwise
- * 中文男声1/中文女声1-style naming — engines like Google expose raw ids
- * only). The current selection is shown in the field; a voice switch
- * applies immediately and persists ([SystemSpeaker] live-follows). While
- * the engine enumerates (a spinner replaces the dropdowns) the selected
- * label stays visible so the picker never blanks mid-session. When the
- * engine exposes no selectable voices the section shows nothing — the
- * source still speaks with the engine's default.
+ * only when the switch is off — the dedicated 英文音色 dropdown with all
+ * English voices merged in one list (美式英语1/英式英语1-style labels,
+ * [systemEnVoiceInfosAll]). Each dropdown carries a 试听 button. Voice
+ * labels come from [SystemVoiceInfo] (a real engine name when meaningful,
+ * otherwise 中文男声1/中文女声1-style naming — engines like Google expose
+ * raw ids only). The current selection is shown in the field; a voice
+ * switch applies immediately and persists ([SystemSpeaker] live-follows).
+ * While the engine enumerates (a spinner replaces the dropdowns) the
+ * selected label stays visible so the picker never blanks mid-session.
+ * When the engine exposes no selectable voices the section shows nothing —
+ * the source still speaks with the engine's default.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SystemVoiceSection(
     loading: Boolean,
     zhVoices: List<SystemVoiceInfo>?,
-    enVoices: Map<String, List<SystemVoiceInfo>>,
-    enRegion: String,
+    enVoices: List<SystemVoiceInfo>?,
     useDefaultEn: Boolean,
     zhKey: String,
     enKey: String,
     onZhChange: (String) -> Unit,
     onUseDefaultEnChange: (Boolean) -> Unit,
-    onEnRegionChange: (String) -> Unit,
     onEnChange: (String) -> Unit,
     onPreviewZh: (String) -> Unit,
     onPreviewEn: (String) -> Unit,
     previewState: TtsTestState,
 ) {
     val zhEmpty = zhVoices.isNullOrEmpty()
-    val enEmpty = enVoices.values.all { it.isEmpty() }
+    val enEmpty = enVoices.isNullOrEmpty()
     if (!loading && zhEmpty && enEmpty && previewState == TtsTestState.Idle) return
 
     Column {
@@ -785,37 +752,17 @@ private fun SystemVoiceSection(
             )
         }
         if (!useDefaultEn) {
-            val regionVoices = enVoices[enRegion].orEmpty()
-            val enCurrent = regionVoices.firstOrNull { it.key == enKey }
-            Column(modifier = Modifier.padding(top = 8.dp)) {
-                Text(
-                    "英文地区",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.semantics { heading() },
-                )
-                SettingsRadioRow(
-                    title = "美式英语",
-                    selected = enRegion != SYSTEM_EN_REGION_GB,
-                    onClick = { onEnRegionChange(SYSTEM_EN_REGION_US) },
-                )
-                SettingsRadioRow(
-                    title = "英式英语",
-                    selected = enRegion == SYSTEM_EN_REGION_GB,
-                    divider = false,
-                    onClick = { onEnRegionChange(SYSTEM_EN_REGION_GB) },
-                )
-            }
+            val enCurrent = enVoices?.firstOrNull { it.key == enKey }
             if (!enEmpty && !loading) {
                 SystemVoiceDropdown(
                     label = "英文音色",
-                    voices = regionVoices,
+                    voices = enVoices.orEmpty(),
                     selectedKey = enKey,
                     current = enCurrent,
                     previewing = previewing,
                     onSelect = onEnChange,
                     onPreview = onPreviewEn,
-                    modifier = Modifier.padding(top = 4.dp),
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
         }

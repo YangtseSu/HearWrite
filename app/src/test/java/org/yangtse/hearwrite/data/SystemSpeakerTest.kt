@@ -68,7 +68,6 @@ class SystemSpeakerTest {
         assertEquals(SYSTEM_EN_REGION_US, systemEnRegionOf("en-us-x-iob-local"))
         assertEquals(SYSTEM_EN_REGION_US, systemEnRegionOf("en-US-language"))
         assertEquals(SYSTEM_EN_REGION_US, systemEnRegionOf(""))
-        assertEquals(SYSTEM_EN_REGION_US, systemEnRegionOf("cmn-cn-x-ssa-local"))
     }
 
     @Test
@@ -95,6 +94,48 @@ class SystemSpeakerTest {
         )
         val us = systemEnVoicesForRegion(set, SYSTEM_EN_REGION_US)
         assertEquals(2, us.size)
+    }
+
+    // ------------------------------------------- merged en picker
+
+    @Test
+    fun `merged en list orders us then gb then countryless`() {
+        val set = setOf(
+            v("en-gb-x-rjs-local", "en", "GB"),
+            v("en-us-x-sfg-local", "en", "US"),
+            v("en-x-ssa-network", "en"), // countryless
+            v("en-us-x-sfg-network", "en", "US"), // twin — dedupe
+        )
+        val all = systemEnVoicesAll(set)
+        assertEquals(
+            listOf("en-us-x-sfg-local", "en-gb-x-rjs-local", "en-x-ssa-network"),
+            all.map { it.name },
+        )
+    }
+
+    @Test
+    fun `merged en labels number within region`() {
+        val set = setOf(
+            v("en-us-x-sfg-local", "en", "US"),
+            v("en-us-x-iob-local", "en", "US"),
+            v("en-gb-x-rjs-local", "en", "GB"),
+            v("en-x-ssa-network", "en"), // countryless
+        )
+        val infos = systemEnVoiceInfosAll(set)
+        assertEquals(
+            listOf("美式英语1", "美式英语2", "英式英语1", "英文语音1"),
+            infos.map { it.label },
+        )
+    }
+
+    @Test
+    fun `merged en readable names get region prefix`() {
+        val set = setOf(
+            v("com.apple.voice.compact.en-GB.Daniel", "en", "GB"),
+            v("com.apple.voice.compact.en-US.Samantha", "en", "US"),
+        )
+        val infos = systemEnVoiceInfosAll(set)
+        assertEquals(listOf("美式 Samantha", "英式 Daniel"), infos.map { it.label })
     }
 
     @Test

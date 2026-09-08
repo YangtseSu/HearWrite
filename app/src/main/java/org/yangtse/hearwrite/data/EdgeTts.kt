@@ -133,57 +133,57 @@ val EDGE_VOICE_CATALOG: List<EdgeVoice> = listOf(
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-US, AriaNeural)",
         shortName = "en-US-AriaNeural", gender = "Female", locale = "en-US",
-        friendlyName = "Aria（女声 · 自信）", status = "GA",
+        friendlyName = "美式 Aria（女声 · 自信）", status = "GA",
     ),
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-US, JennyNeural)",
         shortName = "en-US-JennyNeural", gender = "Female", locale = "en-US",
-        friendlyName = "Jenny（女声 · 亲切）", status = "GA",
+        friendlyName = "美式 Jenny（女声 · 亲切）", status = "GA",
     ),
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-US, MichelleNeural)",
         shortName = "en-US-MichelleNeural", gender = "Female", locale = "en-US",
-        friendlyName = "Michelle（女声 · 愉悦）", status = "GA",
+        friendlyName = "美式 Michelle（女声 · 愉悦）", status = "GA",
     ),
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-US, GuyNeural)",
         shortName = "en-US-GuyNeural", gender = "Male", locale = "en-US",
-        friendlyName = "Guy（男声 · 激情）", status = "GA",
+        friendlyName = "美式 Guy（男声 · 激情）", status = "GA",
     ),
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-US, BrianNeural)",
         shortName = "en-US-BrianNeural", gender = "Male", locale = "en-US",
-        friendlyName = "Brian（男声 · 随和）", status = "GA",
+        friendlyName = "美式 Brian（男声 · 随和）", status = "GA",
     ),
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-US, ChristopherNeural)",
         shortName = "en-US-ChristopherNeural", gender = "Male", locale = "en-US",
-        friendlyName = "Christopher（男声 · 沉稳）", status = "GA",
+        friendlyName = "美式 Christopher（男声 · 沉稳）", status = "GA",
     ),
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-US, EricNeural)",
         shortName = "en-US-EricNeural", gender = "Male", locale = "en-US",
-        friendlyName = "Eric（男声 · 理性）", status = "GA",
+        friendlyName = "美式 Eric（男声 · 理性）", status = "GA",
     ),
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-GB, SoniaNeural)",
         shortName = "en-GB-SoniaNeural", gender = "Female", locale = "en-GB",
-        friendlyName = "Sonia（女声 · 亲切）", status = "GA",
+        friendlyName = "英式 Sonia（女声 · 亲切）", status = "GA",
     ),
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-GB, LibbyNeural)",
         shortName = "en-GB-LibbyNeural", gender = "Female", locale = "en-GB",
-        friendlyName = "Libby（女声 · 亲切）", status = "GA",
+        friendlyName = "英式 Libby（女声 · 亲切）", status = "GA",
     ),
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-GB, RyanNeural)",
         shortName = "en-GB-RyanNeural", gender = "Male", locale = "en-GB",
-        friendlyName = "Ryan（男声 · 亲切）", status = "GA",
+        friendlyName = "英式 Ryan（男声 · 亲切）", status = "GA",
     ),
     EdgeVoice(
         name = "Microsoft Server Speech Text to Speech Voice (en-GB, ThomasNeural)",
         shortName = "en-GB-ThomasNeural", gender = "Male", locale = "en-GB",
-        friendlyName = "Thomas（男声 · 亲切）", status = "GA",
+        friendlyName = "英式 Thomas（男声 · 亲切）", status = "GA",
     ),
 )
 

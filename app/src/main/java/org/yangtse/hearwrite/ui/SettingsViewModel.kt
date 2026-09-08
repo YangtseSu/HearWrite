@@ -20,10 +20,7 @@ import org.yangtse.hearwrite.data.OcrProviderConfig
 import org.yangtse.hearwrite.data.OcrProviderPreset
 import org.yangtse.hearwrite.data.TTS_PROVIDER_PRESETS
 import org.yangtse.hearwrite.data.TtsApiKind
-import org.yangtse.hearwrite.data.SYSTEM_EN_REGION_GB
-import org.yangtse.hearwrite.data.SYSTEM_EN_REGION_US
 import org.yangtse.hearwrite.data.SystemVoiceInfo
-import org.yangtse.hearwrite.data.systemEnRegionOf
 import org.yangtse.hearwrite.data.TtsProviderConfig
 import org.yangtse.hearwrite.data.TtsProviderException
 import org.yangtse.hearwrite.data.TtsProviderPreset
@@ -197,17 +194,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _systemVoicesZh = MutableStateFlow<List<SystemVoiceInfo>?>(null)
     val systemVoicesZh: StateFlow<List<SystemVoiceInfo>?> = _systemVoicesZh.asStateFlow()
 
-    /** The dedicated 英文 voices per region (美式 en-US / 英式 en-GB). */
-    private val _systemEnVoices = MutableStateFlow<Map<String, List<SystemVoiceInfo>>>(emptyMap())
-    val systemEnVoices: StateFlow<Map<String, List<SystemVoiceInfo>>> = _systemEnVoices.asStateFlow()
+    /** The dedicated 英文 voices as one merged list (美式英语N/英式英语N/…). */
+    private val _systemEnVoices = MutableStateFlow<List<SystemVoiceInfo>?>(null)
+    val systemEnVoices: StateFlow<List<SystemVoiceInfo>?> = _systemEnVoices.asStateFlow()
 
     /** 英文使用默认音色 (default on): English text uses the 默认音色 voice. */
     private val _systemUseDefaultEn = MutableStateFlow(true)
     val systemUseDefaultEn: StateFlow<Boolean> = _systemUseDefaultEn.asStateFlow()
-
-    /** The 英文地区 of the stored dedicated English voice (美式/英式). */
-    private val _systemEnRegion = MutableStateFlow(SYSTEM_EN_REGION_US)
-    val systemEnRegion: StateFlow<String> = _systemEnRegion.asStateFlow()
 
     /** Loading flag so the page shows a spinner while the engine enumerates. */
     private val _systemVoicesLoading = MutableStateFlow(false)
@@ -318,10 +311,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             try {
                 _systemVoicesZh.value = speaker.ensureVoiceList("zh-CN")
-                _systemEnVoices.value = mapOf(
-                    SYSTEM_EN_REGION_US to (speaker.ensureEnVoicesForRegion(SYSTEM_EN_REGION_US).orEmpty()),
-                    SYSTEM_EN_REGION_GB to (speaker.ensureEnVoicesForRegion(SYSTEM_EN_REGION_GB).orEmpty()),
-                )
+                _systemEnVoices.value = speaker.ensureEnVoicesAll()
             } catch (e: Exception) {
                 // Engine failures degrade to the system default voice; the
                 // picker stays empty instead of crashing the page.
@@ -350,8 +340,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     /** Change the 英文 system voice selection and persist it. */
     fun onSystemVoiceEnChange(key: String) {
         _systemVoiceEn.value = key
-        // The chosen voice carries its own region (en-gb-* → 英式).
-        _systemEnRegion.value = systemEnRegionOf(key)
         viewModelScope.launch {
             try {
                 settings.setSystemVoiceEn(key)
@@ -367,38 +355,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             try {
                 settings.setSystemUseDefaultEn(useDefault)
-            } catch (e: Exception) {
-                // DataStore failures must never crash the screen (AGENTS.md).
-            }
-        }
-    }
-
-    /**
-     * Switch the 英文地区 (美式/英式), shown only when 英文使用默认音色 is
-     * off. The current dedicated English voice belongs to the other region,
-     * so switching selects that region's default voice explicitly — a blank
-     * stored value could not remember its region (an en-GB voice blanked
-     * would read back as 美式 and bounce the picker). Voices already carry
-     * the region prefix, so a stored en-GB key keeps working whatever the
-     * chip says.
-     */
-    fun onSystemEnRegionChange(region: String) {
-        if (region == _systemEnRegion.value) return
-        val currentKey = _systemVoiceEn.value
-        val enVoices = _systemEnVoices.value[region].orEmpty()
-        // "" (engine default) belongs to whichever region is selected; an
-        // explicit other-region voice carries its own region and wins.
-        val regionDefault = enVoices.firstOrNull { systemEnRegionOf(it.key) == region }
-        val key = if (currentKey.isBlank() || systemEnRegionOf(currentKey) != region) {
-            regionDefault?.key.orEmpty()
-        } else {
-            currentKey
-        }
-        _systemEnRegion.value = region
-        _systemVoiceEn.value = key
-        viewModelScope.launch {
-            try {
-                settings.setSystemVoiceEn(key)
             } catch (e: Exception) {
                 // DataStore failures must never crash the screen (AGENTS.md).
             }

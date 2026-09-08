@@ -55,6 +55,15 @@ const val SYSTEM_EN_REGION_GB = "gb"
 fun systemEnRegionOf(name: String): String =
     if (name.startsWith("en-gb", ignoreCase = true)) SYSTEM_EN_REGION_GB else SYSTEM_EN_REGION_US
 
+/** The region of an English [voice] by its locale country, or null when it
+ *  has no country (a bare `en` engine voice — the engine does not say
+ *  which accent it is, so labeling it 美式 would be a lie). */
+fun systemEnVoiceRegion(voice: SystemEngineVoice): String? = when (voice.country.uppercase()) {
+    "US" -> SYSTEM_EN_REGION_US
+    "GB" -> SYSTEM_EN_REGION_GB
+    else -> null
+}
+
 /**
  * System-voice routing, mirroring the Edge source ([EdgeTts.resolveEdgeVoice]):
  * CJK text always uses the default (zh) voice — a zh-capable system voice
@@ -184,6 +193,34 @@ fun systemEnVoicesForRegion(voices: Set<SystemEngineVoice>, region: String): Lis
         .distinctBy { systemVoiceStem(it.name) }
         .toList()
 
+/**
+ * All English voices in one picker list: en-US and en-GB together (the
+ * textbook serve set), sorted so countryful voices come first (US then GB
+ * by name) with countryless ones (e.g. a bare `en` engine voice) last —
+ * labels carry 美式英语/英式英语 prefixes so one dropdown reads as a
+ * single ordered list. Countryless voices appear only here (never in the
+ * per-region lists — those would double-count them in both regions).
+ */
+fun systemEnVoicesAll(voices: Set<SystemEngineVoice>): List<SystemEngineVoice> {
+    val countryful = voices.asSequence()
+        .filter { it.language.lowercase() == "en" && it.country.isNotEmpty() }
+        .filterNot(::systemVoiceIsLanguagePseudo)
+        .sortedWith(systemVoiceSort)
+        .distinctBy { systemVoiceStem(it.name) }
+        .toList()
+    val countryless = voices.asSequence()
+        .filter { it.language.lowercase() == "en" && it.country.isEmpty() }
+        .filterNot(::systemVoiceIsLanguagePseudo)
+        .sortedWith(compareByDescending<SystemEngineVoice> { !it.networkRequired }.thenBy { it.name })
+        .distinctBy { systemVoiceStem(it.name) }
+        .toList()
+    // US before GB within the countryful set: the sort is by country, but
+    // reorder so the merged picker reads 美式… then 英式… then 英文…
+    return countryful.filter { it.country.uppercase() == "US" } +
+        countryful.filter { it.country.uppercase() == "GB" } +
+        countryless
+}
+
 /** Shared deterministic order: exact-country first, embedded before network, then name. */
 private val systemVoiceSort = compareByDescending<SystemEngineVoice> {
     it.country.uppercase() == "CN" || it.country.uppercase() == "US" || it.country.uppercase() == "GB"
@@ -247,6 +284,29 @@ fun systemVoiceInfos(voices: List<SystemEngineVoice>, lang: String): List<System
             }
         }
         SystemVoiceInfo(voice.name, label, gender)
+    }
+}
+
+/**
+ * Build the English picker rows as one ordered list with region prefixes:
+ * countryful voices (US then GB, sorted) are numbered within their region
+ * (美式英语1…, 英式英语1…); a readable engine name keeps the region prefix
+ * in front (美式 Samantha). Countryless voices (a bare `en` engine voice)
+ * get the neutral 英文语音N naming — the engine does not say which accent
+ * it is, so labeling it 美式 would be a lie.
+ */
+fun systemEnVoiceInfosAll(voices: Set<SystemEngineVoice>): List<SystemVoiceInfo> {
+    var us = 0
+    var gb = 0
+    var other = 0
+    return systemEnVoicesAll(voices).map { voice ->
+        val display = systemVoiceDisplayName(voice)
+        val name = when (systemEnVoiceRegion(voice)) {
+            SYSTEM_EN_REGION_GB -> if (display.isNotEmpty()) "英式 $display" else "英式英语${++gb}"
+            SYSTEM_EN_REGION_US -> if (display.isNotEmpty()) "美式 $display" else "美式英语${++us}"
+            else -> if (display.isNotEmpty()) display else "英文语音${++other}"
+        }
+        SystemVoiceInfo(voice.name, name, systemVoiceGender(voice))
     }
 }
 
@@ -365,6 +425,17 @@ class SystemSpeaker(
     }
 
     /**
+     * The engine's cached English voices as one merged list (美式英语N /
+     * 英式英语N / 英文语音N labels), or null when none exist.
+     */
+    fun enVoicesAll(): List<SystemVoiceInfo>? {
+        val voices = availableVoices ?: return null
+        val all = systemEnVoiceInfosAll(voices.toSet())
+        if (all.isEmpty()) return null
+        return all
+    }
+
+    /**
      * Ensure the engine is initialized (and the [Voice] set enumerated),
      * then return the selectable voices for [lang]. The 设置 系统语音音色
      * picker calls this when it opens — the enumeration happens on the
@@ -378,13 +449,13 @@ class SystemSpeaker(
     }
 
     /**
-     * Ensure the engine is initialized, then return the voices for the
-     * English region [region] (美式 en-US / 英式 en-GB).
+     * Ensure the engine is initialized, then return the English voices as
+     * one merged list (美式英语N/英式英语N/英文语音N).
      */
-    suspend fun ensureEnVoicesForRegion(region: String): List<SystemVoiceInfo>? {
+    suspend fun ensureEnVoicesAll(): List<SystemVoiceInfo>? {
         val tts = ensureEngine() ?: return null
         if (availableVoices == null) refreshVoices(tts)
-        return enVoicesForRegion(region)
+        return enVoicesAll()
     }
 
     /**
@@ -400,7 +471,7 @@ class SystemSpeaker(
         val langVoices = if (zh) {
             systemVoicesFor(voices, lang)
         } else {
-            systemEnVoicesForRegion(voices, systemEnRegionOf(persisted))
+            systemEnVoicesAll(voices)
         }
         if (langVoices.isEmpty()) return ""
         return langVoices.firstOrNull { it.name == persisted }?.name
