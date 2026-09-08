@@ -717,6 +717,10 @@ private fun PlaybackPanel(
             val playing = ui.state == PlayState.PLAYING
             val paused = ui.state == PlayState.PAUSED
             val active = ui.isActive
+            // Single source of truth for the play control: the visible label
+            // under the button and the icon's contentDescription must match
+            // (A3 — TalkBack reads the same state the screen shows).
+            val playLabel = if (playing) "暂停" else if (paused) "继续" else "播放"
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -740,12 +744,12 @@ private fun PlaybackPanel(
                     ) {
                         Icon(
                             if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = if (playing) "暂停" else "继续",
+                            contentDescription = playLabel,
                             modifier = Modifier.size(32.dp),
                         )
                     }
                     Text(
-                        if (playing) "暂停" else if (paused) "继续" else "播放",
+                        playLabel,
                         style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.padding(top = 2.dp),
                     )
