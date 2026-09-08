@@ -697,9 +697,8 @@ private fun SystemVoiceSection(
     onPreviewEn: (String) -> Unit,
     previewState: TtsTestState,
 ) {
-    val zhEmpty = zhVoices.isNullOrEmpty()
     val enEmpty = enVoices.isNullOrEmpty()
-    if (!loading && zhEmpty && enEmpty && previewState == TtsTestState.Idle) return
+    if (!loading && zhVoices.isNullOrEmpty() && enEmpty && previewState == TtsTestState.Idle) return
 
     Column {
         if (loading) {
@@ -720,11 +719,14 @@ private fun SystemVoiceSection(
             }
         }
         val previewing = previewState == TtsTestState.Testing
-        val zhCurrent = zhVoices?.firstOrNull { it.key == zhKey }
-        if (!zhEmpty && !loading) {
+        val zhList = zhVoices.orEmpty()
+        val zhCurrent = zhList.firstOrNull { it.key == zhKey }
+        // A single selectable voice adds nothing over 默认（引擎选择） — hide
+        // the picker entirely (e.g. MiBrain exposes one bare zh voice).
+        if (zhList.size >= 2 && !loading) {
             SystemVoiceDropdown(
                 label = "默认音色",
-                voices = zhVoices.orEmpty(),
+                voices = zhList,
                 selectedKey = zhKey,
                 current = zhCurrent,
                 previewing = previewing,
@@ -752,11 +754,14 @@ private fun SystemVoiceSection(
             )
         }
         if (!useDefaultEn) {
-            val enCurrent = enVoices?.firstOrNull { it.key == enKey }
-            if (!enEmpty && !loading) {
+            val enList = enVoices.orEmpty()
+            val enCurrent = enList.firstOrNull { it.key == enKey }
+            // Same single-voice rule as the zh picker: one candidate is not
+            // a choice, so no dropdown (engine default already covers it).
+            if (enList.size >= 2 && !loading) {
                 SystemVoiceDropdown(
                     label = "英文音色",
-                    voices = enVoices.orEmpty(),
+                    voices = enList,
                     selectedKey = enKey,
                     current = enCurrent,
                     previewing = previewing,
@@ -849,12 +854,14 @@ private fun SystemVoiceDropdown(
             }
         }
         IconButton(
-            onClick = { current?.let { onPreview(it.key) } },
-            enabled = !previewing && current != null,
+            // 默认（引擎选择）is a real choice too — preview it with the
+            // empty key so the engine's own default voice speaks.
+            onClick = { onPreview(current?.key.orEmpty()) },
+            enabled = !previewing,
         ) {
             Icon(
                 Icons.Filled.PlayArrow,
-                contentDescription = "试听 ${current?.label ?: label}",
+                contentDescription = "试听 ${current?.label ?: "默认（引擎选择）"}",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
