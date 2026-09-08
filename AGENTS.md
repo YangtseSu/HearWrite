@@ -180,6 +180,7 @@ fix: correct Edge voice clip cache key on voice switch 🤖
 - **Conditional**: human-authored commits carry no 🤖. Mixed commits — the normal agent-driven case — count as AI-generated.
 - The emoji lives in the subject only; the body stays plain. Conventional-commit prefixes (`feat:` `fix:` `docs:` `data:` `chore:`) are unchanged and the emoji trails them.
 - It marks AI-generated work generically — no model name in the commit (the model can change per session; the release workflow and CHANGELOG parse plain subjects, keep the suffix out of their way).
+- **Roadmap entries**: an entry in `docs/ROADMAP.md` added/edited by an AI agent carries ` 🤖` at the end of its heading (e.g. `## 💡 间隔复习队列 🤖`) — same convention as commit subjects, so human-authored entries stay distinguishable. The suffix is decorative for humans only: it is not parsed by any workflow, and its presence never gates build/release tooling.
 
 ## Testing & QA
 
