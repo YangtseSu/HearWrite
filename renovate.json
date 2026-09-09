@@ -1,0 +1,48 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "enabledManagers": ["gradle", "gradle-wrapper"],
+  "dependencyDashboard": true,
+  "prHourlyLimit": 2,
+  "schedule": ["before 9am on Monday"],
+  "timezone": "Asia/Shanghai",
+  "rebaseWhen": "behind-base-branch",
+  "packageRules": [
+    {
+      "matchManagers": ["gradle-wrapper"],
+      "groupName": "Gradle wrapper"
+    },
+    {
+      "matchPackageNames": [
+        "org.jetbrains.kotlin:kotlin-gradle-plugin",
+        "com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin"
+      ],
+      "groupName": "Kotlin + KSP (co-dependent)",
+      "commitMessageTopic": "Kotlin and KSP together"
+    },
+    {
+      "matchPackageNames": ["org.jetbrains.kotlinx:kotlinx-coroutines-core", "org.jetbrains.kotlinx:kotlinx-coroutines-test"],
+      "groupName": "kotlinx-coroutines"
+    },
+    {
+      "matchPackageNames": [
+        "com.android.tools.build:gradle",
+        "org.jetbrains.kotlin:kotlin-gradle-plugin",
+        "com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin",
+        "androidx.compose:compose-bom",
+        "androidx.room:room-runtime",
+        "androidx.room:room-ktx",
+        "androidx.room:room-compiler",
+        "androidx.room:room-testing"
+      ],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true
+  },
+  "gitAuthor": "HearWrite Renovate <renovate@example.com>",
+  "platform": "github",
+  "repositories": ["YangtseSu/HearWrite"]
+}
