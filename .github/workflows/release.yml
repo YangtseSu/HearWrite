@@ -120,5 +120,3 @@ jobs:
             app/build/dist/HearWrite-*.apk
             app/build/dist/HearWrite-*-mapping.txt
           body_path: release-notes.md
-          # 0.x.y is pre-release until the first stable bump (AGENTS.md versioning).
-          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
