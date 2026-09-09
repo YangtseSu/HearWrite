@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.yangtse.hearwrite.HearWriteApplication
+import org.yangtse.hearwrite.data.DictationSessionStore
 import org.yangtse.hearwrite.data.Haptics
 import org.yangtse.hearwrite.domain.CompoundTables
 import org.yangtse.hearwrite.domain.DictationEngine
@@ -65,10 +66,25 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     private val settings = app.settingsRepository
     private val wrongWordsRepository = app.wrongWordsRepository
 
-    /** Lines handed over by the launching screen (slice → shuffle applied).
-     *  Consumed once — a ViewModel recreated after an activity kill must not
-     *  replay or restart the old session. */
-    val lines: List<String> = app.dictationSession.take()
+    /**
+     * Session handed over by the launching screen: the prepared lines (slice
+     * → shuffle applied) plus the provenance [DictationSessionStore.Session.sourceLabel]
+     * for wrong-word marks (a `default_*` built-in list id or a history row
+     * id; null for bare-word runs). Consumed once — a ViewModel recreated
+     * after an activity kill must not replay or restart the old session.
+     */
+    private val session: DictationSessionStore.Session = app.dictationSession.take()
+
+    /** Lines of the staged session (initial run; 复习错词 restarts with fewer). */
+    private val sessionLines: List<String> = session.lines
+
+    /**
+     * The 错词本 source of the current run: the staged session's provenance
+     * for the initial run, or null once a 复习错词 round restarts over the
+     * book — review marks must not double the original list's count with a
+     * stale source (the round's bare words carry no provenance).
+     */
+    private var runSourceLabel: String? = session.sourceLabel
 
     /**
      * 组词 phrase pass routing: the active TTS chain (own cache + bounded
@@ -119,7 +135,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     val ready: StateFlow<Boolean> = _ready.asStateFlow()
 
     /** Word count of the run in progress (a 复习错词 round restarts with fewer). */
-    private val _total = MutableStateFlow(lines.size)
+    private val _total = MutableStateFlow(sessionLines.size)
     val total: StateFlow<Int> = _total.asStateFlow()
 
     private val _elapsedSec = MutableStateFlow<Long?>(null)
@@ -127,7 +143,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     val elapsedSec: StateFlow<Long?> = _elapsedSec.asStateFlow()
 
     /** Lines of the run in progress (initial session or a review round). */
-    private val _activeLines = MutableStateFlow(lines)
+    private val _activeLines = MutableStateFlow(sessionLines)
     val activeLines: StateFlow<List<String>> = _activeLines.asStateFlow()
 
     /** Wall-clock start of the current run (init session or a review round). */
@@ -227,7 +243,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
                 emptyList()
             }
             _ready.value = true
-            beginRun(lines)
+            beginRun(sessionLines, runSourceLabel)
         }
         // Score summary + completion chime: capture the elapsed time once when
         // the run completes (a review round resets it via beginRun).
@@ -317,14 +333,19 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /** Start a run (initial session or 复习错词 round) and reset its stats. */
-    private fun beginRun(runLines: List<String>) {
+    /**
+     * Start a run (initial session or 复习错词 round) and reset its stats.
+     * [sourceLabel] is the run's wrong-word provenance (null for review
+     * rounds — see [runSourceLabel]).
+     */
+    private fun beginRun(runLines: List<String>, sourceLabel: String?) {
         runStartedAtMs = System.currentTimeMillis()
         _elapsedSec.value = null
         runWrongWords.clear()
         _runWrongCount.value = 0
         _total.value = runLines.size
         _activeLines.value = runLines
+        runSourceLabel = sourceLabel
         engine.start(runLines)
     }
 
@@ -374,7 +395,9 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         Haptics.notifyWarning(getApplication()) // alice notifyWarning parity
         viewModelScope.launch {
             try {
-                wrongWordsRepository.add(head)
+                // The run's provenance feeds the book row's source; a 复习错词
+                // round passes null and keeps whatever source the word had.
+                wrongWordsRepository.add(head, runSourceLabel)
             } catch (e: Exception) {
                 // Persistence must never break dictation; the session list
                 // still carries the mark for the finish/review flow.
@@ -429,22 +452,24 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     /**
      * 复习错词: re-run a dictation round over exactly the wrong set, restoring
      * the enriched session line for each headword when it is still present in
-     * the current word list (upstream `handleRetryWrong`).
+     * the current word list (upstream `handleRetryWrong`). The review round
+     * is a re-check, not a fresh source: its marks carry no provenance so the
+     * original list's count does not double on every review pass.
      */
     fun reviewWrongWords() {
         val book = _wrongWords.value
         if (book.isEmpty()) return
         val reviewLines = book.map { word ->
-            lines.firstOrNull { speakTextFromEntry(it) == word } ?: word
+            sessionLines.firstOrNull { speakTextFromEntry(it) == word } ?: word
         }
-        beginRun(reviewLines)
+        beginRun(reviewLines, null)
     }
 
     private fun snapshot(): DictationUiState = DictationUiState(
         state = engine.state.value,
         finished = false,
         index = 0,
-        total = lines.size,
+        total = sessionLines.size,
         remainingMs = null,
         intervalSec = MIN_INTERVAL_SEC,
         autoNext = true,

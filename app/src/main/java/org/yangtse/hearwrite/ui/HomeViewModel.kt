@@ -56,6 +56,33 @@ data class FavoriteUiItem(
 )
 
 /**
+ * A prepared dictation from Home: canonical lines (slice → shuffle applied)
+ * plus the provenance of the recorded history row, which becomes the run's
+ * 错词本 source label (Roadmap #1). A bare-word start (听写错词 over the book)
+ * carries a null source.
+ */
+data class PreparedSession(
+    val lines: List<String>,
+    val historyId: String?,
+)
+
+/**
+ * One 错词本 drawer group: words sharing a resolved source. [sourceTitle] is
+ * the resolved list label (null = 未知来源), [jumpCategory]/[jumpLabel] carry
+ * the built-in list the group came from so the drawer can offer 查看词表
+ * (source resolution to a clickable library jump).
+ */
+data class WrongWordGroup(
+    val sourceTitle: String?,
+    val marks: List<WrongWordMark>,
+    val jumpCategory: String?,
+    val jumpLabel: String?,
+) {
+    /** Groups sort by their top word's count (most-wrong group first). */
+    val topSortKey: Pair<Int, Long> get() = marks.first().sortKey
+}
+
+/**
  * Home: pasted word list with the persisted draft (500 ms debounce + flush on
  * dispose), start options 起始序号 (clamped when the list shrinks) and 随机顺序
  * (session-local Fisher–Yates). Starting enriches bare English words with the
@@ -116,8 +143,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val favoriteItems: StateFlow<List<FavoriteUiItem>> = _favoriteItems.asStateFlow()
 
     private val _wrongWords = MutableStateFlow<List<WrongWordMark>>(emptyList())
-    /** 错词本 rows (word + mark time) for the 更多 drawer. */
+    /** 错词本 rows (word + count + source) for the 更多 drawer, most-wrong first. */
     val wrongWords: StateFlow<List<WrongWordMark>> = _wrongWords.asStateFlow()
+
+    /** Wrong-word marks regrouped by resolved source (null source → 未知来源). */
+    private val _wrongGroups = MutableStateFlow<List<WrongWordGroup>>(emptyList())
+    val wrongGroups: StateFlow<List<WrongWordGroup>> = _wrongGroups.asStateFlow()
+
+    /** Built-in list titles by list id (`default_*` → label) for source jumps. */
+    private val _libraryTitles = MutableStateFlow<Map<String, String>>(emptyMap())
 
     private val _starting = MutableStateFlow(false)
     /** True while the start action enriches/records the list (button spin). */
@@ -249,9 +283,54 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 _favoriteItems.value = resolveFavorites(h, f)
             }
         }
-        // 错词本 rows for the 更多 drawer (Room observe; oldest mark first).
+        // 错词本 rows for the 更多 drawer: Room marks (most-wrong first)
+        // resolved against the live history (a user list's source title is the
+        // row's first line) and the built-in title map. Groups re-form
+        // whenever any input moves (a mark lands, history is pruned, titles
+        // load late).
         viewModelScope.launch {
-            wrongWordsRepository.observeMarks().collect { _wrongWords.value = it }
+            combine(
+                wrongWordsRepository.observeMarks(),
+                historyRepository.observe(),
+                _libraryTitles,
+            ) { marks, historyRows, titles ->
+                val resolved = marks.map { mark ->
+                    val sourceLabel = mark.sourceLabel
+                    val title = when {
+                        sourceLabel == null -> null
+                        sourceLabel.startsWith("default_") -> titles[sourceLabel]
+                        else -> historyRows.firstOrNull { it.id == sourceLabel }
+                            ?.let { it.enrichedText ?: it.text }
+                            ?.lineSequence()?.firstOrNull { it.isNotBlank() }
+                            // The stored line is `word | pos | meaning`; the
+                            // source title is the list's headword, not the
+                            // whole gloss.
+                            ?.substringBefore('|')?.trim()
+                    }
+                    ResolvedWrongMark(mark, title)
+                }
+                resolved
+            }.collect { resolved ->
+                _wrongWords.value = resolved.map { it.mark }
+                _wrongGroups.value = groupResolvedWrong(resolved)
+            }
+        }
+        // Built-in list titles (id → label) load once off the main thread;
+        // the combine above re-resolves the groups when they land.
+        viewModelScope.launch {
+            val titles = buildMap {
+                libraryRepository.categories().forEach { category ->
+                    try {
+                        libraryRepository.lists(category.name).forEach { list ->
+                            put(list.id, list.label)
+                        }
+                    } catch (e: Exception) {
+                        // Titles are decoration; a failed category degrades
+                        // that group's title to 未知来源.
+                    }
+                }
+            }
+            _libraryTitles.value = titles
         }
         // OCR provider config feeds the scan sheet's service row.
         viewModelScope.launch {
@@ -470,7 +549,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      * 起始序号, then apply 随机顺序. Returns null when there is nothing to
      * dictate or another start is already in flight.
      */
-    suspend fun prepareAndRecord(): List<String>? {
+    suspend fun prepareAndRecord(): PreparedSession? {
         if (_starting.value) return null
         val text = _draft.value
         val all = parseWords(text)
@@ -478,8 +557,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _starting.value = true
         try {
             val enriched = enrich(text)
-            historyRepository.add(text, enriched)
-            return prepareStartLines(parseWords(enriched), _startIndex.value, _shuffle.value)
+            // The row id becomes the run's wrong-word source (Roadmap #1) —
+            // marks from this dictation point back to the recorded list.
+            val historyId = historyRepository.add(text, enriched)
+            val lines = prepareStartLines(parseWords(enriched), _startIndex.value, _shuffle.value)
+            return PreparedSession(lines, historyId)
         } finally {
             _starting.value = false
         }
@@ -677,5 +759,47 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             "已识别 ${entries.size} 个单词"
         }
+    }
+}
+
+/**
+ * A wrong-word mark paired with its resolved source title. [title] is null
+ * when the source is gone (a deleted history row) or the word was entered by
+ * hand — the UI degrades that to "未知来源" (the book outlives its sources).
+ */
+private data class ResolvedWrongMark(
+    val mark: WrongWordMark,
+    val title: String?,
+)
+
+/**
+ * Group resolved marks by their (raw) source id so the drawer shows one
+ * section per dictation source. Group key = source id; the title displayed is
+ * the resolved label of the group's first mark (all marks of one id resolve
+ * identically). Built-in sources (`default_*`) carry their category/label for
+ * a 查看词表 jump; history/manual/null sources do not. Input arrives
+ * most-wrong first; groups and marks preserve that order.
+ */
+private fun groupResolvedWrong(resolved: List<ResolvedWrongMark>): List<WrongWordGroup> {
+    val bySource = LinkedHashMap<String?, MutableList<ResolvedWrongMark>>()
+    resolved.forEach { row -> bySource.getOrPut(row.mark.sourceLabel) { mutableListOf() }.add(row) }
+    return bySource.map { (sourceLabel, rows) ->
+        val first = rows.first()
+        var jumpCategory: String? = null
+        var jumpLabel: String? = null
+        if (sourceLabel != null && sourceLabel.startsWith("default_")) {
+            val parts = sourceLabel.removePrefix("default_").split("_", limit = 2)
+            if (parts.size == 2) {
+                jumpCategory = parts[0]
+                // The resolved title (label) is what the library browser shows.
+                jumpLabel = first.title
+            }
+        }
+        WrongWordGroup(
+            sourceTitle = first.title,
+            marks = rows.map { it.mark },
+            jumpCategory = jumpCategory,
+            jumpLabel = jumpLabel,
+        )
     }
 }

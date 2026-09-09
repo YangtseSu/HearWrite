@@ -2,11 +2,13 @@ package org.yangtse.hearwrite.ui
 
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,9 +32,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.yangtse.hearwrite.data.HistoryEntry
-import org.yangtse.hearwrite.data.WrongWordMark
 import org.yangtse.hearwrite.domain.parseWords
 import org.yangtse.hearwrite.ui.theme.hearWriteSemantics
 import java.time.Instant
@@ -191,12 +193,14 @@ fun FavoritesSheet(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WrongWordsSheet(
-    entries: List<WrongWordMark>,
+    groups: List<WrongWordGroup>,
     onDictate: () -> Unit,
     onDelete: (String) -> Unit,
     onClear: () -> Unit,
+    onJumpToSource: (category: String, label: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val total = groups.sumOf { it.marks.size }
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -206,38 +210,79 @@ fun WrongWordsSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "错词本（${entries.size}）",
+                    "错词本（$total）",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
-                if (entries.isNotEmpty()) {
+                if (total > 0) {
                     TextButton(onClick = onClear) {
                         Text("清空", color = MaterialTheme.colorScheme.error)
                     }
                 }
             }
-            if (entries.isEmpty()) {
+            if (total == 0) {
                 EmptyHint("暂无错词")
             } else {
                 LazyColumn(modifier = Modifier.heightIn(max = SHEET_LIST_MAX_HEIGHT)) {
-                    items(entries, key = { it.word }) { mark ->
-                        ListRow(
-                            title = mark.word,
-                            subtitle = "标记于 ${formatStamp(mark.addedAt)}",
-                            trailing = {
-                                IconButton(
-                                    onClick = { onDelete(mark.word) },
-                                    modifier = Modifier.size(48.dp),
-                                ) {
-                                    Icon(
-                                        Icons.Filled.Delete,
-                                        contentDescription = "移除错词",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    groups.forEach { group ->
+                        // Source section header: resolved label (未知来源 for
+                        // manual / orphaned sources) + wrong-count; built-in
+                        // sources carry a jump back to their list preview.
+                        item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                     )
+                                    .padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    group.sourceTitle ?: "未知来源",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    "×${group.marks.size}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (group.jumpCategory != null && group.jumpLabel != null) {
+                                    TextButton(
+                                        onClick = { onJumpToSource(group.jumpCategory, group.jumpLabel) },
+                                        modifier = Modifier.height(36.dp),
+                                    ) {
+                                        Text("查看词表")
+                                    }
                                 }
-                            },
-                        )
-                        HorizontalDivider()
+                            }
+                        }
+                        items(group.marks, key = { it.word }) { mark ->
+                            ListRow(
+                                title = mark.word,
+                                subtitle = buildString {
+                                    append("错 ${mark.errorCount} 次 · 最近 ")
+                                    append(formatStamp(mark.lastWrongAt))
+                                },
+                                trailing = {
+                                    IconButton(
+                                        onClick = { onDelete(mark.word) },
+                                        modifier = Modifier.size(48.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = "移除错词",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                },
+                            )
+                            HorizontalDivider()
+                        }
                     }
                 }
                 Button(
@@ -248,7 +293,7 @@ fun WrongWordsSheet(
                 ) {
                     Icon(Icons.Filled.PlayArrow, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("听写错词（${entries.size} 词）")
+                    Text("听写错词（$total 词）")
                 }
             }
         }

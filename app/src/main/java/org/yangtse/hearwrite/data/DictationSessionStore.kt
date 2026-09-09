@@ -14,14 +14,40 @@ class DictationSessionStore {
     var lines: List<String> = emptyList()
 
     /**
-     * Consume the staged list — one session, one read. An activity kill that
-     * recreates the dictation ViewModel must not replay (or silently restart)
-     * the old session; without a staged list the screen shows the empty
-     * state and 返回 restarts from Home.
+     * Provenance of the staged lines for the 错词本 source label (Roadmap #1):
+     * a built-in list id (`default_<category>_<label>`) or the history row id
+     * the list was recorded under; null for bare-word sessions (听写错词 over
+     * the book, manual headwords) whose wrong marks keep no source.
      */
-    fun take(): List<String> {
-        val staged = lines
-        lines = emptyList()
-        return staged
+    @Volatile
+    var sourceLabel: String? = null
+
+    /**
+     * Stage one session: [lines] plus its optional [sourceLabel]. Written
+     * right before navigating (Home records the list in history and hands the
+     * row id; the library preview hands the built-in list id).
+     */
+    fun stage(lines: List<String>, sourceLabel: String?) {
+        this.lines = lines
+        this.sourceLabel = sourceLabel
     }
+
+    /**
+     * Consume the staged session — one session, one read. An activity kill
+     * that recreates the dictation ViewModel must not replay (or silently
+     * restart) the old session; without a staged list the screen shows the
+     * empty state and 返回 restarts from Home.
+     */
+    fun take(): Session {
+        val session = Session(lines, sourceLabel)
+        lines = emptyList()
+        sourceLabel = null
+        return session
+    }
+
+    /** One staged session: canonical list lines plus its provenance label. */
+    data class Session(
+        val lines: List<String>,
+        val sourceLabel: String?,
+    )
 }

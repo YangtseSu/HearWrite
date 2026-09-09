@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
@@ -66,8 +67,9 @@ class HistoryRepositoryTest {
         dao.seed(plain, enriched, 1L, "r0")
         // The library preview / history rows hand the enriched text to the
         // draft, so the submission IS the enriched text and effective == null.
-        r.add(enriched, null)
+        val id = r.add(enriched, null)
         assertEquals(1, dao.all().size)
+        assertEquals("r0", id) // the stored row's id is returned (source key)
     }
 
     @Test
@@ -82,7 +84,16 @@ class HistoryRepositoryTest {
     fun `distinct content inserts a new row`() = runTest {
         val (r, dao) = repo()
         dao.seed(plain, enriched, 1L, "r0")
-        r.add("kiwi\nmango", null)
+        val id = r.add("kiwi\nmango", null)
         assertEquals(2, dao.all().size)
+        assertEquals(id, dao.all().first { it.text == "kiwi\nmango" }.id)
+    }
+
+    @Test
+    fun `blank input returns null and records nothing`() = runTest {
+        val (r, dao) = repo()
+        val id = r.add("   ", null)
+        assertNull(id)
+        assertEquals(0, dao.all().size)
     }
 }

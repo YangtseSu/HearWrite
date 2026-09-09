@@ -33,10 +33,13 @@ class HistoryRepository(
      * (null when enrichment changed nothing — the plain text is then the
      * row's only form). An existing row whose text or enriched text matches
      * is bumped to the front with a fresh timestamp.
+     *
+     * @return the stored row id — the provenance key a dictation started from
+     *         this list carries into the 错词本 (Roadmap #1 `sourceLabel`).
      */
-    suspend fun add(text: String, enrichedText: String?) {
+    suspend fun add(text: String, enrichedText: String?): String? {
         val trimmed = text.trim()
-        if (trimmed.isEmpty()) return
+        if (trimmed.isEmpty()) return null
         val effective = enrichedText?.trim()?.takeIf { it.isNotEmpty() && it != trimmed }
         val now = System.currentTimeMillis()
         val existing = historyDao.all().firstOrNull { e ->
@@ -47,24 +50,26 @@ class HistoryRepository(
                 // it is the same content, not a new row.
                 (effective == null && e.enrichedText == trimmed)
         }
-        if (existing != null) {
+        val id: String = if (existing != null) {
             // Bump to the front; attach enrichment that was missing before.
             val mergedEnriched = existing.enrichedText ?: effective
             historyDao.insert(
                 existing.copy(createdAt = now, enrichedText = mergedEnriched)
             )
+            existing.id
         } else {
-            historyDao.insert(
-                HistoryEntity(
-                    id = "${now}_${randomSuffix()}",
-                    text = trimmed,
-                    enrichedText = effective,
-                    createdAt = now,
-                )
+            val fresh = HistoryEntity(
+                id = "${now}_${randomSuffix()}",
+                text = trimmed,
+                enrichedText = effective,
+                createdAt = now,
             )
+            historyDao.insert(fresh)
+            fresh.id
         }
         historyDao.trimTo(MAX_HISTORY)
         favoritesDao.pruneHistoryOrphans()
+        return id
     }
 
     suspend fun delete(id: String) {

@@ -33,7 +33,7 @@
 
 ---
 
-## 1. 💡 错词本升级（错次 + 来源） 🤖
+## 1. ✅ 错词本升级（错次 + 来源） 🤖
 
 现状：`wrong_words` 只有 `word + addedAt`（`data/HearWriteDatabase.kt:13-17`），无来源、无错次；复习只能全量重听一遍，看不出哪些词反复错。Room `version = 1`，`exportSchema` 已开启且提交了 `app/schemas/…/1.json`，但全仓没有任何 `Migration` 基础设施。
 
@@ -48,6 +48,8 @@
 **验证**：模拟器 `HearWrite37` 上跑 instrumentation 迁移测试——建 v1 库写数据 → 升 v2 → 断言新列默认值与既有行完整；再真机走查排序/分组。仓库目前没有 `app/src/androidTest`，需同时补测试基础设施（见候选池「测试基础设施」）。
 
 **决定**：不把"听写统计"的 `sessions` 表并进 v2——避免建一张暂时没有写入方的空表；统计另起 v3。
+
+**已实现（2026-09-09）**：Room v2 落地——`MIGRATION_1_2` 手写迁移（既有行 `errorCount=1`、`lastWrongAt=addedAt`，`sourceLabel` null）+ 提交 `app/schemas/…/2.json`；`WrongWordsDao.recordMark` upsert（同一场重复标记由 ViewModel 的 `runWrongWords` 集合去重，复习错词轮次传 null 来源、不重复计数）；`DictationSessionStore` 携带来源（Home 起听写 = 历史行 id，词库预览 = `default_*` id，裸词 / 错词本听写 = null）；错词本抽屉按来源分组、错次降序，行内显示「错 N 次 · 最近…」，内置来源带「查看词表」跳回词表预览，来源失效降级「未知来源」不删行。配套新增 `app/src/androidTest`（Room 迁移 instrumentation 测试：v1 建库 → 迁移 → 断言新列默认值与 schema 一致 + `recordMark` 真库 upsert）。
 
 ---
 

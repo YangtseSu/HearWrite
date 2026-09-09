@@ -123,7 +123,7 @@ class HearWriteApplication : Application() {
     // ---- Room persistence (wrong words / history / favorites) -------------
 
     val database: HearWriteDatabase by lazy {
-        Room.databaseBuilder(this, HearWriteDatabase::class.java, "hearwrite.db").build()
+        HearWriteDatabase.create(this)
     }
 
     /** The global 错词本; sessions seed from it and marks persist immediately. */

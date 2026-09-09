@@ -83,8 +83,9 @@ import java.io.File
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun HomeScreen(
-    onStartDictation: (List<String>) -> Unit,
+    onStartDictation: (lines: List<String>, sourceLabel: String?) -> Unit,
     onOpenLibrary: () -> Unit,
+    onOpenLibraryPreview: (category: String, label: String) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenOcrSettings: () -> Unit,
     viewModel: HomeViewModel = viewModel(),
@@ -104,6 +105,7 @@ fun HomeScreen(
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val favoriteItems by viewModel.favoriteItems.collectAsStateWithLifecycle()
     val wrongWords by viewModel.wrongWords.collectAsStateWithLifecycle()
+    val wrongGroups by viewModel.wrongGroups.collectAsStateWithLifecycle()
     val ocrBusy by viewModel.ocrBusy.collectAsStateWithLifecycle()
     val ocrPhase by viewModel.ocrPhase.collectAsStateWithLifecycle()
     val ocrError by viewModel.ocrError.collectAsStateWithLifecycle()
@@ -339,7 +341,9 @@ fun HomeScreen(
                     ).show()
                 } else {
                     scope.launch {
-                        viewModel.prepareAndRecord()?.let(onStartDictation)
+                        viewModel.prepareAndRecord()?.let { prepared ->
+                            onStartDictation(prepared.lines, prepared.historyId)
+                        }
                     }
                 }
             },
@@ -464,10 +468,10 @@ fun HomeScreen(
     }
     if (showWrongWords) {
         WrongWordsSheet(
-            entries = wrongWords,
+            groups = wrongGroups,
             onDictate = {
                 showWrongWords = false
-                onStartDictation(wrongWords.map { it.word })
+                onStartDictation(wrongWords.map { it.word }, null)
             },
             onDelete = { word ->
                 viewModel.removeWrongWord(word)
@@ -476,6 +480,10 @@ fun HomeScreen(
                 ).show()
             },
             onClear = { clearWrongConfirm = true },
+            onJumpToSource = { category, label ->
+                showWrongWords = false
+                onOpenLibraryPreview(category, label)
+            },
             onDismiss = { showWrongWords = false },
         )
     }

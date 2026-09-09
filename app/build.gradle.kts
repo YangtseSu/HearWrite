@@ -39,6 +39,7 @@ android {
         applicationId = "org.yangtse.hearwrite"
         minSdk = 33
         targetSdk = 37
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Version scheme: versionName = MAJOR.MINOR.PATCH (semver; 0.x.y while
         // pre-release). versionCode = a monotonic integer, +1 per signed
         // release artifact, never reused or re-ordered. First signed release:
@@ -81,6 +82,13 @@ android {
         compose = true
     }
 
+    // MigrationTestHelper reads the exported schema JSON from the test APK's
+    // assets at `org.yangtse.hearwrite.data.HearWriteDatabase/<version>.json`;
+    // the schema export dir nests exactly that (Roadmap #1 instrumentation
+    // test infra).
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
 }
 
 // Room schema export: checked-in baseline so future entity migrations
@@ -148,4 +156,11 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     // compounds.json fixtures parse through the same domain function as the app.
     testImplementation(libs.kotlinx.serialization.json)
+
+    // Instrumentation: Room schema/migration tests run on the device/emulator
+    // (Roadmap #1 验收 — migration correctness is not unit-testable over a fake).
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.room.testing)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
 }

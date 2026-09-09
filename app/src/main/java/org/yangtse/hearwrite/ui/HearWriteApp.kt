@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import org.yangtse.hearwrite.HearWriteApplication
+import org.yangtse.hearwrite.domain.builtinListId
 
 /** Top-level navigation routes. Finish (听写结束) is a DictationScreen end state, not a route. */
 object Routes {
@@ -31,17 +32,26 @@ fun HearWriteApp() {
     val navController = rememberNavController()
     val app = LocalContext.current.applicationContext as HearWriteApplication
 
-    /** Stage the prepared lines (slice → shuffle already applied) and start. */
-    val startDictation: (List<String>) -> Unit = { lines ->
-        app.dictationSession.lines = lines
+    /** Stage the prepared session (lines + provenance) and start dictation. */
+    val startSession: (List<String>, String?) -> Unit = { lines, sourceLabel ->
+        app.dictationSession.stage(lines, sourceLabel)
         navController.navigate(Routes.DICTATION)
+    }
+
+    /** Start a session over [lines] with no provenance (manual / review runs). */
+    val startDictation: (List<String>) -> Unit = { lines ->
+        startSession(lines, null)
     }
 
     NavHost(navController = navController, startDestination = Routes.HOME) {
         composable(Routes.HOME) {
             HomeScreen(
-                onStartDictation = startDictation,
+                onStartDictation = startSession,
                 onOpenLibrary = { navController.navigate(Routes.LIBRARY) },
+                onOpenLibraryPreview = { category, label ->
+                    // 错词本 source jump: lands on the list's preview directly.
+                    navController.navigate(Routes.libraryPreview(category, label))
+                },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                 // 拍照识词 sheet 的 修改/去设置: one entry opened on the OCR
                 // provider form. Back first lands on the in-screen hub
@@ -90,7 +100,13 @@ fun HearWriteApp() {
                 onBack = { navController.popBackStack() },
             )
         }
-        composable(Routes.LIBRARY_PREVIEW) {
+        composable(Routes.LIBRARY_PREVIEW) { entry ->
+            // The preview knows which built-in list it shows; wrong marks of
+            // a run started here carry that list's id (Roadmap #1 source).
+            val previewSource = builtinListId(
+                checkNotNull(entry.arguments?.getString("category")),
+                checkNotNull(entry.arguments?.getString("label")),
+            )
             LibraryPreviewScreen(
                 onLoadToDraft = { lines ->
                     // Stage the import before leaving; HomeScreen consumes it
@@ -98,7 +114,9 @@ fun HearWriteApp() {
                     app.requestDraftImport(lines.joinToString("\n"))
                     navController.popBackStack(Routes.HOME, false)
                 },
-                onStartDictation = startDictation,
+                onStartDictation = { lines ->
+                    startSession(lines, previewSource)
+                },
                 onBack = { navController.popBackStack() },
             )
         }
