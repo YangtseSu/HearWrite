@@ -26,6 +26,20 @@ data class OcrProviderConfig(
         get() = baseUrl.isNotBlank() && apiKey.isNotBlank() && model.isNotBlank()
 }
 
+/**
+ * A base URL a user may type must be absolute HTTP(S) — a scheme-less
+ * "open.bigmodel.cn/…" would make [chatCompletionsUrl] hand OkHttp a
+ * relative URL and throw before the network layer can degrade the failure
+ * (the OCR crash fixed by validating at the form, then defending the
+ * request build). Returns a non-blank trimmed string when valid, else null.
+ */
+internal fun validOcrBaseUrl(raw: String): String? {
+    val trimmed = raw.trim()
+    if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) return null
+    val rest = trimmed.substringAfter("://")
+    return rest.takeIf { it.isNotBlank() }?.let { trimmed }
+}
+
 /** One selectable provider preset (label shown in the picker chips). */
 data class OcrProviderPreset(
     val id: String,

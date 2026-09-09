@@ -540,10 +540,12 @@ fun OcrProviderSettingsPage(
                     }
                     Button(
                         onClick = {
-                            viewModel.saveOcrConfig()
-                            Toast.makeText(
-                                context, "已保存 OCR 服务配置", Toast.LENGTH_SHORT,
-                            ).show()
+                            val saved = viewModel.saveOcrConfig()
+                            if (saved) {
+                                Toast.makeText(
+                                    context, "已保存 OCR 服务配置", Toast.LENGTH_SHORT,
+                                ).show()
+                            }
                         },
                         enabled = ocrComplete,
                         modifier = Modifier.weight(1f),

@@ -18,6 +18,7 @@ import org.yangtse.hearwrite.data.DEFAULT_TTS_PRESET
 import org.yangtse.hearwrite.data.OCR_PROVIDER_PRESETS
 import org.yangtse.hearwrite.data.OcrProviderConfig
 import org.yangtse.hearwrite.data.OcrProviderPreset
+import org.yangtse.hearwrite.data.validOcrBaseUrl
 import org.yangtse.hearwrite.data.TTS_PROVIDER_PRESETS
 import org.yangtse.hearwrite.data.TtsApiKind
 import org.yangtse.hearwrite.data.SystemVoiceInfo
@@ -839,6 +840,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun testOcrConnection() {
         val cfg = currentOcrConfig() ?: return
         if (_ocrTestState.value is OcrTestState.Testing) return
+        if (validOcrBaseUrl(cfg.baseUrl) == null) {
+            _ocrTestState.value = OcrTestState.Failed("接口地址需以 http:// 或 https:// 开头")
+            return
+        }
         _ocrTestState.value = OcrTestState.Testing
         viewModelScope.launch {
             val error = try {
@@ -852,10 +857,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** Persist the entered config under the selected preset (保存并启用). */
-    fun saveOcrConfig() {
+    /**
+     * Persist the entered config under the selected preset (保存并启用).
+     * Returns false when the base URL is rejected (scheme-less) — the page
+     * must not show its "已保存" toast for a refused save.
+     */
+    fun saveOcrConfig(): Boolean {
         val presetId = _ocrPresetId.value
-        val cfg = currentOcrConfig() ?: return
+        val cfg = currentOcrConfig() ?: return false
+        if (validOcrBaseUrl(cfg.baseUrl) == null) {
+            _ocrTestState.value = OcrTestState.Failed("接口地址需以 http:// 或 https:// 开头")
+            return false
+        }
         viewModelScope.launch {
             try {
                 settings.setOcrProviderConfig(presetId, cfg)
@@ -876,6 +889,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 // DataStore failures must never crash the screen (AGENTS.md).
             }
         }
+        return true
     }
 
     /** 清除配置: drop only the selected preset's stored OCR config. */

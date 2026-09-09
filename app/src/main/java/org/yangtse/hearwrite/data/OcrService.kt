@@ -381,12 +381,22 @@ class OcrService(
         apiKey: String,
         jsonBody: String,
     ): PostResult {
-        val request = Request.Builder()
-            .url(url)
-            .header("Authorization", "Bearer ${apiKey.trim()}")
-            .header("Content-Type", "application/json")
-            .post(jsonBody.toRequestBody(JSON_MEDIA_TYPE))
-            .build()
+        // A malformed stored URL (legacy plaintext config or a bad edit)
+        // must never throw out of the request build — the caller's OCR
+        // coroutine would crash. OkHttp raises IllegalArgumentException
+        // from Request.Builder.url() before any network layer can degrade;
+        // validate the URL is parseable and fail softly.
+        val request = try {
+            Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer ${apiKey.trim()}")
+                .header("Content-Type", "application/json")
+                .post(jsonBody.toRequestBody(JSON_MEDIA_TYPE))
+                .build()
+        } catch (e: Exception) {
+            Log.w(TAG, "OCR request build failed (URL rejected)")
+            return PostResult.Failed
+        }
         return suspendCancellableCoroutine { cont ->
             val call = http.newCall(request)
             cont.invokeOnCancellation {

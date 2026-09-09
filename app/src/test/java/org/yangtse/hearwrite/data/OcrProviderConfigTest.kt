@@ -38,6 +38,26 @@ class OcrProviderConfigTest {
     }
 
     @Test
+    fun `validOcrBaseUrl accepts absolute http and https bases`() {
+        assertEquals("https://a.b/v1", validOcrBaseUrl("  https://a.b/v1  "))
+        assertEquals("http://localhost:8000/v1", validOcrBaseUrl("http://localhost:8000/v1"))
+        assertEquals(
+            "https://a.b/v1/chat/completions",
+            validOcrBaseUrl("https://a.b/v1/chat/completions"),
+        )
+    }
+
+    @Test
+    fun `validOcrBaseUrl rejects scheme-less and empty bases`() {
+        assertNull(validOcrBaseUrl("open.bigmodel.cn/api/paas/v4"))
+        assertNull(validOcrBaseUrl("a.b/v1"))
+        assertNull(validOcrBaseUrl(""))
+        assertNull(validOcrBaseUrl("   "))
+        assertNull(validOcrBaseUrl("ftp://a.b/v1"))
+        assertNull(validOcrBaseUrl("https://"))
+    }
+
+    @Test
     fun defaultPreset_isZhipuGlm4vFlash() {
         assertEquals("zhipu", DEFAULT_OCR_PRESET.id)
         assertEquals("https://open.bigmodel.cn/api/paas/v4", DEFAULT_OCR_PRESET.baseUrl)
