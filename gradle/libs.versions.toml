@@ -2,7 +2,7 @@
 # boring-list libraries at latest stable recorded at scaffold time (2026-09-02).
 [versions]
 agp = "9.3.2"                # pinned — bump 2026-09: 9.3.2 latest stable
-kotlin = "2.4.10"            # pinned — applied via the Compose compiler plugin (AGP 9 built-in Kotlin; kotlin-android is forbidden)
+kotlin = "2.4.20"            # pinned — applied via the Compose compiler plugin (AGP 9 built-in Kotlin; kotlin-android is forbidden)
 composeBom = "2026.08.00"    # pinned
 coreKtx = "1.19.0"
 activityCompose = "1.13.0"
