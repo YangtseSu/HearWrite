@@ -168,11 +168,12 @@ class OpenAiCompatibleTts(
                 Result.failure(TtsProviderException("音频生成失败，请检查接口地址、密钥和模型"))
             }
         }
-        val result = try {
-            awaitFlight(job)
-        } finally {
-            inFlight.remove(key, job)
-        }
+        // We won the slot. The entry dies with the job — not in a caller's
+        // finally — so a waiter that cancels cannot unregister the shared
+        // flight mid-download and let a later identical request duplicate
+        // the (billed) generation.
+        job.invokeOnCompletion { inFlight.remove(key, job) }
+        val result = awaitFlight(job)
         val file = result.getOrNull()?.takeIf(::isValidClip)
         return if (file != null) {
             Result.success(file)
