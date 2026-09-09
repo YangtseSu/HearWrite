@@ -2,6 +2,9 @@ package org.yangtse.hearwrite
 
 import android.app.Application
 import androidx.room.Room
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,6 +32,15 @@ import org.yangtse.hearwrite.data.YoudaoTts
  * ECDICT dictionary parse never run on the startup path.
  */
 class HearWriteApplication : Application() {
+    /**
+     * Process-scoped coroutine scope for fire-and-forget writes that must
+     * outlive a ViewModel — the draft flush on screen dispose (the
+     * ViewModel is already cleared by the time Compose disposes, so
+     * viewModelScope would silently drop the last keystrokes). Never used
+     * for playback or UI state.
+     */
+    val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     private val _pendingDraftImport = MutableStateFlow<String?>(null)
 
     /**

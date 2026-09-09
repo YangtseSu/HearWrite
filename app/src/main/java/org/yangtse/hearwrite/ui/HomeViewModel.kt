@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
@@ -345,9 +346,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _shuffle.value = on
     }
 
-    /** Flush the pending debounced draft (DisposableEffect.onDispose). */
+    /**
+     * Flush the pending debounced draft (DisposableEffect.onDispose). Runs on
+     * the application scope: by the time Compose disposes this screen the
+     * ViewModel is already cleared (androidx.activity clears the store on
+     * ON_DESTROY), so a viewModelScope launch would never execute and the
+     * last ≤500 ms of typing would be lost (AGENTS.md debounce flush).
+     */
     fun flushDraft() {
-        viewModelScope.launch { settings.setDraft(_draft.value) }
+        app.applicationScope.launch { settings.setDraft(_draft.value) }
     }
 
     /**
@@ -577,6 +584,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     is OcrOutcome.Error -> _ocrError.value = outcome.message
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A recognition failure must never crash the process; the
+                // error surfaces inline with the retry hint (AGENTS.md).
+                Log.w(TAG, "OCR recognition failed", e)
+                _ocrError.value = "识别失败，请重试"
             } finally {
                 owned?.recycle()
                 _ocrBusy.value = false
@@ -634,6 +648,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     is OcrOutcome.Error -> _ocrError.value = outcome.message
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A recognition failure must never crash the process; the
+                // error surfaces inline with the retry hint (AGENTS.md).
+                Log.w(TAG, "OCR recognition failed", e)
+                _ocrError.value = "识别失败，请重试"
             } finally {
                 _ocrBusy.value = false
                 _ocrPhase.value = ""
