@@ -1,22 +1,31 @@
 package org.yangtse.hearwrite.data
 
 import android.content.Context
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.yangtse.hearwrite.domain.DEFAULT_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.DEFAULT_SPEECH_RATE
 import org.yangtse.hearwrite.domain.ThemeMode
 import org.yangtse.hearwrite.domain.TtsSource
+import java.io.IOException
 
-private val Context.settingsDataStore by preferencesDataStore(name = "settings")
+private val Context.settingsDataStore by preferencesDataStore(
+    name = "settings",
+    corruptionHandler = ReplaceFileCorruptionHandler {
+        emptyPreferences()
+    },
+)
 
 /**
  * DataStore-backed playback settings + the word-input draft (AGENTS.md
@@ -33,29 +42,41 @@ class SettingsRepository(
     private val context: Context,
     private val secretCipher: SecretCipher,
 ) {
-
+    /** The corrupted-file handler above replaces a bad file with empty
+     *  preferences — a settings read never crashes the process. */
     private val dataStore get() = context.applicationContext.settingsDataStore
 
+    /**
+     * Read surface shared by every typed accessor. A failed read — corrupt
+     * file (replaced by the handler above) or a real I/O error — degrades to
+     * empty preferences, so no `.first()` seed or live `.collect` ever
+     * crashes the process or dies silently (AGENTS.md: every launch catches;
+     * a dead settings collector would freeze voice/interval live-follows).
+     */
+    private val safePrefs: Flow<Preferences> = dataStore.data.catch { e ->
+        if (e is IOException) emit(emptyPreferences()) else throw e
+    }
+
     /** Word-input draft on Home; persisted debounced (500 ms) and flushed on dispose. */
-    val draft: Flow<String> = dataStore.data.map { it[KEY_DRAFT] ?: "" }
+    val draft: Flow<String> = safePrefs.map { it[KEY_DRAFT] ?: "" }
 
     /** 听写间隔秒数: 1–10 s, step 0.5, default 7. */
     val intervalSec: Flow<Double> =
-        dataStore.data.map { it[KEY_INTERVAL_SEC] ?: DEFAULT_INTERVAL_SEC }
+        safePrefs.map { it[KEY_INTERVAL_SEC] ?: DEFAULT_INTERVAL_SEC }
 
     /** 语速: 0.5–1.5, default 0.9. */
     val speechRate: Flow<Float> =
-        dataStore.data.map { it[KEY_SPEECH_RATE] ?: DEFAULT_SPEECH_RATE }
+        safePrefs.map { it[KEY_SPEECH_RATE] ?: DEFAULT_SPEECH_RATE }
 
     /** 自动播报下一词: default on. */
-    val autoNext: Flow<Boolean> = dataStore.data.map { it[KEY_AUTO_NEXT] ?: true }
+    val autoNext: Flow<Boolean> = safePrefs.map { it[KEY_AUTO_NEXT] ?: true }
 
     /** 朗读释义 (English gloss after the word): default off. */
     val readTranslation: Flow<Boolean> =
-        dataStore.data.map { it[KEY_READ_TRANSLATION] ?: false }
+        safePrefs.map { it[KEY_READ_TRANSLATION] ?: false }
 
     /** 发音来源: Youdao dict voice (default) or the system TTS. */
-    val ttsSource: Flow<TtsSource> = dataStore.data.map { prefs ->
+    val ttsSource: Flow<TtsSource> = safePrefs.map { prefs ->
         prefs[KEY_TTS_SOURCE]?.let { stored ->
             TtsSource.entries.firstOrNull { it.name.equals(stored, ignoreCase = true) }
         } ?: TtsSource.YOUDAO
@@ -63,37 +84,37 @@ class SettingsRepository(
 
     /** Edge 音色 (微软 Edge source): default voice shortName; blank = built-in default. */
     val edgeVoiceZh: Flow<String> =
-        dataStore.data.map { it[KEY_EDGE_VOICE_ZH] ?: "" }
+        safePrefs.map { it[KEY_EDGE_VOICE_ZH] ?: "" }
     /** Edge dedicated English voice shortName; blank = its region default (Aria/Sonia). */
     val edgeVoiceEn: Flow<String> =
-        dataStore.data.map { it[KEY_EDGE_VOICE_EN] ?: "" }
+        safePrefs.map { it[KEY_EDGE_VOICE_EN] ?: "" }
     /** 英文使用默认音色: default on (no dedicated English voice). */
     val edgeUseDefaultEn: Flow<Boolean> =
-        dataStore.data.map { it[KEY_EDGE_USE_DEFAULT_EN] ?: true }
+        safePrefs.map { it[KEY_EDGE_USE_DEFAULT_EN] ?: true }
 
     /**
      * 系统语音 音色 (系统语音 source): the engine [Voice.name] key for
      * Chinese text; blank = the engine's zh-CN default voice.
      */
     val systemVoiceZh: Flow<String> =
-        dataStore.data.map { it[KEY_SYSTEM_VOICE_ZH] ?: "" }
+        safePrefs.map { it[KEY_SYSTEM_VOICE_ZH] ?: "" }
     /**
      * 系统语音 音色 (系统语音 source): the engine [Voice.name] key for
      * English text; blank = the engine's en-US default voice. Used only
      * when [systemUseDefaultEn] is off.
      */
     val systemVoiceEn: Flow<String> =
-        dataStore.data.map { it[KEY_SYSTEM_VOICE_EN] ?: "" }
+        safePrefs.map { it[KEY_SYSTEM_VOICE_EN] ?: "" }
     /** 英文使用默认音色 (系统语音): default on (no dedicated English voice). */
     val systemUseDefaultEn: Flow<Boolean> =
-        dataStore.data.map { it[KEY_SYSTEM_USE_DEFAULT_EN] ?: true }
+        safePrefs.map { it[KEY_SYSTEM_USE_DEFAULT_EN] ?: true }
 
     /** 提示音 (countdown tick + completion chime): default on. */
     val soundEnabled: Flow<Boolean> =
-        dataStore.data.map { it[KEY_SOUND_ENABLED] ?: true }
+        safePrefs.map { it[KEY_SOUND_ENABLED] ?: true }
 
     /** App theme: system/light/dark (default system). */
-    val theme: Flow<ThemeMode> = dataStore.data.map { prefs ->
+    val theme: Flow<ThemeMode> = safePrefs.map { prefs ->
         ThemeMode.fromStored(prefs[KEY_THEME])
     }
 
@@ -110,7 +131,7 @@ class SettingsRepository(
     // baseUrl+model, else the 自定义 slot) and removed on the first write.
 
     private val ocrStoreFlow: Flow<Pair<Map<String, OcrProviderConfig>, String>> =
-        dataStore.data.map(::ocrStore)
+        safePrefs.map(::ocrStore)
 
     /** Stored OCR config per preset id (拍照识词); empty when never configured. */
     val ocrProviderConfigs: Flow<Map<String, OcrProviderConfig>> =
@@ -141,7 +162,7 @@ class SettingsRepository(
         storedOcrCiphertext(presetId) != null
 
     private suspend fun storedOcrCiphertext(presetId: String): String? =
-        dataStore.data.first()[KEY_OCR_PROVIDER_CONFIGS]
+        safePrefs.first()[KEY_OCR_PROVIDER_CONFIGS]
             ?.let(::decodeOcrConfigMap)
             ?.get(presetId)?.apiKey
             ?.takeIf { secretCipher.isSealed(it) }
@@ -159,7 +180,7 @@ class SettingsRepository(
     }
 
     private val ttsStoreFlow: Flow<Pair<Map<String, TtsProviderConfig>, String>> =
-        dataStore.data.map(::ttsStore)
+        safePrefs.map(::ttsStore)
 
     /** Stored custom-TTS config per preset id (自定义音源); empty when never configured. */
     val ttsProviderConfigs: Flow<Map<String, TtsProviderConfig>> =
@@ -190,7 +211,7 @@ class SettingsRepository(
         storedTtsCiphertext(presetId) != null
 
     private suspend fun storedTtsCiphertext(presetId: String): String? =
-        dataStore.data.first()[KEY_TTS_PROVIDER_CONFIGS]
+        safePrefs.first()[KEY_TTS_PROVIDER_CONFIGS]
             ?.let(::decodeTtsConfigMap)
             ?.get(presetId)?.apiKey
             ?.takeIf { secretCipher.isSealed(it) }
