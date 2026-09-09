@@ -13,7 +13,8 @@ import org.junit.Test
  * enriched text itself) bumps the row instead of inserting a duplicate that
  * would crowd the 50-row cap. The SQL favorited-row exemptions in
  * `HistoryDao` are NOT unit-testable this way (a mirroring fake proves
- * nothing); they are verified on device instead (no androidTest infra).
+ * nothing); they are locked on real SQLite in the instrumentation test
+ * `HistoryFavoritesTrimTest` (app/src/androidTest, Roadmap #2 验收).
  */
 class HistoryRepositoryTest {
 

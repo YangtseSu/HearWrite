@@ -53,7 +53,7 @@
 
 ---
 
-## 2. 💡 用户词表长期保存（收藏不被 50 条上限淘汰） 🤖
+## 2. ✅ 用户词表长期保存（收藏不被 50 条上限淘汰） 🤖
 
 现状：`HistoryDao.trimTo` 只保留最新 50 行（`data/HearWriteDatabase.kt:60-65`），紧接着 `pruneHistoryOrphans` 删掉指向已消失历史行的收藏（`data/HearWriteDatabase.kt:88-94`）——用户收藏过的用户词表一旦跌出前 50 条就被**连带静默删除**，家长反复用的同一份词表会消失。
 
@@ -65,6 +65,8 @@
 - 界面：收藏行为不变，可在收藏/历史空态文案里点明"收藏的词表不会被历史上限清理"。
 
 **验证**：Room instrumentation 测试——写入 51+ 条历史并收藏其中最早一条，再触发 `trimTo`，断言收藏行仍在、未收藏的最旧行已删；真机走查（收藏一份词表 → 再粘贴 50 份 → 收藏项仍在）。
+
+**已实现（2026-09-09）**：`trimTo` 与 `clear` 的收藏豁免在错词本升级期间随 `f886f67`（fix: keep favorited lists when history is cleared or trimmed）先行落地——`DELETE` 均加 `AND id NOT IN (SELECT id FROM favorites)`，纯查询改动、无迁移；`pruneHistoryOrphans` 语义保留（显式删行才清其收藏）；清空确认文案已点明「收藏的词表会保留」。本条目验收补上：新增 `app/src/androidTest/.../HistoryFavoritesTrimTest`（真库断言：满 50 后收藏最旧行 + 再入两条 → 收藏行存活、未收藏最旧行被裁、50 上限 + 1 豁免；清空保留收藏而显式删行清理其收藏；`default_*` 永不裁剪）；`HistoryRepositoryTest` 里"无 androidTest 基础设施"的过期注释已更正。
 
 ---
 
