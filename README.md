@@ -23,7 +23,7 @@
 
 ## 下载安装
 
-- 从 GitHub [Releases](https://github.com/YangtseSu/HearWrite/releases) 下载 `HearWrite-<版本号>.apk`（如 `HearWrite-0.3.0.apk`）安装（需允许安装未知来源应用）。
+- 从 GitHub [Releases 最新版](https://github.com/YangtseSu/HearWrite/releases/latest) 页面下载 APK 安装（页面顶部 Release 资产即当前最新版；文件名形如 `HearWrite-0.4.0.apk`，随版本变化）。需允许安装未知来源应用。
 - 也可以自行构建，见下「从源码构建」。
 
 要求 Android 13（API 33）及以上：覆盖面与维护成本的平衡点——覆盖 2022 年后绝大多数在售设备，同时让新依赖与 API 不被旧版本拖累（应用无需系统升级即持续保持最新特性）。
