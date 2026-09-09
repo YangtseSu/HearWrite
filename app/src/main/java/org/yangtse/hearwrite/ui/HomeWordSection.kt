@@ -29,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -151,6 +152,11 @@ fun WordListSection(
             LaunchedEffect(displayMode, wordCount) {
                 if (displayMode && wordCount == 0) flippedFromEmpty = false
             }
+            // Skinned to match the display list's card: same 16dp roundness,
+            // same surfaceContainerLow fill and outlineVariant hairline, so
+            // the editing surface reads as the same container as the rows
+            // it becomes once 完成.
+            val cardBorder = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
             OutlinedTextField(
                 value = draft,
                 onValueChange = { value ->
@@ -164,8 +170,23 @@ fun WordListSection(
                     .fillMaxWidth()
                     .height(180.dp)
                     .focusRequester(fieldFocus),
+                shape = MaterialTheme.shapes.medium,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    focusedBorderColor = cardBorder,
+                    unfocusedBorderColor = cardBorder,
+                    cursorColor = MaterialTheme.colorScheme.primary,
+                ),
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    color = MaterialTheme.colorScheme.onSurface,
+                ),
                 placeholder = {
-                    Text("在此粘贴或输入词表，每行一个词\n支持：词 | 词性 | 释义")
+                    Text(
+                        "在此粘贴或输入词表，每行一个词\n支持：词 | 词性 | 释义",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 },
             )
             Row(
