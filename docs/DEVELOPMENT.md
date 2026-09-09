@@ -1,6 +1,6 @@
 # 开发指南（构建 · 签名 · 打包）
 
-面向开发者。架构、工具链版本钉与行为契约见 [`../AGENTS.md`](../AGENTS.md)。本文记录：机器环境搭建、日常命令、以及**签名与打包发布**的完整流程。
+面向开发者。架构、工具链版本策略与行为契约见 [`../AGENTS.md`](../AGENTS.md)。本文记录：机器环境搭建、日常命令、以及**签名与打包发布**的完整流程。
 
 ## 1. 环境搭建（新机器）
 
@@ -48,7 +48,7 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties   # 已被 gitignore，机�
 ./gradlew :app:assembleDebug :app:testDebugUnitTest
 ```
 
-无需系统安装 Gradle：wrapper 会一次性把锁定的 Gradle 9.7.1 下载到 `~/.gradle/wrapper/dists` 并缓存复用（默认从官方 `services.gradle.org` 下载，SHA-256 锚定；若官方地址不可达——例如国内网络——把 `gradle-wrapper.properties` 注释中的腾讯镜像 URL 换上去即可）。其余依赖均从 Google Maven / Maven Central 解析。首次构建需要几分钟，之后都是增量构建。
+无需系统安装 Gradle：wrapper 会一次性把 Gradle 9.7.1（当前版本，wrapper 文件锁 SHA-256 防篡改）下载到 `~/.gradle/wrapper/dists` 并缓存复用（默认从官方 `services.gradle.org` 下载；若官方地址不可达——例如国内网络——把 `gradle-wrapper.properties` 注释中的腾讯镜像 URL 换上去即可）。其余依赖均从 Google Maven / Maven Central 解析。首次构建需要几分钟，之后都是增量构建。
 
 ### 1.5 在设备上运行
 
@@ -163,7 +163,7 @@ adb install -r app/build/dist/HearWrite-0.3.0.apk
 
 - `README.md` 与本指南使用中文（分别面向用户与维护者）；`AGENTS.md`、代码、注释与提交信息使用英文；所有应用内 UI 字符串硬编码中文（无 `strings.xml`）。
 - 一次提交只做一件事（`feat:`/`fix:`/`docs:`/`data:`/`chore:`/`test:`），每个提交都必须可编译。
-- AGP 9 使用**内置 Kotlin**——不要应用 `org.jetbrains.kotlin.android`；Kotlin 版本通过 Compose 编译器插件（`org.jetbrains.kotlin.plugin.compose`）锁定，KSP 需 ≥ 2.3.6。
+- AGP 9 使用**内置 Kotlin**——不要应用 `org.jetbrains.kotlin.android`；Kotlin 版本通过 Compose 编译器插件（`org.jetbrains.kotlin.plugin.compose`）设定，KSP 随 Kotlin 版本联动（一起升）。
 - `data/` 资源只读；其余约定（架构分层、依赖清单、测试范围）以 `AGENTS.md` 为准。
 
 ## 6. BYOK API Key 的加密存储（Android Keystore）

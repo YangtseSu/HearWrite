@@ -15,20 +15,27 @@ This is a **from-scratch Kotlin + Jetpack Compose app** for Chinese dictation tr
 
 **`minSdk` policy**: `minSdk` is a compile-time floor only — never constrain new dependencies or API usage to stay above it, and never add `Build.VERSION.SDK_INT` guards or compat workarounds for it. When a new dependency or function conflicts with the current `minSdk` (manifest merger `minSdkVersion`, lint `NewApi`, or compile/runtime failures caused by the floor being too low), resolve by **raising `minSdk`**, never by substituting an older "compatible" function or dependency.
 
-## Toolchain (latest stable at project start, 2026-09)
+## Toolchain (always track latest stable)
 
-| Tool | Version | Notes |
+**Version policy: no pins.** Every toolchain and library version tracks the
+**latest stable** release — there is no pinned floor, no "approved set" to
+satisfy, and no minimums below which we must not go. Renovate opens PRs on new
+releases (daily) and CI gates them; manual bumps are equally welcome. Current
+versions live in `gradle/libs.versions.toml` (version catalog). The table
+records the 2026-09 baseline plus the *factual* constraints that couple
+versions together (those are compatibility facts, not pins).
+
+| Tool | Baseline (2026-09) | Notes |
 | --- | --- | --- |
-| JDK | 26 (daemon pinned to 26 via user-level `~/.gradle/gradle.properties`, never committed) | toolchain language level 21 |
+| JDK | 26 | toolchain language level 21; daemon set to an installed JDK via user-level `~/.gradle/gradle.properties` (never committed) — daemon-instance stability, not a version policy |
 | Gradle | 9.7.1 (wrapper) | machine has Gradle 9.7.1 installed |
-| AGP | 9.3.2 | max API 37, needs Gradle ≥ 9.5.0 |
-| Kotlin | 2.4.10 | Compose compiler via `org.jetbrains.kotlin.plugin.compose` |
+| AGP | 9.3.2 | max API 37; needs Gradle ≥ 9.5.0 — check Gradle when bumping AGP |
+| Kotlin | 2.4.10 | Compose compiler via `org.jetbrains.kotlin.plugin.compose` (AGP 9 built-in Kotlin; kotlin-android is forbidden). **KSP tracks the Kotlin version** — bump together |
 | Compose BOM | 2026.08.00 | Material 3 |
 
 - Android SDK at `~/Android/Sdk` (write `local.properties` with `sdk.dir`); the build needs `platforms;android-37` (installed). Machine setup — official cmdline-tools only, the distro-packaged sdkmanager's index lacks android-37 — is covered in `docs/DEVELOPMENT.md`.
-- Keep all dependency versions in `gradle/libs.versions.toml` (version catalog). Beyond the pinned four above, pick **latest stable** at scaffold time and record in the catalog. Boring choices: `androidx.core-ktx`, `activity-compose`, `lifecycle-viewmodel-compose`, `navigation-compose`, `datastore-preferences`, `room-runtime/ktx` + KSP, `kotlinx-serialization-json`, `okhttp`, `material3`, `material-icons-extended`.
-- Verify toolchain bumps still satisfy the pinning table; never downgrade below it.
-- **Version fallback**: if the pinned combination fails to resolve or compile, take the versions from the current Android Studio **Empty Activity (Compose)** template `libs.versions.toml`, note the change in the commit message, and tell the user — never fight incompatibilities to keep a version number.
+- Keep all dependency versions in `gradle/libs.versions.toml` (version catalog). Boring choices: `androidx.core-ktx`, `activity-compose`, `lifecycle-viewmodel-compose`, `navigation-compose`, `datastore-preferences`, `room-runtime/ktx` + KSP, `kotlinx-serialization-json`, `okhttp`, `material3`, `material-icons-extended`.
+- **Version fallback**: if a latest-stable combination fails to resolve or compile (upstreams not yet mutually compatible), fall back to the newest working set — e.g. the current Android Studio **Empty Activity (Compose)** template `libs.versions.toml` — note the change in the commit message and tell the user; never fight incompatibilities to keep a version number.
 
 ## Architecture & Data Flow
 

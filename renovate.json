@@ -20,22 +20,11 @@
       "commitMessageTopic": "Kotlin and KSP together"
     },
     {
-      "matchPackageNames": ["org.jetbrains.kotlinx:kotlinx-coroutines-core", "org.jetbrains.kotlinx:kotlinx-coroutines-test"],
-      "groupName": "kotlinx-coroutines"
-    },
-    {
       "matchPackageNames": [
-        "com.android.tools.build:gradle",
-        "org.jetbrains.kotlin:kotlin-gradle-plugin",
-        "com.google.devtools.ksp:com.google.devtools.ksp.gradle.plugin",
-        "androidx.compose:compose-bom",
-        "androidx.room:room-runtime",
-        "androidx.room:room-ktx",
-        "androidx.room:room-compiler",
-        "androidx.room:room-testing"
+        "org.jetbrains.kotlinx:kotlinx-coroutines-core",
+        "org.jetbrains.kotlinx:kotlinx-coroutines-test"
       ],
-      "matchUpdateTypes": ["major"],
-      "dependencyDashboardApproval": true
+      "groupName": "kotlinx-coroutines"
     }
   ],
   "vulnerabilityAlerts": {
