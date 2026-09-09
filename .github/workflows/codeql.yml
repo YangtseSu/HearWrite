@@ -1,0 +1,55 @@
+# CodeQL static analysis — Kotlin/Java. Runs on pushes to main, pull
+# requests, and a weekly schedule. Finds security vulnerabilities in the
+# app code (the repo has no backend; scanning covers the Android module).
+name: "CodeQL"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "21 4 * * 1" # weekly: Monday 04:21 UTC
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write # upload-sarif needs this
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["java-kotlin"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # CodeQL requires the language pack; Kotlin analysis is bundled with
+      # the Java pack.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      # Build the module so CodeQL sees the compiled sources.
+      - name: Set up JDK 26
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "26"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
