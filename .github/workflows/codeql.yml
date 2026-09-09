@@ -7,6 +7,7 @@
 # Honoring latest-stable Kotlin takes precedence over CodeQL coverage, so
 # this workflow is disabled until the extractor supports the current Kotlin.
 # Re-enable by restoring `on:` and deleting the `if: false` guard.
+# Tracked in: https://github.com/YangtseSu/HearWrite/issues/7
 #
 # Secret scanning + push protection are enabled repo-wide (independent of
 # CodeQL) and cover the credential-leak class that matters most here.
