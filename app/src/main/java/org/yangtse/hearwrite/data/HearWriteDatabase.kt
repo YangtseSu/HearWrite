@@ -60,17 +60,23 @@ abstract class HistoryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun insert(entry: HistoryEntity)
 
-    /** Keep only the newest [limit] rows (cap 50, drop oldest — AGENTS.md). */
+    /** Keep only the newest [limit] non-favorited rows (cap 50, drop oldest —
+     *  AGENTS.md; favorited rows are exempt so an explicit favorite never
+     *  silently disappears under the cap, Roadmap #2). */
     @Query(
         "DELETE FROM history WHERE id NOT IN " +
-            "(SELECT id FROM history ORDER BY createdAt DESC, rowid DESC LIMIT :limit)"
+            "(SELECT id FROM history ORDER BY createdAt DESC, rowid DESC LIMIT :limit) " +
+            "AND id NOT IN (SELECT id FROM favorites)"
     )
     abstract suspend fun trimTo(limit: Int)
 
     @Query("DELETE FROM history WHERE id = :id")
     abstract suspend fun delete(id: String)
 
-    @Query("DELETE FROM history")
+    /** 清空历史: keep favorited rows (a favorited user list outliving its
+     *  history row is a documented Roadmap #2 behavior — a user's explicit
+     *  favorite must never be silently deleted by a bulk clear). */
+    @Query("DELETE FROM history WHERE id NOT IN (SELECT id FROM favorites)")
     abstract suspend fun clear()
 }
 

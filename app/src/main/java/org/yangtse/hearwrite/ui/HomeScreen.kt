@@ -471,7 +471,7 @@ fun HomeScreen(
         AlertDialog(
             onDismissRequest = { clearHistoryConfirm = false },
             title = { Text("清空历史记录？") },
-            text = { Text("将删除全部 ${history.size} 条历史记录，收藏的条目不受影响。") },
+            text = { Text("将清空全部 ${history.size} 条历史记录，收藏的词表会保留。") },
             confirmButton = {
                 TextButton(onClick = {
                     clearHistoryConfirm = false
