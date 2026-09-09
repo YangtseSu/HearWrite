@@ -4,6 +4,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,7 +17,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -53,7 +55,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -68,10 +72,13 @@ import java.io.File
  * Home (alice layout, Material 3 tokens): a brand header with the OCR
  * progress pill and a 更多 menu sheet (收藏 / 历史记录 / 词库 / 设置), the
  * 单词列表 section ([WordListSection] — 编辑/展示 two-state word list where
- * tapping a display row selects the 起始词), a floating 拍照识词 FAB and the
+ * tapping a display row selects the 起始词), a 拍照识词 TextButton and the
  * bottom playback panel ([HomePlaybackPanel] — 间隔 / 自动播放 / 随机顺序 /
  * 开始听写). The draft persists with a 500 ms debounce flushed on dispose;
- * the FAB and bottom panel hide while the keyboard is up.
+ * IME padding is applied to the content area only, so the playback panel
+ * stays pinned to the screen bottom (covered by the keyboard while typing)
+ * and its slot is never freed to the editor — dismissing the IME causes no
+ * "fill then pop back" jump.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -186,24 +193,46 @@ fun HomeScreen(
         viewModel.setDisplayMode(true)
     }
 
-    // alice parity: the FAB and the bottom panel step aside while typing.
-    val imeVisible = WindowInsets.isImeVisible
+    // Bottom space the content must yield: the IME when the keyboard is up,
+    // else the playback panel's own height. Content bottom padding animates
+    // between the two, so dismissing the keyboard never frees the panel slot
+    // to the editor ("fill the screen then pop back"): the editor bottom
+    // glides from the keyboard top to the panel top and the panel itself,
+    // drawn as an overlay, simply emerges from behind the keyboard.
+    var panelHeightPx by remember { mutableStateOf(0) }
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    val contentPad by animateDpAsState(
+        targetValue = with(LocalDensity.current) {
+            if (WindowInsets.isImeVisible) {
+                imeBottom.toDp()
+            } else {
+                panelHeightPx.toDp()
+            }
+        },
+        animationSpec = tween(250),
+        label = "contentBottomPad",
+    )
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.background)
-            .statusBarsPadding()
-            .imePadding(),
+            .background(colors.background),
     ) {
-        // ---- Header: brand · OCR progress pill · library/settings shortcuts · menu --
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(bottom = contentPad),
         ) {
-            HearWriteWordmark()
+            // ---- Header: brand · OCR progress pill · library/settings shortcuts ----
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                HearWriteWordmark()
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 if (ocrBusy) {
                     Surface(
@@ -253,68 +282,73 @@ fun HomeScreen(
             }
         }
 
-        // ---- Main: OCR error card + word-list section, FAB overlay ---------
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 20.dp),
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                ocrError?.let { message ->
-                    OcrErrorCard(
-                        message = message,
-                        retryable = ocrRetryable,
-                        onClose = viewModel::clearOcrError,
-                        onRetry = viewModel::retryOcr,
-                        modifier = Modifier.padding(bottom = 8.dp),
+            // ---- Main: OCR error card + word-list section ---------
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 20.dp),
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    ocrError?.let { message ->
+                        OcrErrorCard(
+                            message = message,
+                            retryable = ocrRetryable,
+                            onClose = viewModel::clearOcrError,
+                            onRetry = viewModel::retryOcr,
+                            modifier = Modifier.padding(bottom = 8.dp),
+                        )
+                    }
+                    WordListSection(
+                        draft = draft,
+                        displayMode = displayMode,
+                        wordCount = wordCount,
+                        startIndex = startIndex,
+                        onDraftChange = viewModel::onDraftChange,
+                        onToggleDisplayMode = { viewModel.setDisplayMode(!displayMode) },
+                        onStartIndexChange = viewModel::setStartIndex,
+                        onDeleteWord = viewModel::deleteWord,
+                        onFillSample = viewModel::fillSample,
+                        onClear = viewModel::clearDraft,
+                        onScan = { showOcrSheet = true },
+                        modifier = Modifier.weight(1f),
                     )
                 }
-                WordListSection(
-                    draft = draft,
-                    displayMode = displayMode,
-                    wordCount = wordCount,
-                    startIndex = startIndex,
-                    onDraftChange = viewModel::onDraftChange,
-                    onToggleDisplayMode = { viewModel.setDisplayMode(!displayMode) },
-                    onStartIndexChange = viewModel::setStartIndex,
-                    onDeleteWord = viewModel::deleteWord,
-                    onFillSample = viewModel::fillSample,
-                    onClear = viewModel::clearDraft,
-                    onScan = { showOcrSheet = true },
-                    modifier = Modifier.weight(1f),
-                )
             }
         }
 
-        // ---- Bottom playback panel (hidden with the keyboard) --------------
-        if (!imeVisible) {
-            HomePlaybackPanel(
-                intervalSec = intervalSec,
-                autoNext = autoNext,
-                shuffle = shuffle,
-                wordCount = wordCount,
-                startIndex = startIndex,
-                starting = starting,
-                onIntervalChange = viewModel::onIntervalChange,
-                onAutoNextChange = viewModel::onAutoNextChange,
-                onShuffleChange = viewModel::onShuffleChange,
-                onStart = {
-                    if (wordCount == 0) {
-                        // Kept pressable so the app can explain why (alice).
-                        android.widget.Toast.makeText(
-                            context, "请先输入单词列表", android.widget.Toast.LENGTH_SHORT,
-                        ).show()
-                    } else {
-                        scope.launch {
-                            viewModel.prepareAndRecord()?.let(onStartDictation)
-                        }
+        // ---- Bottom playback panel (overlay, measured for content pad) ----
+        // Drawn at the screen bottom BEHIND the keyboard while typing (the
+        // content pad above already reserves the IME space) and revealed when
+        // the keyboard hides. Its height is reported up so the content column
+        // pads by it when no keyboard is shown.
+        HomePlaybackPanel(
+            intervalSec = intervalSec,
+            autoNext = autoNext,
+            shuffle = shuffle,
+            wordCount = wordCount,
+            startIndex = startIndex,
+            starting = starting,
+            onIntervalChange = viewModel::onIntervalChange,
+            onAutoNextChange = viewModel::onAutoNextChange,
+            onShuffleChange = viewModel::onShuffleChange,
+            onStart = {
+                if (wordCount == 0) {
+                    // Kept pressable so the app can explain why (alice).
+                    android.widget.Toast.makeText(
+                        context, "请先输入单词列表", android.widget.Toast.LENGTH_SHORT,
+                    ).show()
+                } else {
+                    scope.launch {
+                        viewModel.prepareAndRecord()?.let(onStartDictation)
                     }
-                },
-                modifier = Modifier
-                    .navigationBarsPadding()
-                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 12.dp),
-            )
-        }
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .onSizeChanged { panelHeightPx = it.height }
+                .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 12.dp)
+                .navigationBarsPadding(),
+        )
     }
 
     // ---- 更多 menu sheet -----------------------------------------------------
