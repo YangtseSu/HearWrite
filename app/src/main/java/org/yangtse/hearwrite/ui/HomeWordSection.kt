@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,12 +34,15 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,6 +78,15 @@ fun WordListSection(
     onScan: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Auto-focus when 完成 lands on an empty draft: with no list to show,
+    // the section drops straight back to the textarea, and the user's first
+    // keystroke must land in it — not require a second tap on the field.
+    val fieldFocus = remember { FocusRequester() }
+    LaunchedEffect(displayMode) {
+        if (!displayMode && draft.isBlank()) {
+            fieldFocus.requestFocus()
+        }
+    }
     Column(modifier = modifier) {
         Row(
             modifier = Modifier
@@ -100,33 +113,39 @@ fun WordListSection(
                 Spacer(Modifier.width(4.dp))
                 Text("拍照识词")
             }
-            if (wordCount > 0) {
-                TextButton(onClick = onToggleDisplayMode) {
-                    Icon(
-                        if (displayMode) Icons.Filled.Edit else Icons.Filled.Check,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(if (displayMode) "编辑" else "完成")
-                }
+            TextButton(onClick = onToggleDisplayMode) {
+                Icon(
+                    if (displayMode) Icons.Filled.Edit else Icons.Filled.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(if (displayMode) "编辑" else "完成")
             }
         }
-        if (displayMode && wordCount > 0) {
-            WordDisplayList(
-                draft = draft,
-                startIndex = startIndex,
-                onStartIndexChange = onStartIndexChange,
-                onDeleteWord = onDeleteWord,
-                modifier = Modifier.weight(1f),
-            )
+        if (displayMode) {
+            if (wordCount > 0) {
+                WordDisplayList(
+                    draft = draft,
+                    startIndex = startIndex,
+                    onStartIndexChange = onStartIndexChange,
+                    onDeleteWord = onDeleteWord,
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                // Centered over the whole leftover column area.
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    EmptyListPrompt(onClick = onToggleDisplayMode)
+                }
+            }
         } else {
             OutlinedTextField(
                 value = draft,
                 onValueChange = onDraftChange,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp),
+                    .height(180.dp)
+                    .focusRequester(fieldFocus),
                 placeholder = {
                     Text("在此粘贴或输入词表，每行一个词\n支持：词 | 词性 | 释义")
                 },
@@ -147,6 +166,34 @@ fun WordListSection(
                 TextButton(onClick = { onFillSample(SAMPLE_CJK) }) { Text("汉字示例") }
                 TextButton(onClick = onClear) { Text("清空") }
             }
+        }
+    }
+}
+
+/** 展示态 empty-state: tapping the prompt enters 编辑态 to start a list. */
+@Composable
+private fun EmptyListPrompt(onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text("暂无单词", style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "点击这里开始编辑，或按右上角“编辑”",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
