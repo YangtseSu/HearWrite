@@ -35,13 +35,20 @@ jobs:
   # Room migrations and DAO behavior are verified by instrumentation tests
   # (app/src/androidTest) — they need a real Android runtime, so they run on
   # a GitHub-hosted emulator. Previously they only ever ran locally.
+  #
+  # API 36, not 37: GitHub runner images ship android-37 as `android-37.0`
+  # and sdkmanager cannot fetch `platforms;android-37` (actions/runner-images
+  # #13859), which makes android-emulator-runner's SDK-install step fail.
+  # AGP resolves compileSdk 37 (auto-download) in the gradle step; the
+  # emulator itself only runs the app's instrumentation tests (minSdk 33),
+  # so API 36 exercises the same code path.
   instrumented:
     name: Instrumented tests (emulator)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        api-level: [37]
+        api-level: [36]
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
