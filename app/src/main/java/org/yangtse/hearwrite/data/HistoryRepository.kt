@@ -41,7 +41,11 @@ class HistoryRepository(
         val now = System.currentTimeMillis()
         val existing = historyDao.all().firstOrNull { e ->
             e.text == trimmed || e.text == effective ||
-                (effective != null && e.enrichedText == effective)
+                (effective != null && e.enrichedText == effective) ||
+                // Re-dictating a stored enriched row submits the enriched
+                // text itself (enrich() is then a no-op → effective == null);
+                // it is the same content, not a new row.
+                (effective == null && e.enrichedText == trimmed)
         }
         if (existing != null) {
             // Bump to the front; attach enrichment that was missing before.
