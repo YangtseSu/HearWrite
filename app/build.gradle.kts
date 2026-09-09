@@ -146,6 +146,14 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
+    // Coroutines runtime pinned explicitly: room/lifecycle pull an older
+    // core transitively, which ABI-skews against coroutines-test at the
+    // catalog version (runBlockingK$default NoSuchMethodError on device —
+    // seen when test 1.11.0 ran against core 1.9.0). All coroutines
+    // artifacts track one catalog version.
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.coroutines.android)
+
     // Youdao dict-voice downloads (TTS priority chain).
     implementation(libs.okhttp)
 
