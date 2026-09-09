@@ -168,7 +168,11 @@ fun WordListSection(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp)
+                    // The editor is the whole section body: it stretches to
+                    // fill the leftover column height (like the display list
+                    // does), so a large pasted list is visible at once and
+                    // no space below the card goes to waste.
+                    .weight(1f)
                     .focusRequester(fieldFocus),
                 shape = MaterialTheme.shapes.medium,
                 colors = OutlinedTextFieldDefaults.colors(
