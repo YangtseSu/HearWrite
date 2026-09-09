@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -59,9 +58,12 @@ private const val SAMPLE_CJK = "香蕉\n学校\n苹果\n月亮\n生日"
 /**
  * 单词列表 section (alice's WordInputSection + section header): the header row
  * carries the title, the parsed-count badge and the 编辑/完成 toggle; the body
- * is either the paste textarea (编辑态, plus the 共 N 词 / 示例 / 清空 footer)
- * or the parsed display list (展示态) where tapping a row selects the 起始词
- * and long meta text expands. Deletion rewrites the draft line by line.
+ * is the parsed display list (展示态, non-empty) where tapping a row selects
+ * the 起始词 and long meta text expands, or the paste textarea otherwise —
+ * both 编辑态 and an empty 展示态 look like the editor (textarea + 共 N 词 /
+ * 示例 / 清空 footer), so starting from scratch is seamless; typing on the
+ * empty 展示态 flips it to 编辑态 before the first change lands. Deletion
+ * rewrites the draft line by line.
  */
 @Composable
 fun WordListSection(
@@ -123,25 +125,41 @@ fun WordListSection(
                 Text(if (displayMode) "编辑" else "完成")
             }
         }
-        if (displayMode) {
-            if (wordCount > 0) {
-                WordDisplayList(
-                    draft = draft,
-                    startIndex = startIndex,
-                    onStartIndexChange = onStartIndexChange,
-                    onDeleteWord = onDeleteWord,
-                    modifier = Modifier.weight(1f),
-                )
-            } else {
-                // Centered over the whole leftover column area.
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    EmptyListPrompt(onClick = onToggleDisplayMode)
-                }
-            }
+        if (displayMode && wordCount > 0) {
+            WordDisplayList(
+                draft = draft,
+                startIndex = startIndex,
+                onStartIndexChange = onStartIndexChange,
+                onDeleteWord = onDeleteWord,
+                modifier = Modifier.weight(1f),
+            )
         } else {
+            // Editing surface: the real 编辑态, or 展示态 whose list is empty
+            // — an empty list keeps the editor's look (textarea + 示例/清空
+            // footer) so it is indistinguishable from editing. The first
+            // change made on that empty 展示态 flips the mode first: the
+            // header becomes 完成 and the parsed list never snaps in
+            // mid-keystroke; entering via the 编辑 button changes nothing but
+            // the header and focus (smooth by construction).
+            val emptyDisplay = displayMode && wordCount == 0
+            // One-shot empty→edit flip: burst keystrokes (IME commits, fast
+            // typing, injected text) can all arrive before the recomposition,
+            // each re-running this old lambda — an unguarded toggle would
+            // flip 展示态 back and forth and land the word in the display
+            // list mid-entry. Flip at most once per empty-展示态 session.
+            var flippedFromEmpty by remember { mutableStateOf(false) }
+            LaunchedEffect(displayMode, wordCount) {
+                if (displayMode && wordCount == 0) flippedFromEmpty = false
+            }
             OutlinedTextField(
                 value = draft,
-                onValueChange = onDraftChange,
+                onValueChange = { value ->
+                    if (emptyDisplay && !flippedFromEmpty) {
+                        flippedFromEmpty = true
+                        onToggleDisplayMode()
+                    }
+                    onDraftChange(value)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(180.dp)
@@ -162,38 +180,20 @@ fun WordListSection(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = { onFillSample(SAMPLE_EN) }) { Text("英文示例") }
-                TextButton(onClick = { onFillSample(SAMPLE_CJK) }) { Text("汉字示例") }
+                TextButton(
+                    onClick = {
+                        if (emptyDisplay) onToggleDisplayMode()
+                        onFillSample(SAMPLE_EN)
+                    },
+                ) { Text("英文示例") }
+                TextButton(
+                    onClick = {
+                        if (emptyDisplay) onToggleDisplayMode()
+                        onFillSample(SAMPLE_CJK)
+                    },
+                ) { Text("汉字示例") }
                 TextButton(onClick = onClear) { Text("清空") }
             }
-        }
-    }
-}
-
-/** 展示态 empty-state: tapping the prompt enters 编辑态 to start a list. */
-@Composable
-private fun EmptyListPrompt(onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 28.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text("暂无单词", style = MaterialTheme.typography.bodyLarge)
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "点击这里开始编辑，或按右上角“编辑”",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
