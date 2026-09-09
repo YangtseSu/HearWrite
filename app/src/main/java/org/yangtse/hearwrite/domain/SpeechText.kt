@@ -31,8 +31,9 @@ fun speakTextFromEntry(entry: String): String {
     var text = jsEdgeTrim(entry)
     if (text.isEmpty()) return ""
 
-    // Strip pos/meaning after the pipe delimiter (ASCII only, as upstream).
-    val pipe = text.indexOf('|')
+    // Strip pos/meaning after the first pipe delimiter — ASCII `|` or
+    // fullwidth `｜` (the parser accepts both, AGENTS.md Word-line format).
+    val pipe = text.indexOfFirst { it == '|' || it == '｜' }
     if (pipe != -1) text = jsEdgeTrim(text.substring(0, pipe))
     if (text.isEmpty()) return ""
 

@@ -158,8 +158,7 @@ class OcrServiceTest {
 
     @Test
     fun extractEnglishOcrLines_fullwidthPipeLine_degradesToBareWord() {
-        // Alice splits on the ASCII pipe only; a fullwidth-pipe line goes
-        // through the plain path, tokens flatten, meta fails WORD_RE.
+        // Fullwidth-pipe line survives as the bare English word.
         assertEquals(listOf("apple"), extractEnglishOcrLines("apple ｜ n. ｜ 苹果"))
     }
 

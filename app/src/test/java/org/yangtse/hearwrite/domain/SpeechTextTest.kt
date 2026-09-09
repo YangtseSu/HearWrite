@@ -23,9 +23,11 @@ class SpeechTextTest {
     }
 
     @Test
-    fun `fullwidth pipe is not stripped upstream parity`() {
-        // speakTextFromEntry mirrors upstream: only the ASCII pipe is a delimiter.
-        assertEquals("月｜yuè｜月亮", speakTextFromEntry("月｜yuè｜月亮"))
+    fun `fullwidth pipe strips pos and meaning before speaking`() {
+        // The parser accepts fullwidth `｜`; the spoken headword must not
+        // read pinyin/组词/meaning columns (upstream only stripped ASCII).
+        assertEquals("月", speakTextFromEntry("月｜yuè｜月亮"))
+        assertEquals("apple", speakTextFromEntry("apple｜n.｜苹果"))
     }
 
     @Test
