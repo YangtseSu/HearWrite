@@ -444,6 +444,9 @@ fun OcrProviderSettingsPage(
                 OutlinedTextField(
                     value = ocrForm.baseUrl,
                     onValueChange = viewModel::onOcrBaseUrlChange,
+                    // Named presets pin their own endpoint — only 自定义 is
+                    // hand-typed (mirrors the TTS form's locked mimo URL).
+                    readOnly = ocrPresetId != "custom",
                     label = { Text("接口地址（Base URL）") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
