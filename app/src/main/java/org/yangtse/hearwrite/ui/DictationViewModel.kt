@@ -246,7 +246,11 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
             engine.remainingMs.collect { remaining ->
                 val prev = prevRemainingMs
                 prevRemainingMs = remaining
-                if (prev != null && remaining != null && prev > 1000L && remaining <= 1000L) {
+                // Tick on entering the final second: crossing from > 1000 ms
+                // left into ≤ 1000 ms. prev == null covers the seed emission
+                // of a 1.0 s countdown (the minimum interval) — its first
+                // emission IS the final second, so no >1000 crossing exists.
+                if (remaining != null && (prev == null || prev > 1000L) && remaining <= 1000L) {
                     app.soundEffects.playTick()
                 }
             }
