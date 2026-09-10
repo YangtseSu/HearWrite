@@ -49,13 +49,17 @@ jobs:
   # AGP resolves compileSdk 37 (auto-download) in the gradle step; the
   # emulator itself only runs the app's instrumentation tests (minSdk 33),
   # so API 36 exercises the same code path.
+  #
+  # No `strategy.matrix` here, deliberately: the branch protection rule
+  # required-status context is "Instrumented tests (emulator)", and a matrix
+  # makes GitHub report the check as "<job name> (<matrix values>)" —
+  # "Instrumented tests (emulator) (36)" — which no required context can
+  # match, leaving main unmergeable for anyone without admin bypass. One API
+  # level means the matrix buys nothing; if a second one is ever added, keep
+  # the context stable with an aggregate job rather than re-adding a matrix.
   instrumented:
     name: Instrumented tests (emulator)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        api-level: [36]
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -78,7 +82,7 @@ jobs:
       - name: Run instrumentation tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: ${{ matrix.api-level }}
+          api-level: 36
           arch: x86_64
           target: google_apis
           force-avd-creation: false
