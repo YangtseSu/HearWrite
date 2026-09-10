@@ -87,7 +87,7 @@ android {
     // the schema export dir nests exactly that (Roadmap #1 instrumentation
     // test infra).
     sourceSets {
-        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+        getByName("androidTest").assets.directories.add("$projectDir/schemas")
     }
 }
 

@@ -686,10 +686,10 @@ private fun PlaybackPanel(
                 Spacer(Modifier.width(8.dp))
                 IconButton(
                     onClick = {
-                        val stepped = ((ui.intervalSec - 0.5).coerceIn(
-                            MIN_INTERVAL_SEC.toDouble(),
-                            MAX_INTERVAL_SEC.toDouble(),
-                        ))
+                        val stepped = (ui.intervalSec - 0.5).coerceIn(
+                            MIN_INTERVAL_SEC,
+                            MAX_INTERVAL_SEC,
+                        )
                         onIntervalChange(stepped.toFloat())
                     },
                     enabled = ui.intervalSec > MIN_INTERVAL_SEC,
@@ -705,10 +705,10 @@ private fun PlaybackPanel(
                 )
                 IconButton(
                     onClick = {
-                        val stepped = ((ui.intervalSec + 0.5).coerceIn(
-                            MIN_INTERVAL_SEC.toDouble(),
-                            MAX_INTERVAL_SEC.toDouble(),
-                        ))
+                        val stepped = (ui.intervalSec + 0.5).coerceIn(
+                            MIN_INTERVAL_SEC,
+                            MAX_INTERVAL_SEC,
+                        )
                         onIntervalChange(stepped.toFloat())
                     },
                     enabled = ui.intervalSec < MAX_INTERVAL_SEC,

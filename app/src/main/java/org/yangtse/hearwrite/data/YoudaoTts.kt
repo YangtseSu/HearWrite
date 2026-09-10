@@ -214,7 +214,7 @@ class YoudaoTts(private val context: Context) {
                             return
                         }
                         try {
-                            safeResume(cont, res.body?.bytes())
+                            safeResume(cont, res.body.bytes())
                         } catch (e: Exception) {
                             Log.w(TAG, "body read failed: $url", e)
                             safeResume(cont, null)

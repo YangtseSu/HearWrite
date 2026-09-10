@@ -25,8 +25,8 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 fun HearWriteWordmark(
-    tileSize: Dp = 32.dp,
     modifier: Modifier = Modifier,
+    tileSize: Dp = 32.dp,
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         Box(

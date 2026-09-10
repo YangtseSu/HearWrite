@@ -10,7 +10,7 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -58,7 +58,7 @@ fun OcrScanSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),
             )
-            TabRow(selectedTabIndex = if (lang == OcrLang.ENGLISH) 0 else 1) {
+            PrimaryTabRow(selectedTabIndex = if (lang == OcrLang.ENGLISH) 0 else 1) {
                 Tab(
                     selected = lang == OcrLang.ENGLISH,
                     onClick = { onLangChange(OcrLang.ENGLISH) },

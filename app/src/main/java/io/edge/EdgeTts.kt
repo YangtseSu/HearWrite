@@ -1,4 +1,10 @@
-@file:Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
+/*
+ * NOTE (HearWrite): UNNECESSARY_SAFE_CALL is suppressed on purpose — this file is
+ * vendored verbatim (see the provenance notice) and stays compilable against the
+ * okhttp 4.12 the client was written for, where `Response.body` is nullable;
+ * the host module pins okhttp 5, where it is not.
+ */
+@file:Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE", "UNNECESSARY_SAFE_CALL")
 
 /*
  * EdgeTts.kt — 单文件 Microsoft Edge 在线 TTS 客户端(Kotlin / Android / Gradle)

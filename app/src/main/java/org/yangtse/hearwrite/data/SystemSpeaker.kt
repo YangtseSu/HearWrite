@@ -567,7 +567,7 @@ class SystemSpeaker(
             synchronized(lock) {
                 if (engine !== holder) {
                     initFailedAt = SystemClock.elapsedRealtime()
-                    holder?.shutdown()
+                    holder.shutdown()
                 }
                 // else: a late SUCCESS onInit already claimed this instance
                 // right after the timeout — keep the live engine.

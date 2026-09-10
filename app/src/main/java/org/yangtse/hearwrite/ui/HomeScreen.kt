@@ -48,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -203,7 +204,7 @@ fun HomeScreen(
     // to the editor ("fill the screen then pop back"): the editor bottom
     // glides from the keyboard top to the panel top and the panel itself,
     // drawn as an overlay, simply emerges from behind the keyboard.
-    var panelHeightPx by remember { mutableStateOf(0) }
+    var panelHeightPx by remember { mutableIntStateOf(0) }
     val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
     val contentPad by animateDpAsState(
         targetValue = with(LocalDensity.current) {
