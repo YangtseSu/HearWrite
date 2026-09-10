@@ -136,7 +136,7 @@
 
 ---
 
-## 7. 💡 结束页重做本场 / 复习错词带原词行 🤖
+## 7. ✅ 结束页重做本场 / 复习错词带原词行 🤖
 
 现状（修正）：结束页「复习错词」**已能**从本场 `lines` 回查富化行（`ui/DictationViewModel.kt:430-437`），并非纯裸词。真正的缺口是：① 没有「再听一遍」；② 跨场词与首页错词本入口仍退化成裸词（`ui/HomeScreen.kt:426` `wrongWords.map { it.word }`）；③ 跨场回查需要来源信息——依赖错词本升级的 `sourceLabel`。
 
@@ -145,6 +145,18 @@
 - "再听一遍"：重放本场全部词，保留本次顺序与随机/起始设置。
 - "复习错词"：携带本场原行（英文带 pos/释义，汉字带拼音/组词），而非裸词；跨场时按 `sourceLabel` 回查内置词表原行 / 载入历史文本，手动输入的词保持裸词。
 - 落点：本场行数据在结束页直接可用，无需新表；`DictationSessionStore` 是一次性消费，重放所需的本场列表 ViewModel 内已持有。
+
+**已实现（2026-09-10）**：
+
+- **再听一遍**（结束页主按钮，与「复习错词」同排）：`DictationViewModel.replayRun()` 用本场 `_activeLines` 直接 `beginRun`——本场顺序与随机/起始设置在准备阶段已经烘焙进这套行里，重放不做二次准备、**不写新的历史行**，来源沿用本场（`runSourceLabel`）。它是一场新的正式听写：标记照常计数、照常记统计。错词本为空时结束页只显示「再听一遍 / 返回」，不再出现空的复习/导出区。
+- **复习错词带原词行**：新增 `data/WrongWordLineResolver.kt`（两个 loader 作 seam：内置词表读 assets、历史来源读 Room，JVM 测试传普通 lambda，文件本身无 Android 依赖）。解析顺序：**本场行优先**（覆盖「本次听写的词只有本场有」的裸词会话与自定义行），其次按 `sourceLabel` 回查来源，最后才退化成裸词。来源整份加载一次并缓存（同一份词表的多条错词只读一次）；来源失效（历史行被删、词表改名、assets 读失败）或来源里没有该词时，该条降级为裸词、不牵连其他条目。
+- **内置来源按预览的口径补全**：内置词表 assets 里存的是裸词（pos/释义来自离线 ECDICT），所以 resolver 的 loader 走 `dictionaryRepository.enrichLines`，与 `LibraryPreviewScreen` 的富化完全一致——否则英文内置来源的错词复习会既没有提示层、也没有 `朗读释义` 可读的释义列（真机走查时发现的缺口，非规划所及）。汉字表不受影响（enrichLine 对有列的行与 ECDICT 查不到的词原样返回）。
+- **首页错词本入口**（`错词本` 抽屉 → `听写错词（N 词）`）同样走 resolver：`HomeViewModel.prepareWrongWordRun()` 恢复全部错词的原行后再起听写，来源仍传 null（该轮标记不新增来源）。两处入口（结束页 / 抽屉）都在首次挂起前 `Mutex.tryLock()` 领取重入闸（`reviewGate` / `wrongWordGate`），双击不会起两轮。
+- Room/资产读取失败时降级：结束页退回「本场行 + 内存错词本」的旧行为，抽屉入口直接不启动，均不崩、不丢按钮。
+
+**与想法的差异**：再听一遍不做「重新抽随机」——重放的就是这一场原样的顺序（要换顺序回首页重开）；跨场回查对内置来源额外做了 ECDICT 富化（想法里只写了"回查内置词表原行"）。
+
+**验证**：`testDebugUnitTest` 275 tests 全绿（新增 `WrongWordLineResolverTest` 7 + `SpeechTextTest` 的 `findLineByHeadword` 3）；`connectedDebugAndroidTest` 6/6 绿（未动 schema/DAO，迁移测试不受影响）；`lintDebug` 无新增告警。模拟器 `HearWrite37` 走查：英文示例听写标错 `school` → 结束页出现「再听一遍 / 复习错词 / 导出错词」→ 点「再听一遍」回到 `1 / 5` 且暂停后显示 `school | n. | 学校`（富化行随重放保留）；换「汉字示例」再听一场，在该场结束页点「复习错词」→ 本轮为 `1 / 1`，拨盘显示 `school / n. / 学校`——该词不在本场行里，是从第一次听写的历史行回查出来的；清空错词本后从内置词库 `中考1600/A` 起听写并标错 `a/an` → 抽屉「听写错词（2 词）」→ 拨盘显示 `a/an / art. / 一个`（内置来源经 ECDICT 补全），第二条 `school` 仍为 `n. / 学校`（历史来源），两个 loader 一次走通。
 
 ---
 

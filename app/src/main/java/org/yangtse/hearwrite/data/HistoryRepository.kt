@@ -29,6 +29,14 @@ class HistoryRepository(
         }
 
     /**
+     * One-shot read of the stored rows, newest first — for callers that need
+     * a snapshot rather than the live flow (the 错词本 source resolution reads
+     * a dictation source's stored text, Roadmap #7).
+     */
+    suspend fun all(): List<HistoryEntry> =
+        historyDao.all().map { HistoryEntry(it.id, it.text, it.enrichedText, it.createdAt) }
+
+    /**
      * Record a started user list. [enrichedText] is the ECDICT-expanded text
      * (null when enrichment changed nothing — the plain text is then the
      * row's only form). An existing row whose text or enriched text matches

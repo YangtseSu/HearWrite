@@ -289,6 +289,7 @@ private fun DictationContent(
             if (ui.finished) {
                 FinishCard(
                     ui = ui,
+                    onReplay = viewModel::replayRun,
                     onReviewWrong = viewModel::reviewWrongWords,
                     onExportWrong = viewModel::exportWrongWords,
                     onClearWrong = viewModel::clearWrongWords,
@@ -354,14 +355,16 @@ private fun DictationContent(
 
 /**
  * Score card of a finished run: 词数 / 正确数 / 用时, then the 错词本 actions —
- * 复习错词 re-runs a dictation over exactly the wrong set, 导出错词 copies the
- * words to the clipboard (pasteable back into the Home input), chips remove
- * single words and 清空错词本 empties the book.
+ * 再听一遍 replays this run's words in its own order, 复习错词 re-runs a
+ * dictation over exactly the wrong set (each mark restored to its original
+ * line), 导出错词 copies the words to the clipboard (pasteable back into the
+ * Home input), chips remove single words and 清空错词本 empties the book.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun FinishCard(
     ui: DictationUiState,
+    onReplay: () -> Unit,
     onReviewWrong: () -> Unit,
     onExportWrong: () -> Int,
     onClearWrong: () -> Unit,
@@ -406,25 +409,35 @@ private fun FinishCard(
             )
         }
 
-        if (wrong.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 18.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 18.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // 再听一遍: the same words in the same order (起始序号 slice +
+            // 随机顺序 already baked into the run's lines) — no re-preparation.
+            Button(onClick = onReplay, modifier = Modifier.weight(1f)) {
+                Text("再听一遍")
+            }
+            if (wrong.isNotEmpty()) {
                 Button(onClick = onReviewWrong, modifier = Modifier.weight(1f)) {
                     Text("复习错词")
                 }
-                OutlinedButton(
-                    onClick = {
-                        val n = onExportWrong()
-                        if (n > 0) toast(context, "已复制 $n 个错词到剪贴板")
-                    },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("导出错词")
-                }
+            }
+        }
+
+        if (wrong.isNotEmpty()) {
+            OutlinedButton(
+                onClick = {
+                    val n = onExportWrong()
+                    if (n > 0) toast(context, "已复制 $n 个错词到剪贴板")
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+            ) {
+                Text("导出错词")
             }
         }
 

@@ -48,6 +48,16 @@ fun speakTextFromEntry(entry: String): String {
 fun isCjkEntry(entry: String): Boolean =
     CJK_RE.containsMatchIn(speakTextFromEntry(entry))
 
+/**
+ * The first line of [lines] whose speakable headword is [word], or null. The
+ * 错词本 keys on exactly that headword (AGENTS.md "Persistence"), so this is
+ * how a marked word is matched back to its enriched line (Roadmap #7): the
+ * line keeps its 词性/释义 or 拼音/组词 columns, and an expansion line
+ * (`you're = you are`) matches the left side the book stored.
+ */
+fun findLineByHeadword(lines: List<String>, word: String): String? =
+    lines.firstOrNull { speakTextFromEntry(it) == word }
+
 /** Fullwidth chars count 1, halfwidth 0.5 — same measure as the gloss display. */
 private fun meaningWidth(text: String): Double {
     var width = 0.0

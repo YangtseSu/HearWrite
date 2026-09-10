@@ -477,7 +477,14 @@ fun HomeScreen(
             groups = wrongGroups,
             onDictate = {
                 showWrongWords = false
-                onStartDictation(wrongWords.map { it.word }, null)
+                // Book marks keep their original lines (词性/释义 / 拼音/组词)
+                // where the source still resolves; the round itself is a
+                // bare-word run, so its marks carry no new provenance.
+                scope.launch {
+                    viewModel.prepareWrongWordRun()?.let { lines ->
+                        onStartDictation(lines, null)
+                    }
+                }
             },
             onDelete = { word ->
                 viewModel.removeWrongWord(word)

@@ -102,6 +102,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val dictionaryRepository = app.dictionaryRepository
     private val ocrService = app.ocrService
     private val wrongWordsRepository = app.wrongWordsRepository
+    private val wrongWordLines = app.wrongWordLineResolver
 
     private val _draft = MutableStateFlow("")
     val draft: StateFlow<String> = _draft.asStateFlow()
@@ -166,6 +167,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      * (there it double-charged credits); here it would double network calls.
      */
     private val ocrGate = Mutex()
+
+    /** 听写错词 gate: restoring the source lines reads Room/assets, so the
+     *  drawer's button awaits — claimed before that first suspension. */
+    private val wrongWordGate = Mutex()
 
     private val _ocrBusy = MutableStateFlow(false)
     /** True while a recognition run is in flight (buttons/spinners). */
@@ -476,6 +481,29 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 // Best effort.
             }
+        }
+    }
+
+    /**
+     * 听写错词 (错词本 drawer): the book's lines with their original 词性/释义
+     * or 拼音/组词 restored from each mark's source (Roadmap #7) — a built-in
+     * asset list or the history row it was dictated from; a mark whose source
+     * is gone stays a bare headword. Null when the book is empty or another
+     * start is already in flight (the gate is claimed before the first
+     * suspension, AGENTS.md).
+     */
+    suspend fun prepareWrongWordRun(): List<String>? {
+        if (!wrongWordGate.tryLock()) return null
+        try {
+            val marks = wrongWordsRepository.observeMarks().first()
+            if (marks.isEmpty()) return null
+            return wrongWordLines.linesFor(marks)
+        } catch (e: Exception) {
+            // A failed read/gate must not start a half-resolved run; the
+            // sheet simply stays as it was.
+            return null
+        } finally {
+            wrongWordGate.unlock()
         }
     }
 

@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.data.DictationSessionStore
 import org.yangtse.hearwrite.data.Haptics
@@ -29,6 +30,7 @@ import org.yangtse.hearwrite.domain.Speaker
 import org.yangtse.hearwrite.domain.SessionKind
 import org.yangtse.hearwrite.domain.TtsSource
 import org.yangtse.hearwrite.domain.cjkWordSpeech
+import org.yangtse.hearwrite.domain.findLineByHeadword
 import org.yangtse.hearwrite.domain.isCjkEntry
 import org.yangtse.hearwrite.domain.parseWordLine
 import org.yangtse.hearwrite.domain.speakTextFromEntry
@@ -58,8 +60,9 @@ data class DictationUiState(
  * ViewModel) plus the session settings. The 错词本 is the persisted global
  * book (AGENTS.md "Persistence"): seeded from Room before the run starts,
  * session marks append and persist immediately; the finish surface offers
- * 复习错词 (re-run over exactly the wrong set), 导出错词 (clipboard) and
- * remove/clear book management.
+ * 再听一遍 (replay this run's words in its own order), 复习错词 (re-run over
+ * exactly the wrong set, marks restored to their original lines), 导出错词
+ * (clipboard) and remove/clear book management.
  */
 class DictationViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -67,6 +70,15 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     private val settings = app.settingsRepository
     private val wrongWordsRepository = app.wrongWordsRepository
     private val sessionRepository = app.sessionRepository
+    private val wrongWordLines = app.wrongWordLineResolver
+
+    /**
+     * Re-entry gate for 复习错词: restoring the book's original lines reads
+     * assets/Room, so the button's action awaits — claimed synchronously
+     * before that first suspension (AGENTS.md), a fast double-tap can only
+     * lose here and never start two review rounds.
+     */
+    private val reviewGate = Mutex()
 
     /**
      * Session handed over by the launching screen: the prepared lines (slice
@@ -488,19 +500,48 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
-     * 复习错词: re-run a dictation round over exactly the wrong set, restoring
-     * the enriched session line for each headword when it is still present in
-     * the current word list (upstream `handleRetryWrong`). The review round
-     * is a re-check, not a fresh source: its marks carry no provenance so the
-     * original list's count does not double on every review pass.
+     * 再听一遍 (Roadmap #7): replay the run that just finished. Its lines are
+     * the prepared ones (起始序号 slice + 随机顺序 already applied), so the
+     * replay keeps this run's words and order — nothing is re-prepared and no
+     * history row is written. It is a fresh dictation run: marks count like
+     * any other and the provenance of the run it replays is kept.
+     */
+    fun replayRun() {
+        val lines = _activeLines.value
+        if (lines.isEmpty()) return
+        beginRun(lines, runSourceLabel)
+    }
+
+    /**
+     * 复习错词: re-run a dictation round over exactly the wrong set, each mark
+     * restored to its original word line — this run's own lines first, else
+     * the list the mark's `sourceLabel` points back at (built-in asset list or
+     * the history row's text, Roadmap #7), else the bare headword for marks
+     * whose source was never known or is gone. The review round is a re-check,
+     * not a fresh source: its marks carry no provenance so the original list's
+     * count does not double on every review pass.
      */
     fun reviewWrongWords() {
-        val book = _wrongWords.value
-        if (book.isEmpty()) return
-        val reviewLines = book.map { word ->
-            sessionLines.firstOrNull { speakTextFromEntry(it) == word } ?: word
+        if (!reviewGate.tryLock()) return
+        viewModelScope.launch {
+            try {
+                // The run in progress is the best source for its own words; it
+                // covers bare-word sessions whose lines exist nowhere else.
+                val preferred = _activeLines.value
+                val lines = try {
+                    wrongWordLines.linesFor(wrongWordsRepository.observeMarks().first(), preferred)
+                } catch (e: Exception) {
+                    // Room unavailable: degrade to the book held in memory,
+                    // resolved against this run's lines (the pre-sources
+                    // behavior) rather than losing the button.
+                    _wrongWords.value.map { word -> findLineByHeadword(preferred, word) ?: word }
+                }
+                if (lines.isEmpty()) return@launch
+                beginRun(lines, null, kind = SessionKind.REVIEW)
+            } finally {
+                reviewGate.unlock()
+            }
         }
-        beginRun(reviewLines, null, kind = SessionKind.REVIEW)
     }
 
     private fun snapshot(): DictationUiState = DictationUiState(

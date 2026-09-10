@@ -70,6 +70,30 @@ class SpeechTextTest {
         assertTrue(isCjkEntry("你 = you"))
     }
 
+    // --- findLineByHeadword ---
+
+    @Test
+    fun `headword lookup returns the enriched line, not the bare word`() {
+        val lines = listOf("apple | n. | 苹果", "月 | yuè | 月亮", "pear")
+        assertEquals("apple | n. | 苹果", findLineByHeadword(lines, "apple"))
+        assertEquals("月 | yuè | 月亮", findLineByHeadword(lines, "月"))
+        // A line without columns comes back as-is.
+        assertEquals("pear", findLineByHeadword(lines, "pear"))
+    }
+
+    @Test
+    fun `headword lookup matches the spoken side of an expansion`() {
+        // The book keys on the speakable headword, so `you're` must find its
+        // expansion line rather than the raw text.
+        assertEquals("you're = you are", findLineByHeadword(listOf("you're = you are"), "you're"))
+    }
+
+    @Test
+    fun `unknown headword has no line`() {
+        assertEquals(null, findLineByHeadword(listOf("apple", "pear"), "plum"))
+        assertEquals(null, findLineByHeadword(emptyList(), "apple"))
+    }
+
     // --- speakableMeaning ---
 
     @Test

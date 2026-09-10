@@ -17,6 +17,7 @@ import org.yangtse.hearwrite.data.FavoritesRepository
 import org.yangtse.hearwrite.data.HearWriteDatabase
 import org.yangtse.hearwrite.data.HistoryRepository
 import org.yangtse.hearwrite.data.KeystoreCipher
+import org.yangtse.hearwrite.data.LibraryList
 import org.yangtse.hearwrite.data.OcrService
 import org.yangtse.hearwrite.data.OpenAiCompatibleTts
 import org.yangtse.hearwrite.data.SettingsRepository
@@ -24,8 +25,10 @@ import org.yangtse.hearwrite.data.SessionRepository
 import org.yangtse.hearwrite.data.SoundEffects
 import org.yangtse.hearwrite.data.SystemSpeaker
 import org.yangtse.hearwrite.data.TtsChainSpeaker
+import org.yangtse.hearwrite.data.WrongWordLineResolver
 import org.yangtse.hearwrite.data.WrongWordsRepository
 import org.yangtse.hearwrite.data.YoudaoTts
+import org.yangtse.hearwrite.domain.entryToLine
 
 /**
  * Application-scoped singleton container (manual DI per AGENTS.md — no
@@ -135,6 +138,27 @@ class HearWriteApplication : Application() {
     /** User-pasted list history (cap 50), with favorites orphan pruning. */
     val historyRepository: HistoryRepository by lazy {
         HistoryRepository(database.historyDao(), database.favoritesDao())
+    }
+
+    /**
+     * Restore 错词本 marks to their original word-list lines (Roadmap #7):
+     * built-in sources read the asset library (enriched with the offline
+     * ECDICT meta exactly like the list preview, so an English mark keeps its
+     * 词性/释义 and 朗读释义 still has something to speak), history sources the
+     * stored row — so 复习错词 / 听写错词 dictate enriched lines rather than
+     * bare words.
+     */
+    val wrongWordLineResolver: WrongWordLineResolver by lazy {
+        WrongWordLineResolver(
+            builtinListLines = { category, label ->
+                val lines = libraryRepository.entries(LibraryList(category, label)).map(::entryToLine)
+                dictionaryRepository.enrichLines(lines)
+            },
+            historyText = { id ->
+                historyRepository.all().firstOrNull { it.id == id }
+                    ?.let { it.enrichedText ?: it.text }
+            },
+        )
     }
 
     /** Favorite entry ids (`default_*` or history ids). */
