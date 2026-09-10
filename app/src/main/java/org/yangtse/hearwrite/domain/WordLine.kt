@@ -62,7 +62,9 @@ fun parseWords(text: String): List<String> =
 /**
  * Parse a single line into a structured entry. Format: `word | pos | meaning`
  * (fullwidth `｜` accepted). Only `word` is required; missing/blank columns
- * are null. Extra pipe-separated columns beyond `meaning` are ignored.
+ * are null. `word | pinyin` (two columns) is the hint-only 生字 shape the
+ * enrichment emits for a char with no 组词. Extra pipe-separated columns
+ * beyond `meaning` are ignored.
  */
 fun parseWordLine(line: String): WordEntry {
     val trimmed = jsEdgeTrim(line)
@@ -79,9 +81,16 @@ fun parseWordLine(line: String): WordEntry {
 fun parseWordEntries(text: String): List<WordEntry> =
     parseWords(text).map(::parseWordLine)
 
-/** Serialize an entry back to its canonical `word | pos | meaning` line. */
-fun entryToLine(entry: WordEntry): String {
-    if (entry.pos == null && entry.meaning == null) return entry.word
-    return listOf(entry.word, entry.pos ?: "", entry.meaning ?: "")
+/**
+ * Serialize an entry back to its canonical line: `word`, or as many columns as
+ * carry content — `word | pinyin` for a hint-only 生字 row (the enrichment of
+ * a char with no 组词), `word | pos | meaning` otherwise. A gap before a
+ * present column keeps its empty placeholder (`word |  | gloss`), because the
+ * parser reads columns by position.
+ */
+fun entryToLine(entry: WordEntry): String = when {
+    entry.meaning != null -> listOf(entry.word, entry.pos ?: "", entry.meaning)
         .joinToString(" $PIPE ")
+    entry.pos != null -> "${entry.word} $PIPE ${entry.pos}"
+    else -> entry.word
 }

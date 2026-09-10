@@ -220,7 +220,12 @@ class LibraryPreviewViewModel(
         // unchanged. A stale result is dropped if the list changed.
         val parsed = repository.entries(list)
         _entries.value = parsed
-        val needsEnrich = parsed.any { it.pos == null && it.meaning == null && !isCjkEntry(it.word) }
+        // Bare English words get ECDICT meta; a bare single Chinese char gets
+        // 拼音/组词 from `dict/hanzi-meta.json`. Multi-char Chinese words have
+        // no offline source (and no columns to fill), so they never trigger it.
+        val needsEnrich = parsed.any {
+            it.pos == null && it.meaning == null && (!isCjkEntry(it.word) || it.word.length == 1)
+        }
         if (!needsEnrich) return
         val enriched = dictionaryRepository.enrichLines(parsed.map(::entryToLine))
             .map(::parseWordLine)

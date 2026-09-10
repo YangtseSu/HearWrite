@@ -1,0 +1,22 @@
+# Per-char overrides for scripts/build-hanzi-meta.py — the cases where both
+# heuristic sources give a reading or 组词 that is wrong for a dictation app.
+#
+# Format: char<TAB>pinyin<TAB>组词<TAB>why
+# pinyin is tone-marked (the shape the asset stores); the 组词 must contain the
+# char. Keep this table tiny: everything else is derived from the textbook rows
+# and the frequency table.
+
+# 常用词表未收录的单字（只剩读音，无从取二字组词；留空第三列 = 只做拼音提示）。
+戊	wu4		wù，天干第五位（戊戌）
+斌	bin1		bīn，多用于人名
+甫	fu3		fǔ，刚刚/古代男子美称
+矣	yi3		yǐ，文言助词
+禹	yu3		yǔ，传说中夏朝君主
+靖	jing4		jìng，安定/平定
+
+# 轻声虚词：两处数据源都按"实义读音"排序（目的 dì、着眼 zhuó、了解 liǎo），
+# 但单个虚字的默认读音就是轻声，课文注音也是（跑得快 de / 好呢 ne）。
+的	de	有的	作助词时读轻声，实义读音 dì 只出现在"目的"等少数词
+着	zhe	随着	动态助词读轻声 zhe；zhuó 只用于"着眼/着手"等
+了	le	为了	语气助词读轻声 le；liǎo 只用于"了解/明了"等
+嘛	ma	干嘛	语气助词读轻声 ma；常用词表只收了"喇嘛"

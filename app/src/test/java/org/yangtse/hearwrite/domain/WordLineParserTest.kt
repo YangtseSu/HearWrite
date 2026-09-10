@@ -109,7 +109,11 @@ class WordLineParserTest {
     fun `entryToLine keeps empty columns as separators`() {
         assertEquals("apple | n. | 苹果", entryToLine(WordEntry("apple", "n.", "苹果")))
         assertEquals("what's |  | what is 的缩写形式", entryToLine(WordEntry("what's", null, "what is 的缩写形式")))
-        assertEquals("apple | n. | ", entryToLine(WordEntry("apple", "n.", null)))
+        // A missing trailing column is dropped: the hint-only 生字 shape
+        // (`字 | 拼音`) is what the CJK enrichment emits for a char with no
+        // 组词, and a dangling `| ` would ship as a visible empty column.
+        assertEquals("apple | n.", entryToLine(WordEntry("apple", "n.", null)))
+        assertEquals("很 | hěn", entryToLine(WordEntry("很", "hěn", null)))
     }
 
     @Test

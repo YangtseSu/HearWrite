@@ -171,6 +171,10 @@ class HearWriteApplication : Application() {
         SessionRepository(database.sessionDao())
     }
 
-    /** Offline ECDICT pos/meaning; parsed lazily on the first lookup. */
-    val dictionaryRepository: DictionaryRepository by lazy { DictionaryRepository(assets) }
+    /** Offline ECDICT pos/meaning + hanzi 拼音/组词; parsed lazily on first lookup. */
+    val dictionaryRepository: DictionaryRepository by lazy {
+        DictionaryRepository { path ->
+            assets.open(path).bufferedReader().use { it.readText() }
+        }
+    }
 }
