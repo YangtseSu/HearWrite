@@ -61,6 +61,10 @@ private val HANZI = mapOf(
     '字' to ("zi" to 6), '表' to ("biao" to 8), '见' to ("jian" to 4), '识' to ("shi" to 7),
     '词' to ("ci" to 7), '语' to ("yu" to 9), '读' to ("du" to 10), '写' to ("xie" to 5),
     '阅' to ("yue" to 10),
+    // 义务教育语文课程标准 category + its 字表 labels
+    '义' to ("yi" to 3), '务' to ("wu" to 5), '育' to ("yu" to 8), '课' to ("ke" to 10),
+    '程' to ("cheng" to 12), '标' to ("biao" to 9), '准' to ("zhun" to 10),
+    '基' to ("ji" to 11), '本' to ("ben" to 5), '用' to ("yong" to 5),
 )
 
 private fun hanziKey(c: Char): Pair<String, Int>? = HANZI[c]

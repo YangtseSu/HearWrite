@@ -40,10 +40,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import org.yangtse.hearwrite.data.LibraryCategory
 
 /**
- * 词库 browse screen: the 10 textbook categories, or — while a query is
- * active — full-library search results grouped into list-name hits and
- * word hits. Category names open the category list; every hit opens the
- * word preview.
+ * 词库 browse screen: every library category (textbook sets plus the 课标
+ * 字表), or — while a query is active — full-library search results grouped
+ * into list-name hits and word hits. Category names open the category list;
+ * every hit opens the word preview.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

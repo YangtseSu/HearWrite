@@ -92,9 +92,8 @@ fun AboutSettingsPage(onBack: () -> Unit) {
         SettingsCard {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    "导入词表或拍摄课本 → 逐词朗读并倒计时默写 → 标记错词、复习巩固。内置 10 套教材词库，" +
-                        "支持有道词典真人发音、系统语音与自定义 OpenAI 兼容音源。无账号、无广告、无内购，" +
-                        "所有数据只保存在本机。",
+                    "导入词表或拍摄课本 → 逐词朗读并倒计时默写 → 标记错词、复习巩固。内置 10 套教材词库与课标字表，支持有道词典真人发音、" +
+                        "系统语音与自定义 OpenAI 兼容音源。无账号、无广告、无内购，所有数据只保存在本机。",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }

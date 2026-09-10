@@ -39,7 +39,7 @@ class BuiltinLibraryRepository(private val assets: AssetManager) {
 
     private val entriesCache = ConcurrentHashMap<String, List<WordEntry>>()
 
-    /** All 10 textbook categories, ordered like the upstream library generator. */
+    /** Every library category, ordered like the upstream library generator. */
     suspend fun categories(): List<LibraryCategory> = withContext(Dispatchers.IO) {
         assets.list("")
             .orEmpty()
