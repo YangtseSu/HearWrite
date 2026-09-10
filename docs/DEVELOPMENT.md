@@ -172,6 +172,17 @@ adb install -r app/build/dist/HearWrite-0.3.0.apk
 - AGP 9 使用**内置 Kotlin**——不要应用 `org.jetbrains.kotlin.android`；Kotlin 版本通过 Compose 编译器插件（`org.jetbrains.kotlin.plugin.compose`）设定，KSP 随 Kotlin 版本联动（一起升）。
 - `data/` 资源只读；其余约定（架构分层、依赖清单、测试范围）以 `AGENTS.md` 为准。
 
+### 5.1 CI 与 main 分支治理
+
+- **触发**（`.github/workflows/build.yml`）：`pull_request`（含 fork）+ `push` 仅 `main`。逐分支 push 曾让每个 PR 提交把两个 job 各跑两遍（两个云模拟器）；tag push 不再触发 CI——Release 工作流会在该 tag 上构建并 `apksigner` 验签。
+- **检查项**：`Build, unit tests & lint`（含 `scripts/check-assets.py` 数据门禁）与 `Instrumented tests (emulator)`。作业名**就是**分支保护的必需上下文，两边必须逐字一致。
+- ⚠️ **不要给 `instrumented` job 加 `strategy.matrix`**：矩阵会让 GitHub 上报 `Instrumented tests (emulator) (36)`，没有任何必需上下文能匹配，main 会对所有没有 admin 绕过的人永久不可合并。将来真要多 API 级别，用汇总 job 保住上下文不变。
+- **保护分两层并存**，各管一半：
+  - **经典分支保护** — 两项必需检查（`strict`，要求分支与 base 同步后再合并）。`enforce_admins: false`：管理员（目前只有作者）直接 push main 时绕过，**协作者与 PR 仍受门禁约束**；PR 必须两项检查通过才能合并。
+  - **规则集 `main：禁止强推与删除`**（`bypass_actors: []`）— 禁止 force push 与删除 main，**对管理员同样生效**。经典保护无法这样拆分：它的 `allow_force_pushes`/`allow_deletions` 也会随 `enforce_admins: false` 一并豁免管理员。
+- **核对生效规则**：`gh api repos/YangtseSu/HearWrite/rules/branches/main`（ruleset 与经典保护的合集，各规则的 `ruleset_source_type` 标明来源）。
+- **加协作者给 `write`，不要给 `admin`**：GitHub 只按角色豁免，不按用户名；admin 会继承上一条绕过。
+
 ## 6. BYOK API Key 的加密存储（Android Keystore）
 
 TTS / OCR 服务商密钥写入 DataStore 前经 `data/KeystoreCipher.kt` 用 **Android Keystore** 里的 AES-256-GCM 密钥加密（密文格式 `v1.<iv-b64>.<ct-b64>`，每次加密随机 IV，128 位认证标签）。密钥材料在 Keystore 芯片内生成、永不导出；读取时解密。要点：
