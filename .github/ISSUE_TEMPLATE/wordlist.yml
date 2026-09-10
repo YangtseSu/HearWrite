@@ -1,0 +1,66 @@
+name: 词库问题（错行 / 缺词表）
+description: 报告内置词库里的错字、错拼音、错组词，或申请补充缺失的词表
+title: "[词库] "
+labels: ["词库"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        内置词库随安装包一起发布，错一行就会发给所有用户——感谢你帮忙核对。
+        词表的格式与命名规则见 [`docs/WORDLIST.md`](https://github.com/YangtseSu/HearWrite/blob/main/docs/WORDLIST.md)。
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 问题类型
+      options:
+        - 错行（字/拼音/释义/组词有误）
+        - 缺词表（某个单元、某一册、某个字表没有）
+        - 排序不对（词库里的词表顺序）
+        - 其他
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: 位置
+      description: 分类 / 词表名 / 第几行（缺词表则填想要的分类与词表名）
+      placeholder: 人教版小学语文 / 二上 写字表 识字 1 / 第 5 行
+    validations:
+      required: true
+
+  - type: textarea
+    id: content
+    attributes:
+      label: 现在的内容与正确的内容
+      description: 直接贴出错行与改正后的行（生字行格式：`字 | 拼音 | 组词`）
+      placeholder: |
+        现在：柏 | bǎi | 柏树
+        正确：柏 | bǎi | 柏树   ← 或写出你认为正确的一行
+    validations:
+      required: true
+
+  - type: textarea
+    id: source
+    attributes:
+      label: 依据
+      description: 你用的是哪个版本的教材 / 哪份官方字表？有书页照片更好（照片仅用于核对，不会被收录进仓库）
+      placeholder: 人教版（统编）语文二年级上册 2024 印次，第 12 页
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本
+      description: 设置 → 关于，或 APK 文件名里的版本号
+      placeholder: 0.5.0
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        如果你已经改好了词表文件，欢迎直接提 PR——第 5 节有完整流程，
+        提交前请确认 `python3 scripts/check-assets.py` 是 0 error。
