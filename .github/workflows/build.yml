@@ -29,6 +29,13 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
 
+      # The bundled word lists ship verbatim into the APK; a broken row would
+      # reach every user at once. Depends on nothing but python3 — run it
+      # before the (slow) Gradle step so a data error fails fast.
+      # Contract: docs/WORDLIST.md
+      - name: Validate bundled word lists
+        run: python3 scripts/check-assets.py
+
       - name: Build debug APK, run unit tests and lint
         run: ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
 
