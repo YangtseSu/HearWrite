@@ -414,23 +414,33 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         if (!ui.isActive || ui.index >= ui.total) return
         val head = speakTextFromEntry(_activeLines.value.getOrNull(ui.index) ?: return)
         if (head.isEmpty()) return
-        if (runWrongWords.add(head)) {
+        val firstMarkThisRun = runWrongWords.add(head)
+        if (firstMarkThisRun) {
             _runWrongCount.value = _runWrongCount.value + 1
-        }
-        if (head in _wrongWords.value) return
-        _wrongWords.value = _wrongWords.value + head
-        _markedFlash.value = true
-        Haptics.notifyWarning(getApplication()) // alice notifyWarning parity
-        viewModelScope.launch {
-            try {
-                // The run's provenance feeds the book row's source; a 复习错词
-                // round passes null and keeps whatever source the word had.
-                wrongWordsRepository.add(head, runSourceLabel)
-            } catch (e: Exception) {
-                // Persistence must never break dictation; the session list
-                // still carries the mark for the finish/review flow.
+            // The book row is written once per run even when the headword is
+            // already booked — that write is what bumps its error count across
+            // runs (a booked word must not short-circuit it). A 复习错词 round
+            // is a re-check of words the book already holds, not a fresh run:
+            // counting its presses would inflate every count on each pass, so
+            // it writes nothing (its words are in the book by construction).
+            if (runKind == SessionKind.DICTATION) {
+                viewModelScope.launch {
+                    try {
+                        // The run's provenance feeds the book row's source.
+                        wrongWordsRepository.add(head, runSourceLabel)
+                    } catch (e: Exception) {
+                        // Persistence must never break dictation; the session
+                        // list still carries the mark for the finish/review
+                        // flow.
+                    }
+                }
             }
         }
+        if (head !in _wrongWords.value) {
+            _wrongWords.value = _wrongWords.value + head
+        }
+        _markedFlash.value = true
+        Haptics.notifyWarning(getApplication()) // alice notifyWarning parity
         viewModelScope.launch {
             delay(MARKED_FLASH_MS)
             _markedFlash.value = false
