@@ -162,10 +162,11 @@ sdkmanager "platforms;android-37"        # once, before first build (accept lice
 adb install -r app/build/outputs/apk/debug/app-debug.apk   # deploy to device/emulator
 ```
 
-No emulator is guaranteed — verify on a connected device or emulator via `adb`; every phase's demo must run on a real surface.
+No emulator is guaranteed. Discover one with `~/Android/Sdk/emulator/emulator -list-avds` and put it up when the list is non-empty (`-avd <name>`, then `adb wait-for-device`); otherwise use a connected device. Either way every phase's demo must run on a real surface via `adb`.
 
 ### adb device-driving notes (real-device verification)
 
+- **The emulator is not a device you can skip probing**: `~/Android/Sdk/emulator/emulator -list-avds` decides — any name it prints is a bootable target (`-avd <name> &`), and only an empty list sends you to real hardware. A cold boot takes a minute or two; `adb wait-for-device` returns long before the UI is up, so wait on `adb shell getprop sys.boot_completed` (or a `[0-9]`-matching `sys.boot_completed=1`) before screenshotting or injecting input — otherwise you capture a black screen.
 - **The screen sleeps**: a black screenshot, an empty `uiautomator dump`, or silently swallowed `input text` usually means the screen timed out mid-session — not a crash. Check `adb shell dumpsys window | grep mCurrentFocus` and logcat before debugging. During long drives keep the device awake with `adb shell svc power stayon true`, then restore `adb shell svc power stayon false`.
 - **The default IME is a Chinese keyboard**: on zh-CN devices the input method (Gboard pinyin mode) intercepts `adb shell input text` — injected ASCII letters land in the composition/candidate buffer and never reach the field. Disable the IME first (`adb shell ime disable <ime-id>` from `adb shell ime list -s`; optionally switch to a non-keyboard IME) so input goes through the hardware-keyboard path, then `adb shell ime enable <ime-id>` to restore.
 - **Swipe direction**: `adb shell input swipe x y1 x y2` dragging from a top area **downward** opens the notification shade / lock screen — a top-down swipe meant to scroll a list up near its top hides the app behind the shade and later inputs get eaten. List-scroll swipes go bottom-to-top (e.g. `540 1900 540 500`).

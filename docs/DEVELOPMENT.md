@@ -52,21 +52,27 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties   # 已被 gitignore，机�
 
 ### 1.5 在设备上运行
 
-仓库不提交模拟器配置——演示在开启 USB 调试的真机上运行（实机调试的常见坑见 `AGENTS.md` 的 *adb device-driving notes*）：
+仓库不提交模拟器配置。**先查本机有没有可用的 AVD**：
+
+```bash
+~/Android/Sdk/emulator/emulator -list-avds        # 列出 ~/.android/avd/ 下的全部 AVD
+```
+
+有输出就启动其中一个（本机为 API 37 / x86_64 / google_apis 的 `pixel_9a_api37`），没有输出才回到真机：
+
+```bash
+~/Android/Sdk/emulator/emulator -avd pixel_9a_api37 &
+adb wait-for-device                              # 启动等到 boot_completed 才截图/输入
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+模拟器覆盖不依赖真实硬件的验证：Room 迁移 instrumentation 测试（`./gradlew :app:connectedDebugAndroidTest`）、进程死亡恢复、UI 走查。音频焦点 / 来电中断 / 各家 TTS 音色仍必须真机验证——模拟器常常没有可用的 TTS 引擎与音色。
+
+真机则直接（实机调试的常见坑见 `AGENTS.md` 的 *adb device-driving notes*）：
 
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
-
-开发机另有一个本地 AVD **`HearWrite37`**（API 37 / x86_64 / google_apis，位于 `~/.android/avd/`），用于不依赖真实硬件的验证——Room 迁移 instrumentation 测试、进程死亡恢复、UI 走查：
-
-```bash
-~/Android/Sdk/emulator/emulator -avd HearWrite37 &
-adb wait-for-device
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
-
-音频焦点 / 来电中断 / 各家 TTS 音色仍必须真机验证。
 
 ## 2. 日常命令
 

@@ -29,7 +29,7 @@
 
 依赖链：**1 → 3 → 4**（错词本升级 → 听写统计 → 间隔复习）。2、6、7、8、9、12 相互独立，可随时插队；11 依赖 1；15 依赖 3。
 
-> 验证环境：本机已有模拟器 `HearWrite37`（API 37 / x86_64 / google_apis，`~/.android/avd/`），迁移与进程死亡类验证走它；音频焦点、来电、TTS 音色等仍需真机。
+> 验证环境：本机模拟器用 `~/Android/Sdk/emulator/emulator -list-avds` 查（当前为 API 37 / x86_64 / google_apis 的 `pixel_9a_api37`），迁移与进程死亡类验证走它；音频焦点、来电、TTS 音色等仍需真机。下面的历史验证记录里出现的 AVD 名是当时的机器配置。
 
 ---
 
@@ -323,7 +323,7 @@
 ### 数据与可靠性
 
 - **测试基础设施（instrumentation 迁移测试 + Compose 冒烟 + CI lint）** — 现状：`app/src/androidTest` 不存在，CI 只跑 `assembleDebug + testDebugUnitTest`；v2/v3 迁移的正确性目前无法自动验证。
-  建议：**高**，且应随错词本升级一起落地（迁移测试就是它的验收条件）。模拟器 `HearWrite37` 已就绪。
+  建议：**高**，且应随错词本升级一起落地（迁移测试就是它的验收条件）。本机模拟器已就绪（`~/Android/Sdk/emulator/emulator -list-avds`）。
 
 ### 听写体验
 
