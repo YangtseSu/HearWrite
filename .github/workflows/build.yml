@@ -1,11 +1,19 @@
-# CI — assemble + unit tests + lint on every push / pull request, plus
-# instrumentation tests on a cloud emulator (androidTest infra lives in
-# app/src/androidTest and must run on device — GitHub-hosted emulator).
-# Public-repo reproducibility gate: a fresh checkout must build.
+# CI — assemble + unit tests + lint on every pull request, plus instrumentation
+# tests on a cloud emulator (androidTest infra lives in app/src/androidTest and
+# must run on device — GitHub-hosted emulator). Public-repo reproducibility
+# gate: a fresh checkout must build.
+#
+# `push` is narrowed to main on purpose: a bare `push:` also runs CI on every
+# branch a pull request comes from, so each PR push produced two identical runs
+# of both jobs (two emulators per commit). Pull requests are covered by the
+# `pull_request` event — including from forks — and direct pushes to main by the
+# `push` event. Tag pushes are deliberately not covered: the Release workflow
+# builds and signature-verifies that exact commit on the tag.
 name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
