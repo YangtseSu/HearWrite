@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.StarBorder
@@ -87,6 +88,7 @@ fun HomeScreen(
     onOpenLibrary: () -> Unit,
     onOpenLibraryPreview: (category: String, label: String) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenStats: () -> Unit,
     onOpenOcrSettings: () -> Unit,
     viewModel: HomeViewModel = viewModel(),
 ) {
@@ -379,6 +381,10 @@ fun HomeScreen(
                 MenuRow(Icons.Outlined.Cancel, "错词本") {
                     showMenu = false
                     showWrongWords = true
+                }
+                MenuRow(Icons.Outlined.BarChart, "听写统计") {
+                    showMenu = false
+                    onOpenStats()
                 }
             }
         }

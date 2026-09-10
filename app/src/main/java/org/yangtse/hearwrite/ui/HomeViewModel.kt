@@ -294,22 +294,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 historyRepository.observe(),
                 _libraryTitles,
             ) { marks, historyRows, titles ->
-                val resolved = marks.map { mark ->
-                    val sourceLabel = mark.sourceLabel
-                    val title = when {
-                        sourceLabel == null -> null
-                        sourceLabel.startsWith("default_") -> titles[sourceLabel]
-                        else -> historyRows.firstOrNull { it.id == sourceLabel }
-                            ?.let { it.enrichedText ?: it.text }
-                            ?.lineSequence()?.firstOrNull { it.isNotBlank() }
-                            // The stored line is `word | pos | meaning`; the
-                            // source title is the list's headword, not the
-                            // whole gloss.
-                            ?.substringBefore('|')?.trim()
-                    }
-                    ResolvedWrongMark(mark, title)
+                // Source resolution is shared with the 听写统计 page.
+                marks.map { mark ->
+                    ResolvedWrongMark(mark, resolveSourceTitle(mark.sourceLabel, historyRows, titles))
                 }
-                resolved
             }.collect { resolved ->
                 _wrongWords.value = resolved.map { it.mark }
                 _wrongGroups.value = groupResolvedWrong(resolved)

@@ -26,6 +26,7 @@ import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.PlayState
 import org.yangtse.hearwrite.domain.Speaker
+import org.yangtse.hearwrite.domain.SessionKind
 import org.yangtse.hearwrite.domain.TtsSource
 import org.yangtse.hearwrite.domain.cjkWordSpeech
 import org.yangtse.hearwrite.domain.isCjkEntry
@@ -65,6 +66,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     private val app = application as HearWriteApplication
     private val settings = app.settingsRepository
     private val wrongWordsRepository = app.wrongWordsRepository
+    private val sessionRepository = app.sessionRepository
 
     /**
      * Session handed over by the launching screen: the prepared lines (slice
@@ -148,6 +150,9 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
 
     /** Wall-clock start of the current run (init session or a review round). */
     private var runStartedAtMs = 0L
+
+    /** Kind of the run in progress: a fresh dictation or a 复习错词 round. */
+    private var runKind = SessionKind.DICTATION
 
     /** 组词 candidate tables for phrase prefetch (set in init with the engine). */
     private var tables = CompoundTables.EMPTY
@@ -246,13 +251,31 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
             beginRun(sessionLines, runSourceLabel)
         }
         // Score summary + completion chime: capture the elapsed time once when
-        // the run completes (a review round resets it via beginRun).
+        // the run completes (a review round resets it via beginRun). The same
+        // capture records the local stats row (Roadmap #3) — only a run that
+        // reached the end of its list is a session; an abandoned run (stop /
+        // back-exit) never completes and records nothing.
         viewModelScope.launch {
             engine.finished.collect { finished ->
                 if (finished && _elapsedSec.value == null) {
                     val wall = System.currentTimeMillis() - runStartedAtMs
-                    _elapsedSec.value = maxOf(1L, (wall + 500) / 1000)
+                    val elapsed = maxOf(1L, (wall + 500) / 1000)
+                    _elapsedSec.value = elapsed
                     app.soundEffects.playChime()
+                    try {
+                        sessionRepository.record(
+                            startedAt = runStartedAtMs,
+                            sourceLabel = runSourceLabel,
+                            totalWords = _total.value,
+                            wrongCount = _runWrongCount.value,
+                            durationSec = elapsed,
+                            kind = runKind,
+                        )
+                    } catch (e: Exception) {
+                        // Stats must never disturb the finish card; a failed
+                        // write just loses one row.
+                        Log.w(TAG, "session record failed", e)
+                    }
                 }
             }
         }
@@ -336,10 +359,15 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     /**
      * Start a run (initial session or 复习错词 round) and reset its stats.
      * [sourceLabel] is the run's wrong-word provenance (null for review
-     * rounds — see [runSourceLabel]).
+     * rounds — see [runSourceLabel]); [kind] labels the recorded stats row.
      */
-    private fun beginRun(runLines: List<String>, sourceLabel: String?) {
+    private fun beginRun(
+        runLines: List<String>,
+        sourceLabel: String?,
+        kind: SessionKind = SessionKind.DICTATION,
+    ) {
         runStartedAtMs = System.currentTimeMillis()
+        runKind = kind
         _elapsedSec.value = null
         runWrongWords.clear()
         _runWrongCount.value = 0
@@ -462,7 +490,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         val reviewLines = book.map { word ->
             sessionLines.firstOrNull { speakTextFromEntry(it) == word } ?: word
         }
-        beginRun(reviewLines, null)
+        beginRun(reviewLines, null, kind = SessionKind.REVIEW)
     }
 
     private fun snapshot(): DictationUiState = DictationUiState(

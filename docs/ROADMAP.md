@@ -70,7 +70,7 @@
 
 ---
 
-## 3. 💡 听写统计（本地） 🤖
+## 3. ✅ 听写统计（本地） 🤖
 
 现状：每场成绩只在内存里——`DictationViewModel` 的 `runStartedAtMs` / `_elapsedSec` / `runWrongCount` 随页面销毁即失，从不落库。
 
@@ -84,6 +84,12 @@
 **依赖**：无。排在 1 之后只为每次只动一个迁移。
 
 **验证**：聚合纯函数单测；真机连做两场听写后核对记录条数与错词率。
+
+**已实现（2026-09-10）**：Room v3 落地——新表 `sessions` + `MIGRATION_2_3`（纯追加建表，v1/v2 数据不动）+ 提交 `app/schemas/…/3.json`。记录时机：`DictationViewModel` 在 `engine.finished` 首次为真时把本场数字（`runStartedAtMs` / `_total` / `_runWrongCount` / 结束页同一个 `elapsedSec`）写一条，`beginRun` 带上 `SessionKind`（复习错词轮次 = `review`，其 `sourceLabel` 仍为 null）；**中止的听写（结束/返回）不记录**——只有听完的才算一场。聚合为 `domain/Stats.kt` 纯函数（`summarize` / `dailyStats` / `streakDays`，zone 与 today 由调用方注入，便于测试），单测 `StatsTest` 锁定日归属（跨时区按本地日）、窗口补零、连续天数（今天还没听写不算断档，空一整天才算）、错词率与空记录。页面 `ui/StatsScreen.kt`（首页「更多」→ 听写统计，无图表库）：概览卡（场次 / 正式·复习拆分 / 词数 / 错词率 / 累计用时 / 听写天数 / 连续天数）、14 天词数条形（每条带 TalkBack 描述）、高频错词（复用错词本前 10）、最近记录（来源标题解析与错词本共用 `ui/SourceTitles.kt`），另有 清空听写记录（错词本不受影响）。逐词结果与来源条目 id 沿用错词本的 key 体系。
+
+**与规划的差异**：统计页不做「错词率趋势」而只做词数趋势（一天内的错词率样本太小，21 词的错词率是噪声）；「连续听写天数」按"今天未听写不清零"口径实现。
+
+**验证**：`testDebugUnitTest` 265 tests 全绿（新增 `StatsTest` 9 + `SessionRepositoryTest` 5）；`connectedDebugAndroidTest` 6/6 绿（新增 `SessionsMigrationTest`：v2 建库 → 迁 v3 断言既有三表原样 + `sessions` 与 3.json 一致 + 真库写入两条并回读）；`lintDebug` 在改动文件上无新告警（报告里与基线不同的一项是对未改动的 `gradle/libs.versions.toml` 的「有更新版本」时效性检查）。模拟器 `HearWrite37` 走查：5 词正式听写（标记 1 个错词）→ 结束页显示「共 5 词 · 用时 36 秒」→ `sqlite3` 查到 `…|5|1|36|dictation` 且来源为本次历史行 id；点「复习错词」再听 1 词 → 记录 `…|1|0|7|review`，错词本仍是 `banana|1`（复习轮次不加错次）；统计页显示「共听写 2 场 / 正式 1 · 复习 1 / 错词率 17% / 累计 43 秒 / 天数 1 / 连续 1」，14 天条最后一条有柱且日期轴为 8/28–9/10，高频错词与最近记录（来源解析出 `apple`、复习那条为「未知来源」）正确；清空记录后 `sessions` 0 行、错词本仍 1 行并回到空态文案。
 
 ---
 

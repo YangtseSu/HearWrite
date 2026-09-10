@@ -77,11 +77,14 @@ class WrongWordsMigrationTest {
     fun recordMark_bumpsCountOnRealSqlite() = runBlocking {
         helper.createDatabase(DB_NAME_V2, 1).close()
         helper.runMigrationsAndValidate(DB_NAME_V2, 2, true, MIGRATION_1_2).close()
+        // The upsert SQL is version-independent but Room must open the file at
+        // the current version — walk it on to v3 (Roadmap #3) before opening.
+        helper.runMigrationsAndValidate(DB_NAME_V2, 3, true, MIGRATION_2_3).close()
         val room = Room.databaseBuilder(
             InstrumentationRegistry.getInstrumentation().targetContext,
             HearWriteDatabase::class.java,
             DB_NAME_V2,
-        ).addMigrations(MIGRATION_1_2).build()
+        ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
         val dao = room.wrongWordsDao()
         try {
             dao.recordMark("apple", addedAt = 10L, lastWrongAt = 10L, sourceLabel = "src1")

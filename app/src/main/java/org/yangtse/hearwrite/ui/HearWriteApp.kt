@@ -16,6 +16,7 @@ object Routes {
     const val SETTINGS = "settings"
     const val SETTINGS_OCR = "settings_ocr"
     const val LIBRARY = "library"
+    const val STATS = "stats"
     const val LIBRARY_LIST = "library_list/{category}"
     const val LIBRARY_PREVIEW = "library_preview/{category}/{label}"
 
@@ -53,6 +54,7 @@ fun HearWriteApp() {
                     navController.navigate(Routes.libraryPreview(category, label))
                 },
                 onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                onOpenStats = { navController.navigate(Routes.STATS) },
                 // 拍照识词 sheet 的 修改/去设置: one entry opened on the OCR
                 // provider form. Back first lands on the in-screen hub
                 // (goHub), then pops to Home — no second hub entry beneath,
@@ -72,6 +74,9 @@ fun HearWriteApp() {
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(onClose = { navController.popBackStack() })
+        }
+        composable(Routes.STATS) {
+            StatsScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.SETTINGS_OCR) {
             // The scan sheet's 修改/去设置 lands directly on the OCR provider

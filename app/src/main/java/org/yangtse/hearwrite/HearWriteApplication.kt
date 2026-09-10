@@ -20,6 +20,7 @@ import org.yangtse.hearwrite.data.KeystoreCipher
 import org.yangtse.hearwrite.data.OcrService
 import org.yangtse.hearwrite.data.OpenAiCompatibleTts
 import org.yangtse.hearwrite.data.SettingsRepository
+import org.yangtse.hearwrite.data.SessionRepository
 import org.yangtse.hearwrite.data.SoundEffects
 import org.yangtse.hearwrite.data.SystemSpeaker
 import org.yangtse.hearwrite.data.TtsChainSpeaker
@@ -139,6 +140,11 @@ class HearWriteApplication : Application() {
     /** Favorite entry ids (`default_*` or history ids). */
     val favoritesRepository: FavoritesRepository by lazy {
         FavoritesRepository(database.favoritesDao())
+    }
+
+    /** Local dictation record (Roadmap #3 听写统计): one row per finished run. */
+    val sessionRepository: SessionRepository by lazy {
+        SessionRepository(database.sessionDao())
     }
 
     /** Offline ECDICT pos/meaning; parsed lazily on the first lookup. */

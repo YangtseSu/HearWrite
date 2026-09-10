@@ -48,6 +48,25 @@ data class HistoryEntity(
 @Entity(tableName = "favorites")
 data class FavoriteEntity(@PrimaryKey val id: String)
 
+/**
+ * One completed dictation run (Roadmap #3 听写统计). Only runs that reached the
+ * end of their list are recorded; [sourceLabel] uses the same provenance ids
+ * as the 错词本 ([WrongWordEntity.sourceLabel]) and [kind] is a
+ * [SessionKind.wire] value. [durationSec] is the run's wall-clock length —
+ * the same number the finish card shows. Rows accumulate forever (a run is a
+ * few dozen bytes and the stats page reads them all; no cap, no pruning).
+ */
+@Entity(tableName = "sessions")
+data class SessionEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val startedAt: Long,
+    val sourceLabel: String?,
+    val totalWords: Int,
+    val wrongCount: Int,
+    val durationSec: Long,
+    val kind: String,
+)
+
 @Dao
 interface WrongWordsDao {
     /** Book words, most-wrong first (count desc, then most-recent mark). */
@@ -87,6 +106,19 @@ interface WrongWordsDao {
     suspend fun delete(word: String)
 
     @Query("DELETE FROM wrong_words")
+    suspend fun clear()
+}
+
+@Dao
+interface SessionDao {
+    /** Every recorded run, newest first (the stats page reads them all). */
+    @Query("SELECT * FROM sessions ORDER BY startedAt DESC, id DESC")
+    fun observeAll(): Flow<List<SessionEntity>>
+
+    @Insert
+    suspend fun insert(session: SessionEntity)
+
+    @Query("DELETE FROM sessions")
     suspend fun clear()
 }
 
@@ -164,9 +196,35 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+/**
+ * v2 → v3 (Roadmap #3 听写统计): new `sessions` table recording one row per
+ * completed dictation run. Purely additive — no existing table is touched, so
+ * the migration is a plain CREATE TABLE matching the exported 3.json exactly
+ * (Room validates the schema after the migration).
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `sessions` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`startedAt` INTEGER NOT NULL, " +
+                "`sourceLabel` TEXT, " +
+                "`totalWords` INTEGER NOT NULL, " +
+                "`wrongCount` INTEGER NOT NULL, " +
+                "`durationSec` INTEGER NOT NULL, " +
+                "`kind` TEXT NOT NULL)"
+        )
+    }
+}
+
 @Database(
-    entities = [WrongWordEntity::class, HistoryEntity::class, FavoriteEntity::class],
-    version = 2,
+    entities = [
+        WrongWordEntity::class,
+        HistoryEntity::class,
+        FavoriteEntity::class,
+        SessionEntity::class,
+    ],
+    version = 3,
     // Schema JSON is exported to app/schemas (ksp arg in app/build.gradle.kts)
     // and committed — the v1 baseline future migrations diff against. When a
     // later version changes entities, bump `version` and add an
@@ -177,6 +235,7 @@ abstract class HearWriteDatabase : RoomDatabase() {
     abstract fun wrongWordsDao(): WrongWordsDao
     abstract fun historyDao(): HistoryDao
     abstract fun favoritesDao(): FavoritesDao
+    abstract fun sessionDao(): SessionDao
 
     companion object {
         /** Database name (kept stable across versions — migrations run in place). */
@@ -185,7 +244,7 @@ abstract class HearWriteDatabase : RoomDatabase() {
         /** Production builder with the registered migrations. */
         fun create(context: Context): HearWriteDatabase =
             Room.databaseBuilder(context, HearWriteDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
     }
 }
