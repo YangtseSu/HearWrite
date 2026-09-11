@@ -153,8 +153,8 @@ adb install -r app/build/dist/HearWrite-0.3.0.apk
 
 在 `app/build.gradle.kts` 的 `defaultConfig` 中维护：
 
-- **`versionName`**：语义化版本 `MAJOR.MINOR.PATCH`；公开发布前处于 `0.x.y`（当前 `0.5.0`）。
-- **`versionCode`**：单调递增整数，**每出一个签名发布包 +1，永不复用、不回退**（当前 `7`）。升级安装以它为准。
+- **`versionName`**：语义化版本 `MAJOR.MINOR.PATCH`；公开发布前处于 `0.x.y`（当前 `0.6.0`）。
+- **`versionCode`**：单调递增整数，**每出一个签名发布包 +1，永不复用、不回退**（当前 `8`）。升级安装以它为准。
 
 ### 4.6 发布检查清单
 
