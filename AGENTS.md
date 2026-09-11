@@ -91,7 +91,7 @@ Implementation constraints (each line below was a real bug in the RN predecessor
 - Auto-next off: after `speak2` clear the scheduler but keep the session alive; re-enabling resumes from the current word at the `interval` phase.
 - `speak()` plays the active source's own ready cached clip; on a cold-start cache miss it waits a bounded time (≈4 s, joining the source's single-flight download) so one dictation keeps a single voice, then falls back to the system voice — playback never blocks unboundedly; prefetch the current word, the next word and the current line's meaning pass (English gloss; 组词 phrase under EDGE/CUSTOM) in the background.
 - End of list → completion state + chime; system back during dictation asks for confirmation, never exits silently.
-UI: countdown ring (last-second tick; `clearAndSetSemantics` announcing remaining seconds), current word **hidden by default** — tap to reveal, the core interaction — POS/meaning hints, 标记错词 button (buzzes a warning haptic, `Haptics.notifyWarning`), prev/pause/next/stop, progress `n / total`.
+UI: countdown ring (last-second tick; `clearAndSetSemantics` announcing remaining seconds), current word **hidden by default** — tap to reveal, the core interaction — POS/meaning hints, 标记错词 button (buzzes a warning haptic, `Haptics.notifyWarning`), prev/pause/next/stop, progress `n / total`. The whole session holds `View.keepScreenOn` (set while `DictationScreen` is composed, cleared on exit) — active, paused or finish card, a multi-minute run never hits the screen timeout or the lock screen.
 
 ### TTS priority chain
 

@@ -343,8 +343,7 @@
   建议：**中高**。若两者只做一个，我倾向先做它而不是拍照批改。
 - **提示层可配置**（拼音 / 释义 / 词性 / 全隐藏）— 现状提示层是固定组合。
   建议：**中**。与"看拼音写词""反向默写"共用一个提示层开关。
-- **听写页屏幕常亮** — 听写中看屏幕，熄屏会打断节奏。
-  建议：**中**（`FLAG_KEEP_SCREEN_ON` 级别的小改动，收益立竿见影）。
+- ✅ **听写页屏幕常亮** — 听写中看屏幕，熄屏会打断节奏。**早已实现**（`b198fff`，v0.1 起）：`ui/DictationScreen.kt` 在组合期间设 `View.keepScreenOn`、`onDispose` 清除，听写中 / 暂停 / 结束页整场不熄屏，退出听写页立刻恢复系统熄屏（`View.keepScreenOn` 落到窗口 `fl=KEEP_SCREEN_ON`，等价于 `FLAG_KEEP_SCREEN_ON`）。此前本条一直留在候选池、且记录它的 PROGRESS/PHASES 日志在 `c0688d4` 公开化时删除，才显得"被改没了"——代码从未移除。验证（2026-09-11，模拟器 `pixel_9a_api37`，`screen_off_timeout=15000` + `svc power stayon false`）：听写窗口 `mAttrs` 带 `fl=KEEP_SCREEN_ON`，活动中 45 s、暂停 30 s、结束页仍 `mWakefulness=Awake`；回首页后窗口无该 flag，25 s 内 `Asleep`。
 - **成绩单分享图** — 把结束页成绩卡渲染成图片分享（家长群打卡）。
   建议：**中**，与"可打印练习纸"共用 Compose → Bitmap/PDF 渲染层。
 
