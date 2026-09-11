@@ -182,6 +182,9 @@ fun HomeScreen(
     // clear the bus, confirm. Runs on every re-entry, so a request staged
     // while this screen was off-stack is consumed exactly once on return.
     val app = context.applicationContext as HearWriteApplication
+    // A 多选词库 selection is composing work for 抽词听写; landing Home ends
+    // it, so a stale ticked selection can never greet a later 词库 visit.
+    LaunchedEffect(Unit) { app.librarySelection.setActive(false) }
     LaunchedEffect(Unit) {
         app.pendingDraftImport.collect { lines ->
             if (lines != null) {

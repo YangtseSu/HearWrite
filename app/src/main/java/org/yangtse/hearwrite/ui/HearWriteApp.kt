@@ -19,6 +19,7 @@ object Routes {
     const val STATS = "stats"
     const val LIBRARY_LIST = "library_list/{category}"
     const val LIBRARY_PREVIEW = "library_preview/{category}/{label}"
+    const val LIBRARY_DRAW = "library_draw"
 
     /** Route to one category's list screen; [category] is URL-encoded (Chinese names). */
     fun libraryList(category: String) = "library_list/${Uri.encode(category)}"
@@ -93,6 +94,9 @@ fun HearWriteApp() {
                 onOpenList = { category, label ->
                     navController.navigate(Routes.libraryPreview(category, label))
                 },
+                onOpenDraw = {
+                    navController.navigate(Routes.LIBRARY_DRAW) { launchSingleTop = true }
+                },
                 onBack = { navController.popBackStack() },
             )
         }
@@ -101,6 +105,20 @@ fun HearWriteApp() {
             LibraryListsScreen(
                 onOpenList = { label ->
                     navController.navigate(Routes.libraryPreview(category, label))
+                },
+                onOpenDraw = {
+                    navController.navigate(Routes.LIBRARY_DRAW) { launchSingleTop = true }
+                },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.LIBRARY_DRAW) {
+            LibraryDrawScreen(
+                onStartDictation = { lines, sourceLabel ->
+                    // The drawn session is a normal run: staged lines + the
+                    // multi-list provenance for its 错词本 marks (Roadmap #9).
+                    app.librarySelection.setActive(false)
+                    startSession(lines, sourceLabel)
                 },
                 onBack = { navController.popBackStack() },
             )

@@ -1,6 +1,7 @@
 package org.yangtse.hearwrite.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,8 +19,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -29,14 +32,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.data.LibraryCategory
 
 /**
@@ -50,12 +58,20 @@ import org.yangtse.hearwrite.data.LibraryCategory
 fun LibraryScreen(
     onOpenCategory: (String) -> Unit,
     onOpenList: (category: String, label: String) -> Unit,
+    onOpenDraw: () -> Unit,
     onBack: () -> Unit,
     viewModel: LibraryViewModel = viewModel(),
 ) {
     val categories by viewModel.categories.collectAsState()
     val searchState by viewModel.searchState.collectAsState()
     val queryText by viewModel.queryText.collectAsState()
+    val selection = (LocalContext.current.applicationContext as HearWriteApplication).librarySelection
+    val selecting by selection.active.collectAsState()
+    val selectedIds by selection.selectedIds.collectAsState()
+
+    // Back in selection mode leaves the mode, not the 词库 (a stale selection
+    // can never survive a back navigation).
+    BackHandler(enabled = selecting) { selection.setActive(false) }
 
     Scaffold(
         topBar = {
@@ -66,7 +82,25 @@ fun LibraryScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
+                actions = {
+                    if (selecting) {
+                        TextButton(onClick = { selection.setActive(false) }) { Text("完成") }
+                    } else {
+                        IconButton(onClick = { selection.setActive(true) }) {
+                            Icon(Icons.Filled.Checklist, contentDescription = "多选词表")
+                        }
+                    }
+                },
             )
+        },
+        bottomBar = {
+            if (selecting) {
+                LibrarySelectionBar(
+                    selectedCount = selectedIds.size,
+                    onStartDraw = onOpenDraw,
+                    onExit = { selection.setActive(false) },
+                )
+            }
         },
     ) { innerPadding ->
         Column(
@@ -93,13 +127,26 @@ fun LibraryScreen(
             )
             val state = searchState
             when {
-                state is LibrarySearchState.Idle -> CategoryList(
-                    categories = categories,
-                    onOpenCategory = onOpenCategory,
-                )
+                state is LibrarySearchState.Idle -> Column {
+                    if (selecting) {
+                        Text(
+                            "多选模式：进入分类勾选词表（可跨分类）",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        )
+                    }
+                    CategoryList(
+                        categories = categories,
+                        onOpenCategory = onOpenCategory,
+                    )
+                }
                 state is LibrarySearchState.Loading -> CenterProgress()
                 state is LibrarySearchState.Done -> SearchResults(
                     state = state,
+                    selecting = selecting,
+                    selectedIds = selectedIds,
+                    onToggle = selection::toggle,
                     onOpenList = onOpenList,
                 )
             }
@@ -163,6 +210,9 @@ private fun CategoryCard(category: LibraryCategory, onClick: () -> Unit) {
 @Composable
 private fun SearchResults(
     state: LibrarySearchState.Done,
+    selecting: Boolean,
+    selectedIds: Set<String>,
+    onToggle: (String) -> Unit,
     onOpenList: (category: String, label: String) -> Unit,
 ) {
     val result = state.result
@@ -184,6 +234,9 @@ private fun SearchResults(
                     category = list.category,
                     label = list.label,
                     subtitle = "词表名匹配",
+                    selecting = selecting,
+                    selected = list.id in selectedIds,
+                    onToggle = { onToggle(list.id) },
                     onClick = { onOpenList(list.category, list.label) },
                 )
                 HorizontalDivider()
@@ -196,6 +249,9 @@ private fun SearchResults(
                     category = hit.list.category,
                     label = hit.list.label,
                     subtitle = hit.words.joinToString("、"),
+                    selecting = selecting,
+                    selected = hit.list.id in selectedIds,
+                    onToggle = { onToggle(hit.list.id) },
                     onClick = { onOpenList(hit.list.category, hit.list.label) },
                 )
                 HorizontalDivider()
@@ -219,13 +275,28 @@ private fun SearchListRow(
     category: String,
     label: String,
     subtitle: String,
+    selecting: Boolean,
+    selected: Boolean,
+    onToggle: () -> Unit,
     onClick: () -> Unit,
 ) {
     ListRow(
         title = label,
         subtitle = "$category · $subtitle",
         onClick = onClick,
-        trailing = { RowChevron() },
+        trailing = {
+            if (selecting) {
+                Checkbox(
+                    checked = selected,
+                    onCheckedChange = { onToggle() },
+                    modifier = Modifier.semantics {
+                        contentDescription = "选择词表 $label"
+                    },
+                )
+            } else {
+                RowChevron()
+            }
+        },
     )
 }
 

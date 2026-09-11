@@ -3,6 +3,7 @@ package org.yangtse.hearwrite.data
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.yangtse.hearwrite.domain.multiSourceLabel
 
 /**
  * Locks the 错词本 → original-line resolution (Roadmap #7): 复习错词 / 听写错词
@@ -110,5 +111,29 @@ class WrongWordLineResolverTest {
             listOf("you're = you are | v. | 你是"),
             repo.linesFor(listOf(mark("you're", "h1"))),
         )
+    }
+
+    @Test
+    fun `a multi-list source searches every member list`() = runTest {
+        // 抽词听写 (Roadmap #9): marks carry the pool's member lists, so a word
+        // drawn from the second list still resolves its columns.
+        val source = multiSourceLabel(
+            listOf("default_中考1600_核心词汇", "default_人教版小学语文_识字表"),
+        )
+        val lines = resolver().linesFor(
+            listOf(
+                mark("apple", source),
+                mark("月", source),
+            ),
+        )
+        assertEquals(listOf("apple | n. | 苹果", "月 | yuè | 月亮"), lines)
+    }
+
+    @Test
+    fun `a multi-list source whose members are gone degrades to bare words`() = runTest {
+        val lines = resolver(failBuiltin = true).linesFor(
+            listOf(mark("apple", multiSourceLabel(listOf("default_中考1600_核心词汇")))),
+        )
+        assertEquals(listOf("apple"), lines)
     }
 }

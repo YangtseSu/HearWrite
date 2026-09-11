@@ -15,9 +15,10 @@ class DictationSessionStore {
 
     /**
      * Provenance of the staged lines for the 错词本 source label (Roadmap #1):
-     * a built-in list id (`default_<category>_<label>`) or the history row id
-     * the list was recorded under; null for bare-word sessions (听写错词 over
-     * the book, manual headwords) whose wrong marks keep no source.
+     * a built-in list id (`default_<category>_<label>`), the history row id
+     * the list was recorded under, or the `multi:` label of a 抽词听写 pool
+     * (Roadmap #9); null for bare-word sessions (听写错词 over the book,
+     * manual headwords) whose wrong marks keep no source.
      */
     @Volatile
     var sourceLabel: String? = null

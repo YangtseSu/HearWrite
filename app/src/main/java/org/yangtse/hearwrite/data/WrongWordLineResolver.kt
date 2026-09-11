@@ -1,21 +1,24 @@
 package org.yangtse.hearwrite.data
 
+import org.yangtse.hearwrite.domain.BUILTIN_LIST_ID_PREFIX
+import org.yangtse.hearwrite.domain.MULTI_SOURCE_PREFIX
 import org.yangtse.hearwrite.domain.findLineByHeadword
+import org.yangtse.hearwrite.domain.multiSourceIds
+import org.yangtse.hearwrite.domain.parseBuiltinListId
 import org.yangtse.hearwrite.domain.parseWords
-
-/** Id prefix of a built-in library list (`default_<category>_<label>`). */
-private const val BUILTIN_PREFIX = "default_"
 
 /**
  * Restore the original word-list lines behind 错词本 marks (Roadmap #7).
  *
  * A mark carries the id of the list it was dictated from — a built-in list id
- * (`default_<category>_<label>`, shipped as an asset) or a history row id
- * (the user's own pasted text); null means manual input. Resolving a mark back
- * to its stored line brings the 词性/释义 or 拼音/组词 columns back for
- * 复习错词 / 听写错词 instead of dictating a bare headword; a mark whose source
- * no longer resolves (deleted history row, renamed list) or never existed
- * stays a bare headword — the book outlives its sources.
+ * (`default_<category>_<label>`, shipped as an asset), a history row id (the
+ * user's own pasted text), or a `multi:` label naming the several built-in
+ * lists a 抽词听写 pool was assembled from (Roadmap #9); null means manual
+ * input. Resolving a mark back to its stored line brings the 词性/释义 or
+ * 拼音/组词 columns back for 复习错词 / 听写错词 instead of dictating a bare
+ * headword; a mark whose source no longer resolves (deleted history row,
+ * renamed list) or never existed stays a bare headword — the book outlives
+ * its sources.
  *
  * The two loaders are the seam: the application wires them to the asset
  * library and Room, JVM tests pass plain lambdas — no Android dependency in
@@ -53,10 +56,12 @@ class WrongWordLineResolver(
         if (sourceLabel == null) return emptyList()
         cache[sourceLabel]?.let { return it }
         val lines = try {
-            if (sourceLabel.startsWith(BUILTIN_PREFIX)) {
-                builtinLines(sourceLabel)
-            } else {
-                historyLines(sourceLabel)
+            when {
+                // A 抽词听写 pool: search every member list for the word.
+                sourceLabel.startsWith(MULTI_SOURCE_PREFIX) ->
+                    multiSourceIds(sourceLabel).flatMap { builtinLines(it) }
+                sourceLabel.startsWith(BUILTIN_LIST_ID_PREFIX) -> builtinLines(sourceLabel)
+                else -> historyLines(sourceLabel)
             }
         } catch (e: Exception) {
             // A source that no longer loads (pruned history row, list gone,
@@ -69,10 +74,8 @@ class WrongWordLineResolver(
     }
 
     private suspend fun builtinLines(id: String): List<String> {
-        // `default_<category>_<label>` — labels never contain underscores.
-        val parts = id.removePrefix(BUILTIN_PREFIX).split("_", limit = 2)
-        if (parts.size != 2) return emptyList()
-        return builtinListLines(parts[0], parts[1])
+        val (category, label) = parseBuiltinListId(id) ?: return emptyList()
+        return builtinListLines(category, label)
     }
 
     private suspend fun historyLines(id: String): List<String> =

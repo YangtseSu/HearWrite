@@ -222,4 +222,5 @@ fun compareLabels(a: String, b: String): Int {
  * key persisted by favorites/wrong-words history (AGENTS.md "Persistence").
  * Labels are stable — renaming a data file orphans stored ids.
  */
-fun builtinListId(category: String, label: String): String = "default_${category}_$label"
+fun builtinListId(category: String, label: String): String =
+    "$BUILTIN_LIST_ID_PREFIX${category}_$label"

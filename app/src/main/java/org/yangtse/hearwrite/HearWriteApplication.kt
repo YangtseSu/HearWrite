@@ -18,6 +18,7 @@ import org.yangtse.hearwrite.data.HearWriteDatabase
 import org.yangtse.hearwrite.data.HistoryRepository
 import org.yangtse.hearwrite.data.KeystoreCipher
 import org.yangtse.hearwrite.data.LibraryList
+import org.yangtse.hearwrite.data.LibrarySelectionStore
 import org.yangtse.hearwrite.data.OcrService
 import org.yangtse.hearwrite.data.OpenAiCompatibleTts
 import org.yangtse.hearwrite.data.SettingsRepository
@@ -123,6 +124,9 @@ class HearWriteApplication : Application() {
 
     /** Word-list handoff for starting a dictation session. */
     val dictationSession: DictationSessionStore by lazy { DictationSessionStore() }
+
+    /** Cross-screen 多选词库 selection for 抽词听写 (Roadmap #9). */
+    val librarySelection: LibrarySelectionStore by lazy { LibrarySelectionStore() }
 
     // ---- Room persistence (wrong words / history / favorites) -------------
 
