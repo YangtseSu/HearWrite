@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Hearing
@@ -245,6 +246,34 @@ private fun DictationContent(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    // ---- 拍照批改 (Roadmap #11) --------------------------------------------
+    val gradePane by viewModel.gradePane.collectAsStateWithLifecycle()
+    val gradeResult by viewModel.gradeResult.collectAsStateWithLifecycle()
+    val gradeSelected by viewModel.gradeSelected.collectAsStateWithLifecycle()
+    val gradeBusy by viewModel.gradeBusy.collectAsStateWithLifecycle()
+    val gradePhase by viewModel.gradePhase.collectAsStateWithLifecycle()
+    val gradeError by viewModel.gradeError.collectAsStateWithLifecycle()
+    val gradeRetryable by viewModel.gradeRetryable.collectAsStateWithLifecycle()
+    val gradeToast by viewModel.gradeToast.collectAsStateWithLifecycle()
+    val cropBitmap by viewModel.cropBitmap.collectAsStateWithLifecycle()
+    val cropLoading by viewModel.cropLoading.collectAsStateWithLifecycle()
+    val gradePicker = rememberOcrImagePicker(
+        onPicked = { uri -> viewModel.startCrop(uri) },
+        onError = { message -> toast(context, message) },
+    )
+    // The crop overlay owns system back while it is up (back leaves the region
+    // selection, not the dictation): this handler is registered after the
+    // screen's requestStop one, so it wins for as long as it is enabled.
+    BackHandler(enabled = cropBitmap != null || cropLoading) { viewModel.cancelCrop() }
+    // One-shot confirmation of a 拍照批改 write (记入错词本 N 个词).
+    LaunchedEffect(gradeToast) {
+        gradeToast?.let { message ->
+            toast(context, message)
+            viewModel.clearGradeToast()
+        }
+    }
+
     Column(modifier = modifier) {
         // Position counter: the word being dictated (index + 1) while
         // active; at completion the engine index parks on the last word, so
@@ -287,15 +316,42 @@ private fun DictationContent(
             contentAlignment = Alignment.Center,
         ) {
             if (ui.finished) {
-                FinishCard(
-                    ui = ui,
-                    onReplay = viewModel::replayRun,
-                    onReviewWrong = viewModel::reviewWrongWords,
-                    onExportWrong = viewModel::exportWrongWords,
-                    onClearWrong = viewModel::clearWrongWords,
-                    onRemoveWrong = viewModel::removeWrongWord,
-                    onClose = onClose,
-                )
+                if (gradePane) {
+                    DictationGradePane(
+                        result = gradeResult,
+                        selected = gradeSelected,
+                        busy = gradeBusy,
+                        phase = gradePhase,
+                        error = gradeError,
+                        pickerBusy = gradePicker.busy,
+                        retryable = gradeRetryable,
+                        onCamera = gradePicker.launchCamera,
+                        onGallery = gradePicker.launchGallery,
+                        onRetry = viewModel::retryGrade,
+                        onToggle = viewModel::toggleGradeSelected,
+                        onConfirm = viewModel::confirmGrade,
+                        onBack = viewModel::closeGradePane,
+                    )
+                    // 选定识别区域 step: the same crop overlay as 拍照识词.
+                    if (cropBitmap != null || cropLoading) {
+                        OcrCropOverlay(
+                            bitmap = cropBitmap,
+                            onConfirm = { rect -> viewModel.confirmCrop(rect) },
+                            onDismiss = { viewModel.cancelCrop() },
+                        )
+                    }
+                } else {
+                    FinishCard(
+                        ui = ui,
+                        onReplay = viewModel::replayRun,
+                        onReviewWrong = viewModel::reviewWrongWords,
+                        onExportWrong = viewModel::exportWrongWords,
+                        onClearWrong = viewModel::clearWrongWords,
+                        onRemoveWrong = viewModel::removeWrongWord,
+                        onGrade = viewModel::openGradePane,
+                        onClose = onClose,
+                    )
+                }
             } else {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     WatchDial(
@@ -357,8 +413,9 @@ private fun DictationContent(
  * Score card of a finished run: 词数 / 正确数 / 用时, then the 错词本 actions —
  * 再听一遍 replays this run's words in its own order, 复习错词 re-runs a
  * dictation over exactly the wrong set (each mark restored to its original
- * line), 导出错词 copies the words to the clipboard (pasteable back into the
- * Home input), chips remove single words and 清空错词本 empties the book.
+ * line), 拍照批改 grades the student's photographed answer sheet against this
+ * run's words, 导出错词 copies the words to the clipboard (pasteable back into
+ * the Home input), chips remove single words and 清空错词本 empties the book.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -369,6 +426,7 @@ private fun FinishCard(
     onExportWrong: () -> Int,
     onClearWrong: () -> Unit,
     onRemoveWrong: (String) -> Unit,
+    onGrade: () -> Unit,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -425,6 +483,18 @@ private fun FinishCard(
                     Text("复习错词")
                 }
             }
+        }
+
+        // 拍照批改: photograph the student's answer sheet and grade it against
+        // this run's words (the marks become 错词本 entries after confirmation).
+        OutlinedButton(
+            onClick = onGrade,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+        ) {
+            Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+            Text("拍照批改", modifier = Modifier.padding(start = 8.dp))
         }
 
         if (wrong.isNotEmpty()) {

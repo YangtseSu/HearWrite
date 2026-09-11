@@ -4,9 +4,13 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Bitmap
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -21,8 +25,14 @@ import kotlinx.coroutines.sync.Mutex
 import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.data.DictationSessionStore
 import org.yangtse.hearwrite.data.Haptics
+import org.yangtse.hearwrite.data.NormalizedRect
+import org.yangtse.hearwrite.data.OCR_PROGRESS_COMPRESSING
+import org.yangtse.hearwrite.data.OCR_PROGRESS_RECOGNIZING
+import org.yangtse.hearwrite.data.OcrLang
+import org.yangtse.hearwrite.data.OcrOutcome
 import org.yangtse.hearwrite.domain.CompoundTables
 import org.yangtse.hearwrite.domain.DictationEngine
+import org.yangtse.hearwrite.domain.GradeResult
 import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.PlayState
@@ -31,8 +41,11 @@ import org.yangtse.hearwrite.domain.SessionKind
 import org.yangtse.hearwrite.domain.TtsSource
 import org.yangtse.hearwrite.domain.cjkWordSpeech
 import org.yangtse.hearwrite.domain.findLineByHeadword
+import org.yangtse.hearwrite.domain.gradeAnswers
 import org.yangtse.hearwrite.domain.isCjkEntry
+import org.yangtse.hearwrite.domain.isCjkRun
 import org.yangtse.hearwrite.domain.parseWordLine
+import org.yangtse.hearwrite.domain.parseWords
 import org.yangtse.hearwrite.domain.speakTextFromEntry
 import org.yangtse.hearwrite.domain.speakableMeaning
 
@@ -386,6 +399,9 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         _total.value = runLines.size
         _activeLines.value = runLines
         runSourceLabel = sourceLabel
+        // A new run (再听一遍 / 复习错词) invalidates any 拍照批改 pending from
+        // the previous finish card — including its crop overlay.
+        closeGradePane()
         engine.start(runLines)
     }
 
@@ -512,6 +528,268 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         beginRun(lines, runSourceLabel)
     }
 
+    // ----------------------------------------------------- 拍照批改 (grading)
+
+    /**
+     * Re-entry gate for the 拍照批改 vision call: claimed synchronously before
+     * the first suspension (AGENTS.md) so a fast double-tap cannot start two
+     * recognitions over one picture.
+     */
+    private val gradeGate = Mutex()
+
+    private var gradeCropJob: Job? = null
+
+    /** Crop session id: bumped on start/close so a stale decode dies. */
+    private var gradeCropSession = 0
+
+    /** dataUrl + lang of the last compressed sheet — the 重试 target. */
+    private var lastGradeRun: Pair<String, OcrLang>? = null
+
+    private val _gradePane = MutableStateFlow(false)
+    /** True while the 拍照批改 pane replaces the score card. */
+    val gradePane: StateFlow<Boolean> = _gradePane.asStateFlow()
+
+    private val _cropBitmap = MutableStateFlow<Bitmap?>(null)
+    /** Answer-sheet source shown in the crop overlay (decode in flight = null). */
+    val cropBitmap: StateFlow<Bitmap?> = _cropBitmap.asStateFlow()
+
+    private val _cropLoading = MutableStateFlow(false)
+    /** True while the picked answer-sheet photo is being decoded. */
+    val cropLoading: StateFlow<Boolean> = _cropLoading.asStateFlow()
+
+    private val _gradeBusy = MutableStateFlow(false)
+    /** True while the vision call recognizes the answer sheet. */
+    val gradeBusy: StateFlow<Boolean> = _gradeBusy.asStateFlow()
+
+    private val _gradePhase = MutableStateFlow("")
+    /** In-flight progress copy ("处理图片中…" / "识别中…") for the 批改 pane. */
+    val gradePhase: StateFlow<String> = _gradePhase.asStateFlow()
+
+    private val _gradeError = MutableStateFlow<String?>(null)
+    /** Terminal 批改 failure (Chinese); cleared by the next attempt or [closeGradePane]. */
+    val gradeError: StateFlow<String?> = _gradeError.asStateFlow()
+
+    private val _gradeResult = MutableStateFlow<GradeResult?>(null)
+    /** The machine's judgement of the photographed sheet (null = nothing read yet). */
+    val gradeResult: StateFlow<GradeResult?> = _gradeResult.asStateFlow()
+
+    private val _gradeSelected = MutableStateFlow<Set<Int>>(emptySet())
+    /** Indices into [GradeResult.items] ticked for the 错词本 — the confirmed subset. */
+    val gradeSelected: StateFlow<Set<Int>> = _gradeSelected.asStateFlow()
+
+    private val _gradeRetryable = MutableStateFlow(false)
+    /** True when the last sheet reached the network — 重试 can re-run it. */
+    val gradeRetryable: StateFlow<Boolean> = _gradeRetryable.asStateFlow()
+
+    private val _gradeToast = MutableStateFlow<String?>(null)
+    /** One-shot confirmation text, consumed by the screen ([clearGradeToast]). */
+    val gradeToast: StateFlow<String?> = _gradeToast.asStateFlow()
+
+    /**
+     * Open the 拍照批改 pane. The recognition language follows this run's own
+     * list ([isCjkRun]) — a 汉字/词语 run needs the Chinese prompt — so there
+     * is no language picker here.
+     */
+    fun openGradePane() {
+        _gradePane.value = true
+    }
+
+    /**
+     * Leave the pane, dropping the picture and the reading with it: a stale
+     * judgement must never sit under a later score card, so the next entry
+     * always starts from a fresh photo.
+     */
+    fun closeGradePane() {
+        _gradePane.value = false
+        _gradeResult.value = null
+        _gradeSelected.value = emptySet()
+        _gradeError.value = null
+        _gradePhase.value = ""
+        _gradeRetryable.value = false
+        lastGradeRun = null
+        cancelCrop()
+    }
+
+    /** Drop the crop overlay without touching the reading behind it. */
+    fun cancelCrop() {
+        gradeCropSession++
+        gradeCropJob?.cancel()
+        gradeCropJob = null
+        _cropLoading.value = false
+        _cropBitmap.value?.recycle()
+        _cropBitmap.value = null
+    }
+
+    fun clearGradeToast() {
+        _gradeToast.value = null
+    }
+
+    /**
+     * Decode a picked/captured answer sheet for the 选定识别区域 step — the
+     * same crop overlay as 拍照识词, because a phone photo of a notebook needs
+     * its region picked or the vision model reads the desk around it.
+     */
+    fun startCrop(uri: Uri) {
+        cancelCrop()
+        val session = ++gradeCropSession
+        _gradeError.value = null
+        _cropLoading.value = true
+        gradeCropJob = viewModelScope.launch {
+            val decoded = app.ocrService.decodeCropSource(uri)
+            if (session != gradeCropSession) {
+                decoded?.recycle()
+                return@launch
+            }
+            _cropLoading.value = false
+            if (decoded == null) {
+                _gradeError.value = "读取图片失败，请重新拍摄或选择"
+            } else {
+                _cropBitmap.value = decoded
+            }
+        }
+    }
+
+    /**
+     * Recognize the cropped answer sheet and judge it against this run's lines
+     * ([gradeAnswers]). The verdicts are a proposal: the pane reviews them and
+     * only [confirmGrade] writes to the 错词本.
+     */
+    fun confirmCrop(rect: NormalizedRect) {
+        val source = _cropBitmap.value ?: return
+        _cropBitmap.value = null
+        viewModelScope.launch {
+            if (!gradeGate.tryLock()) {
+                source.recycle()
+                return@launch
+            }
+            var owned: Bitmap? = source
+            try {
+                _gradeBusy.value = true
+                _gradeError.value = null
+                _gradeRetryable.value = false
+                if (app.ocrService.config() == null) {
+                    _gradeError.value = "请先在设置中配置 OCR 服务（需自备 API Key）"
+                    return@launch
+                }
+                val lines = _activeLines.value
+                if (lines.isEmpty()) {
+                    _gradeError.value = "没有可批改的词表"
+                    return@launch
+                }
+                _gradePhase.value = OCR_PROGRESS_COMPRESSING
+                val dataUrl = app.ocrService.cropToDataUrl(source, rect)
+                if (dataUrl == null) {
+                    _gradeError.value = "读取图片失败，请重新拍摄或选择"
+                    return@launch
+                }
+                // The crop consumed the source's pixels; the encode made its
+                // own copy, so the decode can go now (owned tracks the recycle).
+                owned = null
+                source.recycle()
+                val lang = if (isCjkRun(lines)) OcrLang.CHINESE else OcrLang.ENGLISH
+                lastGradeRun = dataUrl to lang
+                _gradeRetryable.value = true
+                recognizeSheet(dataUrl, lang)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A recognition failure must never crash the finished screen.
+                Log.w(TAG, "answer-sheet OCR failed", e)
+                _gradeError.value = "识别失败，请重试"
+            } finally {
+                owned?.recycle()
+                _gradeBusy.value = false
+                _gradePhase.value = ""
+                gradeGate.unlock()
+            }
+        }
+    }
+
+    /** Re-run the last recognition against the same picture (after an error). */
+    fun retryGrade() {
+        val last = lastGradeRun ?: return
+        viewModelScope.launch {
+            if (!gradeGate.tryLock()) return@launch
+            try {
+                _gradeBusy.value = true
+                _gradeError.value = null
+                _gradePhase.value = OCR_PROGRESS_RECOGNIZING
+                recognizeSheet(last.first, last.second)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "answer-sheet OCR retry failed", e)
+                _gradeError.value = "识别失败，请重试"
+            } finally {
+                _gradeBusy.value = false
+                _gradePhase.value = ""
+                gradeGate.unlock()
+            }
+        }
+    }
+
+    /** One vision call over an already-compressed sheet, then the judgement. */
+    private suspend fun recognizeSheet(dataUrl: String, lang: OcrLang) {
+        when (val outcome = app.ocrService.recognizeAnswers(dataUrl, lang)) {
+            is OcrOutcome.Success -> {
+                val result = gradeAnswers(_activeLines.value, parseWords(outcome.linesText))
+                _gradeResult.value = result
+                _gradeSelected.value = result.defaultSelection()
+            }
+
+            is OcrOutcome.Error -> _gradeError.value = outcome.message
+        }
+    }
+
+    /** Tick/untick one judged answer (its index in [GradeResult.items]). */
+    fun toggleGradeSelected(index: Int) {
+        val result = _gradeResult.value ?: return
+        if (index !in result.items.indices) return
+        _gradeSelected.value = if (index in _gradeSelected.value) {
+            _gradeSelected.value - index
+        } else {
+            _gradeSelected.value + index
+        }
+    }
+
+    /**
+     * Write the confirmed answers into the 错词本 — the only path from a photo
+     * to the book, and the reason the machine's verdicts are a proposal. The
+     * score card updates immediately (the confirmed words are misses of this
+     * run, exactly as a manual 标记错词 would be); the write bumps each head
+     * once with this run's provenance. A 复习错词 round writes nothing, since
+     * it re-checks words the book already holds.
+     */
+    fun confirmGrade() {
+        val result = _gradeResult.value ?: return
+        val selected = _gradeSelected.value
+        val words = result.items
+            .filterIndexed { index, _ -> index in selected }
+            .mapNotNull { it.expected }
+            .distinct()
+        if (words.isEmpty()) {
+            _gradeToast.value = "没有勾选任何错词"
+            return
+        }
+        val fresh = words.filter { it !in runWrongWords }
+        runWrongWords.addAll(words)
+        if (fresh.isNotEmpty()) {
+            _runWrongCount.value = _runWrongCount.value + fresh.size
+            _wrongWords.value = _wrongWords.value + fresh.filter { it !in _wrongWords.value }
+            if (runKind == SessionKind.DICTATION) {
+                viewModelScope.launch {
+                    try {
+                        fresh.forEach { wrongWordsRepository.add(it, runSourceLabel) }
+                    } catch (e: Exception) {
+                        // Persistence must never break the finish card.
+                    }
+                }
+            }
+        }
+        _gradeToast.value = "已记入错词本 ${words.size} 个词"
+        closeGradePane()
+    }
+
     /**
      * 复习错词: re-run a dictation round over exactly the wrong set, each mark
      * restored to its original word line — this run's own lines first, else
@@ -560,6 +838,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     )
 
     override fun onCleared() {
+        cancelCrop() // reclaim the answer-sheet decode, if any
         engine.dispose() // leaving the screen stops playback
     }
 

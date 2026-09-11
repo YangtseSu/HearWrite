@@ -1,9 +1,6 @@
 package org.yangtse.hearwrite.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -62,13 +59,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.yangtse.hearwrite.data.OcrLang
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.yangtse.hearwrite.HearWriteApplication
-import java.io.File
 
 /**
  * Home (alice layout, Material 3 tokens): a brand header with the OCR
@@ -132,36 +127,20 @@ fun HomeScreen(
     // rotation mid-selection (the overlay comes back from the VM's bitmap).
     var showOcrCrop by rememberSaveable { mutableStateOf(false) }
     var ocrLang by rememberSaveable { mutableStateOf(OcrLang.ENGLISH) }
-    // Suppresses a second picker/camera launch while one is open (the VM's
-    // Mutex backstop guards the network call itself — AGENTS.md re-entry).
-    var pickerOpen by remember { mutableStateOf(false) }
 
-    // One fixed cache file, overwritten per shot; FileProvider hands the
-    // camera app a writable content Uri (no CAMERA permission needed).
-    val cameraFile = remember { File(context.cacheDir, "ocr/capture.jpg") }
-    val cameraUri = remember {
-        FileProvider.getUriForFile(context, context.packageName + ".fileprovider", cameraFile)
-    }
-    val galleryLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        pickerOpen = false
-        // Every pick goes through the 选定识别区域 crop step first.
-        if (uri != null) {
+    // Camera/album launchers shared with 拍照批改; every pick goes through the
+    // 选定识别区域 crop step first. The VM's Mutex backstops the network call
+    // itself (AGENTS.md re-entry) — the picker only suppresses a second
+    // launch while one is open.
+    val ocrPicker = rememberOcrImagePicker(
+        onPicked = { uri ->
             showOcrCrop = true
             viewModel.startOcrCrop(uri)
-        }
-    }
-    val cameraLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.TakePicture(),
-    ) { ok ->
-        pickerOpen = false
-        // Every capture goes through the 选定识别区域 crop step first.
-        if (ok) {
-            showOcrCrop = true
-            viewModel.startOcrCrop(cameraUri)
-        }
-    }
+        },
+        onError = { message ->
+            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+        },
+    )
 
     // One-shot OCR success toast (已识别 N 个…), consumed once shown.
     LaunchedEffect(ocrOutcome) {
@@ -400,32 +379,14 @@ fun HomeScreen(
             onLangChange = { ocrLang = it },
             configured = ocrConfigured,
             modelName = ocrModel,
-            busy = ocrBusy || pickerOpen,
+            busy = ocrBusy || ocrPicker.busy,
             onCamera = {
                 showOcrSheet = false
-                pickerOpen = true
-                cameraFile.parentFile?.mkdirs()
-                runCatching { cameraLauncher.launch(cameraUri) }
-                    .onFailure {
-                        pickerOpen = false
-                        android.widget.Toast.makeText(
-                            context, "无法启动相机", android.widget.Toast.LENGTH_SHORT,
-                        ).show()
-                    }
+                ocrPicker.launchCamera()
             },
             onGallery = {
                 showOcrSheet = false
-                pickerOpen = true
-                runCatching {
-                    galleryLauncher.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                    )
-                }.onFailure {
-                    pickerOpen = false
-                    android.widget.Toast.makeText(
-                        context, "无法打开相册", android.widget.Toast.LENGTH_SHORT,
-                    ).show()
-                }
+                ocrPicker.launchGallery()
             },
             onOpenSettings = {
                 showOcrSheet = false

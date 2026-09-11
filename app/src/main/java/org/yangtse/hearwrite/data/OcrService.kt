@@ -72,8 +72,8 @@ const val OCR_DISCLAIMER = "AI 识图可能存在误差，请核对识别结果"
 const val OCR_PROGRESS_COMPRESSING = "处理图片中…"
 const val OCR_PROGRESS_RECOGNIZING = "识别中…"
 
-/** Recognition language for the vision OCR pass (alice `OcrLang`). */
-enum class OcrLang(val prompt: String) {
+/** Recognition language for the vision OCR pass (alice `OcrLang`); [wordListPrompt] is the 拍照识词 word-list prompt, [answerPrompt] the 拍照批改 one. */
+enum class OcrLang(val wordListPrompt: String) {
     ENGLISH(ENGLISH_OCR_PROMPT),
     CHINESE(CHINESE_OCR_PROMPT),
 }
@@ -98,6 +98,39 @@ private val CHINESE_OCR_PROMPT = listOf(
     "不要输出“生字”“词语”等栏目标题、序号、标点符号或任何解释。",
     "不要把多个字词合并到一行。",
 ).joinToString("")
+
+/**
+ * 拍照批改 prompts (Roadmap #11), English / Chinese answer sheet. Unlike the
+ * word-list prompts above, these transcribe the **student's own writing**:
+ * recognition must not "correct" it. Misspellings, 题号 and blank rows stay
+ * exactly as written, because a silently fixed word would be graded correct
+ * and silently lost the mistake. Sentences join with no separator, matching
+ * the word-list prompts.
+ */
+private val ENGLISH_ANSWER_PROMPT = listOf(
+    "这是一张英文听写作答的照片，内容是学生手写的英文答案。",
+    "请逐行识别学生写下的英文单词，每行输出一个，不要合并。",
+    "请如实识别学生的拼写，包含拼写错误，不要自动纠正。",
+    "如果某一行有题号（如 1. 2、），请把题号与答案一起输出，格式：1. apple。",
+    "空白行请跳过，不要输出。",
+    "不要输出学生姓名、日期、页码、批注或任何解释。",
+).joinToString("")
+
+/** Chinese answer-sheet prompt — same rules, 汉字 answers (拼音 annotations dropped). */
+private val CHINESE_ANSWER_PROMPT = listOf(
+    "这是一张语文听写作答的照片，内容是学生手写的汉字答案。",
+    "请逐行识别学生写下的汉字，每行输出一个，不要合并。",
+    "请如实识别学生写的字，包含写错的字，不要自动纠正或补全。",
+    "如果某一行有题号（如 1. 2、），请把题号与答案一起输出，格式：1. 月亮。",
+    "忽略拼音、英文、数字、页码与批注；空白行请跳过，不要输出。",
+    "不要输出学生姓名、日期、页码或任何解释。",
+).joinToString("")
+
+/** The answer-sheet prompt of a recognition language (拍照批改). */
+internal fun answerPrompt(lang: OcrLang): String = when (lang) {
+    OcrLang.ENGLISH -> ENGLISH_ANSWER_PROMPT
+    OcrLang.CHINESE -> CHINESE_ANSWER_PROMPT
+}
 
 private val JSON = Json { ignoreUnknownKeys = true }
 private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
@@ -287,7 +320,39 @@ class OcrService(
      * language-specific extractor ([extractOcrLines]) into word lines.
      * Errors are Chinese messages ready for the UI.
      */
-    suspend fun recognize(dataUrl: String, lang: OcrLang): OcrOutcome {
+    suspend fun recognize(dataUrl: String, lang: OcrLang): OcrOutcome =
+        postVision(
+            dataUrl,
+            lang.wordListPrompt,
+            rawTextToLines = { extractOcrLines(it, lang) },
+            emptyCopy = { unparsed -> ocrEmptyMessage(lang, unparsed) },
+        )
+
+    /**
+     * 拍照批改 (Roadmap #11): transcribe a photographed answer sheet, one
+     * answer per line, exactly as written — misspellings included. Unlike
+     * [recognize], the reply keeps **every** line, 题号 and Latin/汉字 mixed:
+     * the answer carries no column structure, and the grading compares it
+     * against the run's own list.
+     */
+    suspend fun recognizeAnswers(dataUrl: String, lang: OcrLang): OcrOutcome =
+        postVision(dataUrl, answerPrompt(lang), rawTextToLines = ::extractAnswerLines, emptyCopy = { unparsed ->
+            if (unparsed) "未能从识别结果中读出作答，请换一张更清晰的照片再试"
+            else "未识别到作答内容，请换一张更清晰的照片再试"
+        })
+
+    /**
+     * Shared vision call: unconfigured provider → the standard BYOK error,
+     * otherwise POST the image with [prompt] and hand the raw reply to
+     * [rawTextToLines]. [emptyCopy] words the "nothing usable came back"
+     * error for the call site (word-list scan vs 批改).
+     */
+    private suspend fun postVision(
+        dataUrl: String,
+        prompt: String,
+        rawTextToLines: (String) -> List<String>,
+        emptyCopy: (unparsed: Boolean) -> String,
+    ): OcrOutcome {
         val cfg = config()
         if (cfg == null) {
             return OcrOutcome.Error("请先在设置中配置 OCR 服务（需自备 API Key）")
@@ -305,7 +370,7 @@ class OcrService(
                         }
                         addJsonObject {
                             put("type", "text")
-                            put("text", lang.prompt)
+                            put("text", prompt)
                         }
                     }
                 }
@@ -323,11 +388,11 @@ class OcrService(
                     )
                 } else {
                     val rawText = parseReplyContent(result.body)
-                    val lines = extractOcrLines(rawText, lang)
+                    val lines = rawTextToLines(rawText)
                     if (lines.isEmpty()) {
                         // Alice distinguishes "the model said nothing" from
                         // "the model answered but nothing usable survived".
-                        OcrOutcome.Error(ocrEmptyMessage(lang, unparsed = rawText.isNotBlank()))
+                        OcrOutcome.Error(emptyCopy(rawText.isNotBlank()))
                     } else {
                         OcrOutcome.Success(lines.joinToString("\n"))
                     }
@@ -652,6 +717,17 @@ internal fun extractChineseOcrLines(rawText: String): List<String> {
     }
     return words
 }
+
+/**
+ * 拍照批改 reply → one answer per line, **as written**: fences stripped,
+ * newlines normalized, blank lines dropped, 题号 prefixes kept for the
+ * grading pass ([stripAnswerNumber] reads them). Nothing else is filtered —
+ * unlike [extractEnglishOcrLines]/[extractChineseOcrLines], which salvage
+ * headwords from a model that echoes a textbook, the answer sheet is the
+ * student's own writing and every character matters: dropping an unreadable
+ * line or "fixing" a spelling here would silently lose a mistake.
+ */
+internal fun extractAnswerLines(rawText: String): List<String> = normalizeOcrLines(rawText)
 
 /**
  * OCR empty-result messages per recognition language (alice

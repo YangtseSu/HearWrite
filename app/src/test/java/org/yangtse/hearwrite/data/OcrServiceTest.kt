@@ -36,11 +36,44 @@ class OcrServiceTest {
 
     @Test
     fun prompts_areVerbatimUpstream_copy() {
-        assertEquals(expectedEnglishPrompt, OcrLang.ENGLISH.prompt)
-        assertEquals(expectedChinesePrompt, OcrLang.CHINESE.prompt)
+        assertEquals(expectedEnglishPrompt, OcrLang.ENGLISH.wordListPrompt)
+        assertEquals(expectedChinesePrompt, OcrLang.CHINESE.wordListPrompt)
         // Single concatenated string — upstream joins the sentences with "".
         assertTrue(expectedEnglishPrompt.length > 100)
         assertTrue(expectedChinesePrompt.length > 150)
+    }
+
+    /**
+     * The 拍照批改 prompts (Roadmap #11) are ours, not upstream's: they must
+     * ask for the student's **own** writing — a silently corrected spelling
+     * would be graded correct and lose the mistake — and for the 题号 that
+     * makes a skipped word grade as blank instead of shifting every answer.
+     */
+    @Test
+    fun answerPrompts_transcribeAsWritten_withNumbers() {
+        for (prompt in listOf(answerPrompt(OcrLang.ENGLISH), answerPrompt(OcrLang.CHINESE))) {
+            assertTrue(prompt.contains("不要自动纠正"))
+            assertTrue(prompt.contains("每行输出一个"))
+            assertTrue(prompt.contains("题号"))
+            assertTrue(prompt.contains("空白行请跳过"))
+        }
+        assertTrue(answerPrompt(OcrLang.ENGLISH).contains("英文"))
+        assertTrue(answerPrompt(OcrLang.CHINESE).contains("汉字"))
+    }
+
+    @Test
+    fun extractAnswerLines_keepsEverythingButBlanks() {
+        // 题号 and any Latin/汉字 mix survive verbatim — unlike the word-list
+        // extractors, nothing is filtered or "salvaged" out.
+        assertEquals(
+            listOf("1. apple", "2. banan", "3、月", "张三"),
+            extractAnswerLines("1. apple\n\n2. banan\n3、月\n张三\n"),
+        )
+        assertEquals(
+            listOf("1. apple"),
+            extractAnswerLines("```\n1. apple\n```"),
+        )
+        assertEquals(emptyList<String>(), extractAnswerLines("   \n\n"))
     }
 
     @Test
