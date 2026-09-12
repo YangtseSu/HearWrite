@@ -349,9 +349,9 @@
 
 ### 界面（UI / UX Audit，2026-09-12 🤖）
 
-**详见 [`docs/UI-AUDIT.md`](UI-AUDIT.md)**（基线 `4c40ab7`，纯源码静态审查，177 条原始发现 / 去重后约 150 条，P1 18 条）。分四段：**A 缺陷修复**（12 项，无视觉变更，≤20 行/项，建议单独发 patch release）→ **B 一致性收口**（补 `Type.kt` 字阶覆盖 85% 文字、Snackbar 取代 15 处 Toast、`toggleable` 统一、insets 去重、单位合一、TTS/OCR provider 表单抽公共件）→ **C 状态覆盖与内容层** → **D 打磨**（动效、导航、术语）。
+**详见 [`docs/UI-AUDIT.md`](UI-AUDIT.md)**（基线 `4c40ab7`，纯源码静态审查，177 条原始发现 / 去重后约 150 条，P1 18 条）。分四段：**A 缺陷修复**（12 项，≤20 行/项）→ **B 一致性收口**（补 `Type.kt` 字阶覆盖 85% 文字、Snackbar 取代 15 处 Toast、`toggleable` 统一、insets 去重、单位合一、TTS/OCR provider 表单抽公共件）→ **C 状态覆盖与内容层** → **D 打磨**（动效、导航、术语）。
 建议：**高**，A 段可随时插队（便宜且用户可感知）；B1 字阶应排在其他视觉微调之前。
-两条需要决策：① `AGENTS.md:94` 的 "tap to reveal" 与实现（表盘不可点、只能点按钮）二选一；② 5 个从未被引用的语义 token（朱砂/`successContainer`）接上还是删掉。
+**已拍板（2026-09-12）**：① 表盘恢复 tap-to-reveal（改回 `AGENTS.md:94` 描述的行为，按钮保留作可见标注，见 UI-AUDIT §0.1 D-1）；② 5 个零引用语义 token **接上**——朱砂用于汉字提示层、`successContainer` 用于"正确"徽章，`DialCenter(isCjk)` 从死参数转为实际判据（见 §0.1 D-2）。
 
 ### 平台与打磨
 

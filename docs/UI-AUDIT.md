@@ -21,6 +21,19 @@
 
 ---
 
+## 0.1 已拍板（2026-09-12）
+
+审计中两处"不是 bug、需要选样子"的分歧，作者已定：
+
+| # | 分歧 | **决定** | 落实位置 |
+|---|---|---|---|
+| D-1 | `AGENTS.md:94` 规定表盘 tap-to-reveal，实现在 `447d613` 视觉改版时把 `.clickable` 删掉、只留按钮 | **恢复表盘点按**（选项 1）：改回契约描述的行为，`显示词语` 按钮保留为可见标注 | `A2`（§1） |
+| D-2 | 8 个语义 token 里 5 个全仓零引用（朱砂 `cjk*` ×3、`successContainer` ×2），`DialCenter(isCjk=…)` 参数声明后从未读 | **接上**（选项 1）：朱砂接到汉字提示层，`successContainer` 接到"正确"徽章，`isCjk` 从死参数变成实际判据 | `B6`（§2） |
+
+两项都不含功能损失，属于视觉/交互取向；`D-1` 恢复的是一个曾被实现的交互（非新增需求），`D-2` 兑现的是设计系统里已写好、未落地的注释承诺。
+
+---
+
 ## 0. 结论摘要
 
 界面的**视觉语言本身是完整且自洽的**：纸质/墨色双主题、朱砂（CJK）强调色、圆角卡片阶、语义 token（`HearWriteSemantics`）、倒计时表盘的字体度量稳定占位器、`View.keepScreenOn`、`clearAndSetSemantics` + `Polite` liveRegion 的逐秒播报——这些比多数商业 app 做得更细。**35 个 `IconButton` 全部带中文 `contentDescription`**（AGENTS.md 的硬要求，零违规），7 处破坏性操作有确认对话框，裁剪浮层把手势暴露为 7 个 `CustomAccessibilityAction`。
@@ -55,13 +68,28 @@
 游标行只有 8% 主色底 + 3dp 主色竖条 + 主色词头三处**颜色**线索，无 `selected`/`selectable`/`stateDescription`；8% 底色的非文本对比度远低于 3:1。TalkBack 用户无法得知听写从哪个词开始。
 仓库内已有正确范例：`SettingsComponents.kt:155` 的 `selectable(selected, role = Role.RadioButton)`。
 
-### A2 · 表盘不可点（与 AGENTS.md 契约冲突）
+### A2 · 表盘不可点（与 AGENTS.md 契约冲突）——**已拍板：恢复表盘点按**
 `DictationScreen.kt:364-393`、`CountdownRing.kt`（全文）
 
 `AGENTS.md:94`：`current word hidden by default — tap to reveal, the core interaction`。
 实际实现：248dp 环 / 204dp 盘是**死区**，显示词语只能靠盘下方按钮；隐藏态文案还写着 `用下方按钮显示词语`（`DictationScreen.kt:721-724`）。
 对目标场景（学生低头写字、抬眼瞥手机）代价明确：找按钮 → 点 → 再看回去，而不是点任意处。
-**注意这是有意的分歧**（文案被同步改过），所以要在"改回契约"和"改契约"之间二选一，不能两边都留。
+
+**这不是设计取舍，是 `447d613` 视觉改版漏掉的**——git 记录可证：
+
+| 提交 | 内容 |
+|---|---|
+| `d807ff8` | 初版即有 `.clickable { onToggleWord() }`（`DictationScreen.kt:402`），盘内提示 `点按显示词语` |
+| `f7679e5` | 契约写入 `tap to reveal, the core interaction` |
+| `447d613` | 删除 `- .clickable { onToggleWord() }`（提交正文只写"eye button moved out of the ring corner"），并把提示改写成 `用下方按钮显示词语`；契约未同步 |
+
+**决策：恢复表盘点按，保留按钮作为可见标注。** 实施要点：
+
+- `WatchDial` 的 `CountdownRing`（或其外层 `Box`）加 `Modifier.clickable(enabled = ui.isActive) { onToggleWord() }`；`ui.isActive` 门控与现有按钮一致（`DictationScreen.kt:372`）。
+- 语义：点击区域给 `Role.Button` + `contentDescription = if (showWord) "隐藏词语" else "显示词语"`，与按钮文案同源（沿用 `:806` 的 playLabel 单源写法），避免 TalkBack 听到两个不同的动作名。
+- 隐藏态提示文案改回 `点按显示词语`（`DictationScreen.kt:721-724`）；按钮保留 `显示词语`/`隐藏词语`。
+- 圆盘内不得放其他可点元素与之嵌套（当前无），`显示词语` 按钮不吞掉圆盘的点击区域。
+- 验收：`uiautomator dump` 断言圆盘节点带 `clickable="true"` 与上述 `content-desc`；真机走查点圆盘正中与边缘均能切换。
 
 ### A3 · 批改页按返回会退出整场听写
 `DictationScreen.kt:319`（`if (gradePane)`），全文仅两个 `BackHandler`（`:149`、`:268`）
@@ -194,11 +222,23 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 - 两个时长格式化器：`DictationScreen.kt:93-94`（两档，无小时）vs `StatsScreen.kt:69-72`（三档，含小时）。75 分钟的复习轮在成绩卡显示 `75 分 30 秒`、在统计页显示 `1 小时 15 分`。
 - 日期两套：趋势轴 `M/d`（`StatsScreen.kt:59`）vs 记录行 `MM-dd HH:mm`（`:60`），且在无上限的记录里不显示年份。
 
-### B6 · 5 个语义 token 全仓无人读
+### B6 · 5 个语义 token 全仓无人读——**已拍板：接上（选项 1）**
 `theme/Color.kt:96-107`、`theme/Theme.kt:105-137`
+
 `cjkAccent` / `cjkContainer` / `onCjkContainer` / `successContainer` / `onSuccessContainer` —— grep 全仓，**除 `theme/` 外零引用**。KDoc 承诺它们用于"汉字标签、组词提示行"，即设计系统里"汉字身份"的强调色没有任何调用点。
 配套死代码：`DialCenter(isCjk = …)` 的参数 `isCjk`（`DictationScreen.kt:644`）声明后从未被读——而表盘正是拼音提示（`:682`）与组词释义（`:690`）渲染的地方，也就是朱砂色被设计出来要用的那一个界面。
-要么接上（汉字提示行/生字行用朱砂，一眼区分汉字场次与英文场次），要么删参数删 token。
+
+**决策：接上，删掉 `isCjk` 这个死参数——它从"声明未读"变成实际判据。** 实施要点：
+
+| token | 接到哪里 | 具体 |
+|---|---|---|
+| `cjkAccent` | 汉字提示层（表盘内） | `DialCenter` 里 `entry.pos`（拼音）与汉字释义（组词）两行的 `color`；`isCjk` 为真时用 `cjkAccent`，否则维持 `onSurfaceVariant`（英文的 POS/释义**不用**朱砂——`Color.kt` 注释明确"never used for English/POS content"） |
+| `cjkAccent` | 汉字行标记 | 首页/预览的展示列表行，汉字词头旁的标记（当前无标记，加一个 3dp 朱砂竖条或 `汉字` 小徽章的最小形态即可；**只做表盘那一处也可接受**，两处都做需一次性视觉走查） |
+| `cjkContainer` + `onCjkContainer` | 同上的容器态 | 若加 `汉字` 徽章，则用它做底色/文字色（与 `primaryContainer`/`onPrimaryContainer` 同一用法） |
+| `successContainer` + `onSuccessContainer` | 听写页"正确"徽章 | 批改页 `GradeRow` 的 `正确` 标签（当前是裸 `Text` + `success` 前景色，`DictationGradePane.kt:307, 375-379`），或成绩卡的 `正确 N 词` 一行；成对使用，保证前景/底色同源 |
+| `isCjk` | 不再是死参数 | 作为上述表盘配色的判据；若最终表盘不接朱砂，则**删除该参数与 3 个 `cjk*` token**（不得留声明未读） |
+
+约束：亮暗两套都要过对比度——`CjkAccentLight #B23A2A` 在浅色卡上 ≈5.95:1、`CjkAccentDark #E08A7A` 在 `#1A212B` 上 ≥4.5:1，均达正文标准；`successContainer` 的用法与 `errorContainer` 一致（底色 + `on*` 前景），不得只取其一。
 
 ### B7 · 成功态用专属 token；补 `heading()` 语义
 - `SettingsProviderPages.kt:1196-1200`、`:522-525`：`连接成功` / `已播放试听` 用 `colorScheme.primary`，而主题已有 `hearWriteSemantics.success`（`DictationScreen.kt:216` 在用）。
@@ -340,11 +380,11 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 
 ## 5. 修复计划
 
-### 阶段 A — 缺陷修复（12 项，无视觉变更）
-`A1`–`A12`（§1）。全部是"用户能感知的错误"，且都是 ≤20 行的定点改动。**建议单独发一个 patch release**，可先于任何设计决策。
+### 阶段 A — 缺陷修复（12 项）
+`A1`–`A12`（§1）。全部是"用户能感知的错误"，且都是 ≤20 行的定点改动。其中 `A2` 按 §0.1 的 D-1 恢复表盘点按（行为变化 + 隐藏态提示文案改回 `点按显示词语`），其余 11 项**无视觉变更**。**建议单独发一个 patch release**。
 
 ### 阶段 B — 一致性收口（9 项，一次做完收益最大）
-`B1`（字阶，覆盖 85% 文字）+ `B2`（Snackbar 取代全部 Toast）+ `B3`（`toggleable` 统一）+ `B4`（insets 去重）+ `B5`（单位/格式化合一）+ `B6`（5 个死 token 二选一）+ `B7`（success token + `heading()`）+ `B8`（词库交互一致性）+ `B9`（provider 表单抽公共件）。
+`B1`（字阶，覆盖 85% 文字）+ `B2`（Snackbar 取代全部 Toast）+ `B3`（`toggleable` 统一）+ `B4`（insets 去重）+ `B5`（单位/格式化合一）+ `B6`（**接上朱砂与 successContainer，`isCjk` 转为实际判据**，见 §0.1 D-2）+ `B7`（success token + `heading()`）+ `B8`（词库交互一致性）+ `B9`（provider 表单抽公共件）。
 
 ### 阶段 C — 状态覆盖与内容层
 `C1`（缺失状态：首页草稿加载态、听写准备态、语音失败提示、OCR 可取消、空态补齐）→ `C2`（听写页：词语展开、表盘圆裁切、暂停文案、满分成绩、错词不可撤销、错词本 chip 惰性化）→ `C3`（统计页：柱子下限、列表惰性/上限、错误态、图表可读）→ `C4`（抽词行 `FlowRow`、摘要固定、OCR 语言持久化、覆盖草稿前确认、错误卡加 `去设置`、裁剪把手与缩放）→ `C6`（`WindowSizeClass`、表盘随约束、旋转不丢状态）。
@@ -353,7 +393,8 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 动效（§4）、导航 `launchSingleTop`、结束页 → 本次统计入口、术语统一（C7）、死代码清理、系统栏图标随自选主题、动态取色（Material You）。
 
 ### 依赖与顺序
-- `A2` **需要一次决策**：改回 `AGENTS.md:94` 的 tap-to-reveal，还是改契约文档。二者不能同时保留现状。
+- `A2` 已按 §0.1 D-1 拍板为"恢复表盘点按"，**不再是待决项**；`AGENTS.md:94` 契约不需要改。
+- `B6` 已按 §0.1 D-2 拍板为"接上"；`isCjk` 参数随之从死代码变成判据（若最终走另一条路，则须同时删参数与 3 个 `cjk*` token，不得留声明未读）。
 - `B9` 是 `C4` 的前置（OCR 表单改动落在抽取后的公共件上，避免第三次复制）。
 - `B1` 放最前：它改变几乎所有页面的文字度量，晚做会让其他视觉微调白做。
 - 其余条目相互独立。
