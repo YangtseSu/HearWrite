@@ -29,8 +29,23 @@
 |---|---|---|---|
 | D-1 | `AGENTS.md:94` 规定表盘 tap-to-reveal，实现在 `447d613` 视觉改版时把 `.clickable` 删掉、只留按钮 | **恢复表盘点按**（选项 1）：改回契约描述的行为，`显示词语` 按钮保留为可见标注 | `A2`（§1） |
 | D-2 | 8 个语义 token 里 5 个全仓零引用（朱砂 `cjk*` ×3、`successContainer` ×2），`DialCenter(isCjk=…)` 参数声明后从未读 | **接上**（选项 1）：朱砂接到汉字提示层，`successContainer` 接到"正确"徽章，`isCjk` 从死参数变成实际判据 | `B6`（§2） |
+| D-3 | 接上朱砂后暴露：**现有朱砂取值与错误红几乎同色**（`#B23A2A` vs `#BA1A1A` ΔE₀₀ = **4.1**；容器 `#F6DAD3` vs `#FFDAD6` ΔE₀₀ = **3.4**），而 `Color.kt` 的注释写的是"绝不用于错误"——汉字提示会被读成报错 | **换色后再接**（选项 1，作者采纳）：取值下移到赭石/熟的朱砂族，与错误红、收藏金同时拉开 | `B6`（§2），取值见下表 |
 
 两项都不含功能损失，属于视觉/交互取向；`D-1` 恢复的是一个曾被实现的交互（非新增需求），`D-2` 兑现的是设计系统里已写好、未落地的注释承诺。
+
+### D-3 决定的朱砂取值（ΔE₀₀ 与对比度均为实测计算）
+
+| token | 原值 | **新值** | 与错误红的 ΔE₀₀ | 与收藏金的 ΔE₀₀ | 对比度 |
+|---|---|---|---|---|---|
+| `CjkAccentLight` | `#B23A2A` | **`#9C4A22`** | 4.1 → **11.6** | — → 14.8 | 白卡 6.15 / 纸底 5.75 |
+| `CjkContainerLight` | `#F6DAD3` | **`#E8DFC9`** | 3.4 → **16.2**（vs 错误容器） | — | 承 `onCjk` 11.80 |
+| `OnCjkContainerLight` | `#48150E` | **`#3A1B0C`** | — | — | 承 11.80 |
+| `CjkAccentDark` | `#E08A7A` | **`#DB9A6B`** | 11.1 → **16.1** | — → 17.2 | 暗卡 6.82 |
+| `CjkContainerDark` | `#5A231C` | **`#4A3220`** | 12.9 → **20.5**（vs 错误容器） | — | 承 `onCjk` 8.96 |
+| `OnCjkContainerDark` | `#F8D9D2` | `#F8D9D2`（不变） | — | — | 承 8.96 |
+
+口径：ΔE₀₀ ≥ 10 为"明显不同"，≥ 15 为"不可能混淆"；正文对比度门槛 4.5:1。三项约束（远离错误红 / 远离收藏金 / 保持可读）同时满足；`#8F4A18` 一类偏棕取值分离度更高（vs 错误红 15.7）但更偏褐、离"朱砂"更远，故取 `#9C4A22` 作为平衡点。
+**换色本身零视觉影响**（这 5 个 token 当前无人引用），实际生效在 `B6` 接线上；两项应在同一提交内完成，避免"改了值但没人用"的中间态被误认为已修复。
 
 ---
 
@@ -222,7 +237,7 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 - 两个时长格式化器：`DictationScreen.kt:93-94`（两档，无小时）vs `StatsScreen.kt:69-72`（三档，含小时）。75 分钟的复习轮在成绩卡显示 `75 分 30 秒`、在统计页显示 `1 小时 15 分`。
 - 日期两套：趋势轴 `M/d`（`StatsScreen.kt:59`）vs 记录行 `MM-dd HH:mm`（`:60`），且在无上限的记录里不显示年份。
 
-### B6 · 5 个语义 token 全仓无人读——**已拍板：接上（选项 1）**
+### B6 · 5 个语义 token 全仓无人读——**已拍板：换色后接上（§0.1 D-2 + D-3）**
 `theme/Color.kt:96-107`、`theme/Theme.kt:105-137`
 
 `cjkAccent` / `cjkContainer` / `onCjkContainer` / `successContainer` / `onSuccessContainer` —— grep 全仓，**除 `theme/` 外零引用**。KDoc 承诺它们用于"汉字标签、组词提示行"，即设计系统里"汉字身份"的强调色没有任何调用点。
@@ -238,7 +253,12 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 | `successContainer` + `onSuccessContainer` | 听写页"正确"徽章 | 批改页 `GradeRow` 的 `正确` 标签（当前是裸 `Text` + `success` 前景色，`DictationGradePane.kt:307, 375-379`），或成绩卡的 `正确 N 词` 一行；成对使用，保证前景/底色同源 |
 | `isCjk` | 不再是死参数 | 作为上述表盘配色的判据；若最终表盘不接朱砂，则**删除该参数与 3 个 `cjk*` token**（不得留声明未读） |
 
-约束：亮暗两套都要过对比度——`CjkAccentLight #B23A2A` 在浅色卡上 ≈5.95:1、`CjkAccentDark #E08A7A` 在 `#1A212B` 上 ≥4.5:1，均达正文标准；`successContainer` 的用法与 `errorContainer` 一致（底色 + `on*` 前景），不得只取其一。
+约束（取值按 §0.1 D-3 已定，均为计算实测）：
+
+- `cjkAccent` 新值 `#9C4A22`（浅）/ `#DB9A6B`（暗）：白卡 6.15:1、纸底 5.75:1、暗卡 6.82:1，均过正文门槛；与错误红 ΔE₀₀ 11.6 / 16.1，与收藏金 14.8 / 17.2——三项约束同时满足。
+- `cjkContainer` 新值 `#E8DFC9`（浅）/ `#4A3220`（暗）：与错误容器 ΔE₀₀ 16.2 / 20.5；其上的 `onCjkContainer` `#3A1B0C` / `#F8D9D2` 对比度 11.80 / 8.96。
+- `successContainer` 的用法与 `errorContainer` 一致（底色 + `on*` 前景），不得只取其一。
+- **换色与接线同一提交完成**：如果只改 token 取值不接线，界面上看不出任何变化，容易被误判为"已修复"。
 
 ### B7 · 成功态用专属 token；补 `heading()` 语义
 - `SettingsProviderPages.kt:1196-1200`、`:522-525`：`连接成功` / `已播放试听` 用 `colorScheme.primary`，而主题已有 `hearWriteSemantics.success`（`DictationScreen.kt:216` 在用）。
@@ -384,7 +404,7 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 `A1`–`A12`（§1）。全部是"用户能感知的错误"，且都是 ≤20 行的定点改动。其中 `A2` 按 §0.1 的 D-1 恢复表盘点按（行为变化 + 隐藏态提示文案改回 `点按显示词语`），其余 11 项**无视觉变更**。**建议单独发一个 patch release**。
 
 ### 阶段 B — 一致性收口（9 项，一次做完收益最大）
-`B1`（字阶，覆盖 85% 文字）+ `B2`（Snackbar 取代全部 Toast）+ `B3`（`toggleable` 统一）+ `B4`（insets 去重）+ `B5`（单位/格式化合一）+ `B6`（**接上朱砂与 successContainer，`isCjk` 转为实际判据**，见 §0.1 D-2）+ `B7`（success token + `heading()`）+ `B8`（词库交互一致性）+ `B9`（provider 表单抽公共件）。
+`B1`（字阶，覆盖 85% 文字）+ `B2`（Snackbar 取代全部 Toast）+ `B3`（`toggleable` 统一）+ `B4`（insets 去重）+ `B5`（单位/格式化合一）+ `B6`（**换色 + 接上朱砂与 successContainer，`isCjk` 转为实际判据**，见 §0.1 D-2/D-3）+ `B7`（success token + `heading()`）+ `B8`（词库交互一致性）+ `B9`（provider 表单抽公共件）。
 
 ### 阶段 C — 状态覆盖与内容层
 `C1`（缺失状态：首页草稿加载态、听写准备态、语音失败提示、OCR 可取消、空态补齐）→ `C2`（听写页：词语展开、表盘圆裁切、暂停文案、满分成绩、错词不可撤销、错词本 chip 惰性化）→ `C3`（统计页：柱子下限、列表惰性/上限、错误态、图表可读）→ `C4`（抽词行 `FlowRow`、摘要固定、OCR 语言持久化、覆盖草稿前确认、错误卡加 `去设置`、裁剪把手与缩放）→ `C6`（`WindowSizeClass`、表盘随约束、旋转不丢状态）。
