@@ -11,10 +11,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -240,6 +242,12 @@ fun SettingsSubPage(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
+                // Edge-to-edge and the window is not resized by the IME, so a
+                // sub-page with text fields (both provider forms) must yield
+                // the keyboard space itself — otherwise 保存并启用 and the
+                // lower fields sit behind the keyboard and scroll-to-focus
+                // cannot lift them clear.
+                .imePadding()
                 .padding(bottom = 32.dp),
             content = content,
         )
@@ -258,7 +266,6 @@ fun ThemePreviewCard(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        onClick = onClick,
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -270,7 +277,14 @@ fun ThemePreviewCard(
         } else {
             null
         },
-        modifier = modifier,
+        // The mode is also a choice, not just a button: selectable() puts
+        // selected + Role.RadioButton into the semantics tree (the 2dp border
+        // alone told TalkBack nothing), matching SettingsRadioRow.
+        modifier = modifier.selectable(
+            selected = selected,
+            role = Role.RadioButton,
+            onClick = onClick,
+        ),
     ) {
         Column(
             modifier = Modifier.padding(12.dp),

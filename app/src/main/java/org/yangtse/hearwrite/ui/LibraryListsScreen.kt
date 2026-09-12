@@ -56,21 +56,26 @@ fun LibraryListsScreen(
     val selecting by selection.active.collectAsState()
     val selectedIds by selection.selectedIds.collectAsState()
 
-    // Back in selection mode leaves the mode, not the category.
-    BackHandler(enabled = selecting) { selection.setActive(false) }
+    // Mirrors the browse screen: one guarded exit behind system back, the
+    // app-bar arrow and 退出多选 (a ticked selection is never dropped
+    // silently, and the three affordances cannot disagree).
+    val exitSelection = rememberSelectionExitGuard(selectedIds.size) { selection.setActive(false) }
+    val onBackOrExit: () -> Unit = { if (selecting) exitSelection() else onBack() }
+
+    BackHandler(enabled = selecting) { exitSelection() }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(viewModel.category) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = onBackOrExit) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
                     if (selecting) {
-                        TextButton(onClick = { selection.setActive(false) }) { Text("完成") }
+                        TextButton(onClick = exitSelection) { Text("退出多选") }
                     } else {
                         IconButton(onClick = { selection.setActive(true) }) {
                             Icon(Icons.Filled.Checklist, contentDescription = "多选词表")
@@ -84,7 +89,7 @@ fun LibraryListsScreen(
                 LibrarySelectionBar(
                     selectedCount = selectedIds.size,
                     onStartDraw = onOpenDraw,
-                    onExit = { selection.setActive(false) },
+                    onExit = exitSelection,
                 )
             }
         },

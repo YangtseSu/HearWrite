@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,6 +72,7 @@ import org.yangtse.hearwrite.ui.theme.hearWriteSemantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -266,6 +268,13 @@ private fun DictationContent(
     // selection, not the dictation): this handler is registered after the
     // screen's requestStop one, so it wins for as long as it is enabled.
     BackHandler(enabled = cropBitmap != null || cropLoading) { viewModel.cancelCrop() }
+    // 拍照批改 pane: back returns to the score card. Registered after the crop
+    // handler so the crop step still wins while it is up; without this the
+    // screen's requestStop() sees finished+inactive and exits the whole run,
+    // dropping the grade result and the ticked rows.
+    BackHandler(enabled = gradePane && cropBitmap == null && !cropLoading) {
+        viewModel.closeGradePane()
+    }
     // One-shot confirmation of a 拍照批改 write (记入错词本 N 个词).
     LaunchedEffect(gradeToast) {
         gradeToast?.let { message ->
@@ -359,6 +368,7 @@ private fun DictationContent(
                         line = runLines.getOrNull(ui.index),
                         showWord = showWord,
                         metaExpanded = metaExpanded,
+                        onToggleWord = onToggleWord,
                         onToggleMeta = onToggleMeta,
                     )
                     Row(
@@ -431,6 +441,7 @@ private fun FinishCard(
 ) {
     val context = LocalContext.current
     val wrong = ui.wrongWords
+    var clearWrongConfirm by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -540,11 +551,27 @@ private fun FinishCard(
                     )
                 }
             }
-            TextButton(onClick = {
-                onClearWrong()
-                toast(context, "已清空错词本")
-            }) {
+            TextButton(onClick = { clearWrongConfirm = true }) {
                 Text("清空错词本", color = MaterialTheme.colorScheme.error)
+            }
+            // The book is persisted across sessions: same confirm as the Home
+            // drawer's 清空 (a mis-tap on the card would wipe it silently).
+            if (clearWrongConfirm) {
+                AlertDialog(
+                    onDismissRequest = { clearWrongConfirm = false },
+                    title = { Text("清空错词本？") },
+                    text = { Text("将删除全部 ${wrong.size} 个错词。") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            clearWrongConfirm = false
+                            onClearWrong()
+                            toast(context, "已清空错词本")
+                        }) { Text("清空", color = MaterialTheme.colorScheme.error) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { clearWrongConfirm = false }) { Text("取消") }
+                    },
+                )
             }
         }
 
@@ -564,6 +591,7 @@ private fun WatchDial(
     line: String?,
     showWord: Boolean,
     metaExpanded: Boolean,
+    onToggleWord: () -> Unit,
     onToggleMeta: () -> Unit,
 ) {
     val entry = remember(line) { line?.let(::parseWordLine) }
@@ -582,7 +610,20 @@ private fun WatchDial(
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         CountdownRing(
             progressFraction = fraction,
-            modifier = Modifier.size(248.dp),
+            modifier = Modifier
+                .size(248.dp)
+                // Tap-to-reveal (AGENTS.md:94 "tap to reveal, the core
+                // interaction"): the whole dial is the target, so a student
+                // glancing up from paper hits it anywhere — the 显示词语
+                // button below stays as the visible label. Gated on isActive
+                // like that button, and merged into one semantics node so
+                // TalkBack reads the same action the screen shows.
+                .clickable(
+                    enabled = ui.isActive,
+                    role = Role.Button,
+                    onClickLabel = if (showWord) "隐藏词语" else "显示词语",
+                    onClick = onToggleWord,
+                ),
             color = ringColor,
             trackColor = trackColor,
         ) {
@@ -718,7 +759,7 @@ private fun DialCenter(
                     modifier = Modifier.padding(top = 8.dp),
                 )
                 Text(
-                    "用下方按钮显示词语",
+                    "点按显示词语",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     modifier = Modifier.padding(top = 4.dp),

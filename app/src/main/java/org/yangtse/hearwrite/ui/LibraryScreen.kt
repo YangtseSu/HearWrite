@@ -69,22 +69,29 @@ fun LibraryScreen(
     val selecting by selection.active.collectAsState()
     val selectedIds by selection.selectedIds.collectAsState()
 
-    // Back in selection mode leaves the mode, not the 词库 (a stale selection
-    // can never survive a back navigation).
-    BackHandler(enabled = selecting) { selection.setActive(false) }
+    // One guarded exit for every affordance in selection mode — system back,
+    // the app-bar arrow and 完成 all funnel through it, so they cannot mean
+    // three different things (and a non-empty tick set is never dropped
+    // silently). The arrow leaves the 词库 when not selecting.
+    val exitSelection = rememberSelectionExitGuard(selectedIds.size) { selection.setActive(false) }
+    val onBackOrExit: () -> Unit = { if (selecting) exitSelection() else onBack() }
+
+    BackHandler(enabled = selecting) { exitSelection() }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("词库") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = onBackOrExit) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
                 actions = {
                     if (selecting) {
-                        TextButton(onClick = { selection.setActive(false) }) { Text("完成") }
+                        // 完成 read as "confirm", but it discards the tick set;
+                        // name it what it does.
+                        TextButton(onClick = exitSelection) { Text("退出多选") }
                     } else {
                         IconButton(onClick = { selection.setActive(true) }) {
                             Icon(Icons.Filled.Checklist, contentDescription = "多选词表")
@@ -98,7 +105,7 @@ fun LibraryScreen(
                 LibrarySelectionBar(
                     selectedCount = selectedIds.size,
                     onStartDraw = onOpenDraw,
-                    onExit = { selection.setActive(false) },
+                    onExit = exitSelection,
                 )
             }
         },

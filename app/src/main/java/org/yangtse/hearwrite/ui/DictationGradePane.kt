@@ -335,14 +335,19 @@ private fun GradeRow(
                     item.expected ?: "额外一行",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                // The written answer is the evidence the human is asked to
+                // verify: a 1-line clamp hides exactly the characters that
+                // differ on a near miss (the case the pane exists for), so
+                // wrap instead of truncating. 3 lines fits any single entry;
+                // the ellipsis stays as a last resort for a stray long line.
                 Text(
                     if (item.answer.isNullOrEmpty()) "未识别到作答" else "写：${item.answer}",
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.onSurfaceVariant,
-                    maxLines = 1,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (item.doubt || item.outOfOrder) {

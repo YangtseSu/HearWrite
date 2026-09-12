@@ -228,7 +228,7 @@ fun WrongWordsSheet(
                         // Source section header: resolved label (未知来源 for
                         // manual / orphaned sources) + wrong-count; built-in
                         // sources carry a jump back to their list preview.
-                        item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}") {
+                        item(key = "src_${group.sourceId.orEmpty()}") {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()

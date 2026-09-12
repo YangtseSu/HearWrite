@@ -1,7 +1,6 @@
 package org.yangtse.hearwrite.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,11 +12,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
@@ -43,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -75,6 +77,7 @@ fun LibraryPreviewScreen(
     val entries by viewModel.entries.collectAsState()
     val shuffle by viewModel.shuffle.collectAsState()
     val startIndex by viewModel.startIndex.collectAsState()
+    val starting by viewModel.starting.collectAsState()
     val current = entries
     // startLines awaits the lazy ECDICT enrich — launch off the click handler.
     val startScope = rememberCoroutineScope()
@@ -92,7 +95,17 @@ fun LibraryPreviewScreen(
         },
         bottomBar = {
             if (current != null && current.isNotEmpty()) {
-                Column(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // Scaffold does not inset its bottomBar, and the
+                        // activity is edge-to-edge: without this the two
+                        // action buttons sit under the system nav bar (the
+                        // sibling bars in LibrarySelectionBar / LibraryDraw
+                        // already own theirs). No imePadding here — the screen
+                        // has no text input.
+                        .navigationBarsPadding(),
+                ) {
                     HorizontalDivider()
                     Row(
                         modifier = Modifier
@@ -160,9 +173,19 @@ fun LibraryPreviewScreen(
                                     viewModel.startLines()?.let(onStartDictation)
                                 }
                             },
+                            enabled = !starting,
                             modifier = Modifier.weight(1f),
                         ) {
-                            Text("听写本词表（共 ${current.size} 词）")
+                            if (starting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Text("整理词表…")
+                            } else {
+                                Text("听写本词表（共 ${current.size} 词）")
+                            }
                         }
                     }
                 }
@@ -249,10 +272,14 @@ private fun EntryRow(
                     Color.Transparent
                 },
             )
-            .clickable {
-                onSelect(index)
-                onToggleExpand()
-            },
+            .selectable(
+                selected = selected,
+                role = Role.RadioButton,
+                onClick = {
+                    onSelect(index)
+                    onToggleExpand()
+                },
+            ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(

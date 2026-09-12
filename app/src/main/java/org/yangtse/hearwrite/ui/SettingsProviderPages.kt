@@ -259,6 +259,10 @@ fun VoiceSourceSettingsPage(
                             }
                         },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        // A newline in the key would land inside
+                        // `Authorization: Bearer …` and surface as a bogus
+                        // 网络请求失败. OCR's twin already pins singleLine.
+                        singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 4.dp),

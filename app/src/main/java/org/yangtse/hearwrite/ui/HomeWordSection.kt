@@ -2,7 +2,6 @@ package org.yangtse.hearwrite.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -18,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -285,16 +286,20 @@ private fun WordDisplayList(
                                 Color.Transparent
                             },
                         )
-                        .clickable {
-                            onStartIndexChange(index)
-                            if (expandable) {
-                                expanded = if (index in expanded) {
-                                    expanded - index
-                                } else {
-                                    expanded + index
+                        .selectable(
+                            selected = isCursor,
+                            role = Role.RadioButton,
+                            onClick = {
+                                onStartIndexChange(index)
+                                if (expandable) {
+                                    expanded = if (index in expanded) {
+                                        expanded - index
+                                    } else {
+                                        expanded + index
+                                    }
                                 }
-                            }
-                        },
+                            },
+                        ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(

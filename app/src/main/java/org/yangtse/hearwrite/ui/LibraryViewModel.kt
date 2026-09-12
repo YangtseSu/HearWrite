@@ -157,6 +157,14 @@ class LibraryPreviewViewModel(
     /** 起始序号: 0-based index of the tapped start word; 0 = whole list. */
     val startIndex: StateFlow<Int> = _startIndex.asStateFlow()
 
+    private val _starting = MutableStateFlow(false)
+    /**
+     * True while [startLines] is preparing (awaits the lazy ECDICT enrich —
+     * hundreds of ms on a cold process). The button spins instead of looking
+     * dead, mirroring Home's 整理词表… state.
+     */
+    val starting: StateFlow<Boolean> = _starting.asStateFlow()
+
     /** Completes once the initial enrich pass settled (done, skipped, or
      *  failed) — [startLines] awaits it so a start in the enrich window still
      *  ships the ECDICT meanings (朗读释义 needs them). */
@@ -185,11 +193,13 @@ class LibraryPreviewViewModel(
      *  Returns null when another start is already in flight. */
     suspend fun startLines(): List<String>? {
         if (!startGate.tryLock()) return null
+        _starting.value = true
         try {
             enrichSettled.await()
             val current = _entries.value ?: return null
             return prepareStartLines(current.map(::entryToLine), _startIndex.value, _shuffle.value)
         } finally {
+            _starting.value = false
             startGate.unlock()
         }
     }

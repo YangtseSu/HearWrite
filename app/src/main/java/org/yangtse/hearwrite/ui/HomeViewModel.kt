@@ -73,6 +73,15 @@ data class PreparedSession(
  * (source resolution to a clickable library jump).
  */
 data class WrongWordGroup(
+    /**
+     * The raw source id the group was built from (null = manual / orphaned).
+     * It — not the resolved title — is the group's identity: resolved titles
+     * are not unique (未知来源, 多词表 and 多词表（N 个词表） are shared by
+     * every unresolvable source), so keying a LazyColumn on the title would
+     * throw "Key was already used" on exactly the degradation path this model
+     * exists to support.
+     */
+    val sourceId: String?,
     val sourceTitle: String?,
     val marks: List<WrongWordMark>,
     val jumpCategory: String?,
@@ -812,6 +821,7 @@ private fun groupResolvedWrong(resolved: List<ResolvedWrongMark>): List<WrongWor
             }
         }
         WrongWordGroup(
+            sourceId = sourceLabel,
             sourceTitle = first.title,
             marks = rows.map { it.mark },
             jumpCategory = jumpCategory,
