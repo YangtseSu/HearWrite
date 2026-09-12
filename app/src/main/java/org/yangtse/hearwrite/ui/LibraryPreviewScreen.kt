@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
@@ -47,7 +48,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -56,6 +56,7 @@ import org.yangtse.hearwrite.domain.WordEntry
 import org.yangtse.hearwrite.domain.entryToLine
 import org.yangtse.hearwrite.domain.glossNeedsExpansion
 import org.yangtse.hearwrite.domain.isCjkEntry
+import org.yangtse.hearwrite.ui.theme.wordHead
 
 /**
  * Word preview of one built-in list: numbered rows (headword + pos/pinyin +
@@ -81,8 +82,15 @@ fun LibraryPreviewScreen(
     val current = entries
     // startLines awaits the lazy ECDICT enrich — launch off the click handler.
     val startScope = rememberCoroutineScope()
+    // 载入草稿 hands the list to Home's draft and returns to this category
+    // (B8: Home is four taps away, the browsing position is not). Confirming
+    // here is what keeps that from being a silent, deferred action.
+    val messages = rememberMessageController()
 
     Scaffold(
+        // The confirmation appears in this screen's own window, just above the
+        // action strip that raised it.
+        snackbarHost = { MessageHost(messages) },
         topBar = {
             TopAppBar(
                 title = { Text(viewModel.label) },
@@ -120,10 +128,14 @@ fun LibraryPreviewScreen(
                         )
                         Switch(
                             checked = shuffle,
-                            onCheckedChange = viewModel::onShuffleChange,
+                            onCheckedChange = null,
                             modifier = Modifier
                                 .padding(start = 4.dp)
-                                .semantics { contentDescription = "随机打乱词序" },
+                                .toggleable(
+                                    value = shuffle,
+                                    role = Role.Switch,
+                                    onValueChange = viewModel::onShuffleChange,
+                                ),
                         )
                         Spacer(Modifier.weight(1f))
                         Text(
@@ -139,10 +151,14 @@ fun LibraryPreviewScreen(
                                 MaterialTheme.colorScheme.primary
                             },
                         )
+                        // The slot is always laid out (`Spacer` when there is
+                        // nothing to reset) so 从第 N 词开始 never shifts
+                        // sideways, and the real button is a full 48dp touch
+                        // target instead of the 40dp it used to be.
                         if (startIndex > 0) {
                             IconButton(
                                 onClick = viewModel::resetStart,
-                                modifier = Modifier.size(40.dp),
+                                modifier = Modifier.size(48.dp),
                             ) {
                                 Icon(
                                     Icons.Filled.Clear,
@@ -151,6 +167,8 @@ fun LibraryPreviewScreen(
                                     modifier = Modifier.size(18.dp),
                                 )
                             }
+                        } else {
+                            Spacer(Modifier.size(48.dp))
                         }
                     }
                     Row(
@@ -162,6 +180,10 @@ fun LibraryPreviewScreen(
                     ) {
                         OutlinedButton(onClick = {
                             onLoadToDraft(current.map(::entryToLine))
+                            // Names the destination: this no longer navigates
+                            // away, so the message is the only thing that
+                            // tells the user where the list went.
+                            messages.show("已载入草稿，返回首页即可听写")
                         }) {
                             Text("载入草稿")
                         }
@@ -313,8 +335,7 @@ private fun EntryRow(
         ) {
             Text(
                 entry.word,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.wordHead,
                 color = if (selected) {
                     MaterialTheme.colorScheme.primary
                 } else {

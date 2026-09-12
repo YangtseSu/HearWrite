@@ -167,6 +167,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _ttsActive = MutableStateFlow<TtsProviderConfig?>(null)
     val ttsActive: StateFlow<TtsProviderConfig?> = _ttsActive.asStateFlow()
 
+    /** Preset id of the active custom-TTS config ("" when none saved). */
+    private val _ttsActiveId = MutableStateFlow("")
+    val ttsActivePresetId: StateFlow<String> = _ttsActiveId.asStateFlow()
+
     private val _ttsTestState = MutableStateFlow<TtsTestState>(TtsTestState.Idle)
     val ttsTestState: StateFlow<TtsTestState> = _ttsTestState.asStateFlow()
 
@@ -484,6 +488,35 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val providerKeyWarning: StateFlow<String?> = _providerKeyWarning.asStateFlow()
 
     /**
+     * One-shot outcome of the last 发音来源 保存并启用. The save's write settles
+     * after the click, so its result cannot ride the call's return value — a
+     * Boolean could only report the pre-write validation, which is how
+     * 已保存发音配置 used to be shown for saves that failed. The page announces
+     * the message once and consumes it, the same consume-once shape as
+     * [providerKeyWarning] and the dictation screen's confirmations.
+     *
+     * 发音来源 and 拍照识词 keep one flow each: a single shared flow would let a
+     * message raised just before the user left the form surface later on the
+     * other provider's page, announcing a save that page never ran.
+     */
+    private val _ttsSaveMessage = MutableStateFlow<String?>(null)
+    val ttsSaveMessage: StateFlow<String?> = _ttsSaveMessage.asStateFlow()
+
+    /** Consume the pending 发音来源 save message (the page has announced it). */
+    fun clearTtsSaveMessage() {
+        _ttsSaveMessage.value = null
+    }
+
+    /** The 拍照识词 twin of [ttsSaveMessage]. */
+    private val _ocrSaveMessage = MutableStateFlow<String?>(null)
+    val ocrSaveMessage: StateFlow<String?> = _ocrSaveMessage.asStateFlow()
+
+    /** Consume the pending 拍照识词 save message (the page has announced it). */
+    fun clearOcrSaveMessage() {
+        _ocrSaveMessage.value = null
+    }
+
+    /**
      * After a 保存并启用 round-trip, emit a one-shot message when the saved
      * key was NOT sealed (keystore failed/absent — stored plaintext). The
      * keystore itself re-reads the just-written value, so the message rides
@@ -524,6 +557,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { settings.ttsProviderConfigs.collect { _ttsStored.value = it } }
         viewModelScope.launch {
             settings.ttsProviderConfig.collect { _ttsActive.value = it }
+        }
+        viewModelScope.launch {
+            settings.ttsActivePresetId.collect { _ttsActiveId.value = it }
         }
         viewModelScope.launch {
             val activeId = settings.ttsActivePresetId.first()
@@ -653,10 +689,20 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
      * Persist the entered config under the selected preset and activate the
      * custom source (the 保存并启用 button). Other presets' stored configs
      * are untouched.
+     *
+     * The outcome never rides the return value: the write settles after the
+     * call, so a Boolean could only report the pre-write validation — which is
+     * how 已保存发音配置 used to be shown for saves that failed. A scheme-less
+     * base URL puts the reason on the form's status line, and the write's own
+     * result arrives as a one-shot [ttsSaveMessage].
      */
     fun saveTtsConfig() {
         val presetId = _ttsPresetId.value
         val cfg = currentTtsConfig() ?: return
+        if (validOcrBaseUrl(cfg.baseUrl) == null) {
+            _ttsTestState.value = TtsTestState.Failed(INVALID_BASE_URL_MESSAGE)
+            return
+        }
         viewModelScope.launch {
             try {
                 settings.setTtsProviderConfig(presetId, cfg)
@@ -664,6 +710,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 // this map, and the DataStore flow lags a beat behind the
                 // write — an immediate retest must see the just-saved secret.
                 _ttsStored.value = _ttsStored.value + (presetId to cfg)
+                // Same reason: the preset row's 正在使用 mark follows the save
+                // without waiting for the DataStore round-trip.
+                _ttsActive.value = cfg
+                _ttsActiveId.value = presetId
                 _ttsSource.value = TtsSource.CUSTOM
                 settings.setTtsSource(TtsSource.CUSTOM)
                 emitSaveWarningIfUnsealed(
@@ -677,8 +727,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     apiKeyDirty = false,
                     apiKeySavedHint = cfg.apiKey.takeLast(4),
                 )
+                _ttsSaveMessage.value = TTS_SAVED_MESSAGE
             } catch (e: Exception) {
-                // DataStore failures must never crash the screen (AGENTS.md).
+                // DataStore failures must never crash the screen (AGENTS.md),
+                // but the page must not claim a save that did not happen.
+                _ttsSaveMessage.value = SAVE_FAILED_MESSAGE
             }
         }
     }
@@ -716,6 +769,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun testTtsVoice() {
         val cfg = currentTtsConfig() ?: return
         if (_ttsTestState.value is TtsTestState.Testing) return
+        // Same guard as 保存并启用 (and as the OCR form's test): a scheme-less
+        // URL must fail with the reason, not as a generic 网络请求失败.
+        if (validOcrBaseUrl(cfg.baseUrl) == null) {
+            _ttsTestState.value = TtsTestState.Failed(INVALID_BASE_URL_MESSAGE)
+            return
+        }
         _ttsTestState.value = TtsTestState.Testing
         viewModelScope.launch {
             val error = try {
@@ -745,6 +804,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun previewTtsVoice(voice: String, english: Boolean) {
         val base = currentTtsConfig() ?: return
         if (_ttsTestState.value is TtsTestState.Testing) return
+        if (validOcrBaseUrl(base.baseUrl) == null) {
+            _ttsTestState.value = TtsTestState.Failed(INVALID_BASE_URL_MESSAGE)
+            return
+        }
         _ttsTestState.value = TtsTestState.Testing
         val sample = if (english) "Apple, a very common fruit." else "Apple，苹果，一种很常见的水果。"
         val cfg = base.copy(
@@ -841,7 +904,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         val cfg = currentOcrConfig() ?: return
         if (_ocrTestState.value is OcrTestState.Testing) return
         if (validOcrBaseUrl(cfg.baseUrl) == null) {
-            _ocrTestState.value = OcrTestState.Failed("接口地址需以 http:// 或 https:// 开头")
+            _ocrTestState.value = OcrTestState.Failed(INVALID_BASE_URL_MESSAGE)
             return
         }
         _ocrTestState.value = OcrTestState.Testing
@@ -859,21 +922,29 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     /**
      * Persist the entered config under the selected preset (保存并启用).
-     * Returns false when the base URL is rejected (scheme-less) — the page
-     * must not show its "已保存" toast for a refused save.
+     *
+     * Same shape as the TTS save: a scheme-less base URL puts the reason on
+     * the form's status line and writes nothing, and the write's own outcome
+     * arrives as a one-shot [ocrSaveMessage] — 已保存 OCR 服务配置 only
+     * for a save that landed. The old Boolean could not see that far: it
+     * returned true before the write settled.
      */
-    fun saveOcrConfig(): Boolean {
+    fun saveOcrConfig() {
         val presetId = _ocrPresetId.value
-        val cfg = currentOcrConfig() ?: return false
+        val cfg = currentOcrConfig() ?: return
         if (validOcrBaseUrl(cfg.baseUrl) == null) {
-            _ocrTestState.value = OcrTestState.Failed("接口地址需以 http:// 或 https:// 开头")
-            return false
+            _ocrTestState.value = OcrTestState.Failed(INVALID_BASE_URL_MESSAGE)
+            return
         }
         viewModelScope.launch {
             try {
                 settings.setOcrProviderConfig(presetId, cfg)
-                // Mirror optimistically (same reason as the TTS save path).
+                // Mirror optimistically (same reason as the TTS save path):
+                // the preset row's 正在使用 mark follows the save without
+                // waiting for the DataStore round-trip.
                 _ocrStored.value = _ocrStored.value + (presetId to cfg)
+                _ocrActive.value = cfg
+                _ocrActiveId.value = presetId
                 emitSaveWarningIfUnsealed(
                     sealed = settings.ocrKeySealed(presetId),
                     plaintextMessage = OCR_KEY_UNSEALED_MESSAGE,
@@ -885,11 +956,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     apiKeyDirty = false,
                     apiKeySavedHint = cfg.apiKey.takeLast(4),
                 )
+                _ocrSaveMessage.value = OCR_SAVED_MESSAGE
             } catch (e: Exception) {
-                // DataStore failures must never crash the screen (AGENTS.md).
+                // DataStore failures must never crash the screen (AGENTS.md),
+                // but the page must not claim a save that did not happen.
+                _ocrSaveMessage.value = SAVE_FAILED_MESSAGE
             }
         }
-        return true
     }
 
     /** 清除配置: drop only the selected preset's stored OCR config. */
@@ -962,6 +1035,16 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     companion object {
+        /** A scheme-less base URL, refused by both forms' test and save paths. */
+        const val INVALID_BASE_URL_MESSAGE = "接口地址需以 http:// 或 https:// 开头"
+
+        /** A provider config write that failed (DataStore); nothing was saved. */
+        const val SAVE_FAILED_MESSAGE = "保存失败，请重试"
+
+        /** 保存并启用 confirmations — one per provider form, never interchangeable. */
+        const val TTS_SAVED_MESSAGE = "已保存发音配置"
+        const val OCR_SAVED_MESSAGE = "已保存 OCR 服务配置"
+
         /** Saved plaintext (keystore seal failed) — surfaced by the hub as a toast. */
         const val TTS_KEY_UNSEALED_MESSAGE =
             "发音配置已保存，但密钥未能加密保存（本机安全存储不可用），Key 将以明文保存在本机"

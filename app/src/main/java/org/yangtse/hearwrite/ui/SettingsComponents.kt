@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -32,9 +33,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import java.util.Locale
 
@@ -44,11 +48,16 @@ import java.util.Locale
  * headers ([SettingsSectionHeader]), list rows ([SettingsRow], [SettingsRadioRow])
  * and the sub-page scaffold ([SettingsSubPage]) with a back arrow.
  * Every user-facing string stays Chinese; row semantics follow the M3
- * settings pattern (row text is the label, controls carry their own
- * contentDescription where no visible label exists).
+ * settings pattern (the row text is the label and the row itself carries any
+ * state, so the trailing indicator is decorative rather than a second focus
+ * stop).
  */
 
-/** Small gray section header above a group card (e.g. 外观 / 听写). */
+/**
+ * Small gray section header above a group card (e.g. 外观 / 听写). It is a real
+ * heading in the semantics tree, so TalkBack can jump section to section
+ * instead of reading one flat list of rows.
+ */
 @Composable
 fun SettingsSectionHeader(
     text: String,
@@ -58,7 +67,9 @@ fun SettingsSectionHeader(
         text,
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(start = 16.dp, top = 20.dp, bottom = 8.dp),
+        modifier = modifier
+            .semantics { heading() }
+            .padding(start = 16.dp, top = 20.dp, bottom = 8.dp),
     )
 }
 
@@ -80,8 +91,10 @@ fun SettingsCard(
 /**
  * One settings list row: leading icon, title + supporting text, optional
  * trailing composable (value / switch / chevron). [onClick] makes the whole
- * row tappable. The divider is inset to the text column when an icon is
- * shown (Android settings convention).
+ * row tappable; pass [toggle] instead when the row's own state is what it
+ * carries — the row then reports on/off and the trailing indicator is drawn
+ * as its purely visual reflection (`onCheckedChange = null`). The divider is
+ * inset to the text column when an icon is shown (Android settings convention).
  */
 @Composable
 fun SettingsRow(
@@ -91,6 +104,7 @@ fun SettingsRow(
     trailing: (@Composable RowScope.() -> Unit)? = null,
     divider: Boolean = true,
     onClick: (() -> Unit)? = null,
+    toggle: RowToggle? = null,
 ) {
     Column {
         Row(
@@ -98,7 +112,15 @@ fun SettingsRow(
                 .fillMaxWidth()
                 .heightIn(min = 60.dp)
                 .let { base ->
-                    if (onClick != null) base.clickable(onClick = onClick) else base
+                    when {
+                        toggle != null -> base.toggleable(
+                            value = toggle.checked,
+                            role = toggle.role,
+                            onValueChange = { toggle.onToggle() },
+                        )
+                        onClick != null -> base.clickable(onClick = onClick)
+                        else -> base
+                    }
                 }
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -217,6 +239,12 @@ fun RowScope.SettingsChevronTrailing() {
 /**
  * Scaffold + top app bar shared by every settings sub-page (back → hub).
  * Content is a vertically scrollable column with the standard side padding.
+ *
+ * The shell is self-contained on feedback: it installs its own message channel
+ * and renders that channel's [MessageHost] in its Scaffold. A descendant that
+ * runs a 保存并启用 or a test round-trip therefore reports the result with
+ * `LocalMessages.current.show("已保存发音配置")` and the Snackbar lands in this
+ * page's window — no wiring, no controller passed down by the caller.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -225,6 +253,7 @@ fun SettingsSubPage(
     onBack: () -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val messages = rememberMessageController()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -236,23 +265,27 @@ fun SettingsSubPage(
                 },
             )
         },
+        snackbarHost = { MessageHost(messages) },
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                // Edge-to-edge and the window is not resized by the IME, so a
-                // sub-page with text fields (both provider forms) must yield
-                // the keyboard space itself — otherwise 保存并启用 and the
-                // lower fields sit behind the keyboard and scroll-to-focus
-                // cannot lift them clear.
-                .imePadding()
-                .padding(bottom = 32.dp),
-            content = content,
-        )
+        CompositionLocalProvider(LocalMessages provides messages) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .verticalScroll(rememberScrollState())
+                    // Edge-to-edge and the window is not resized by the IME, so a
+                    // sub-page with text fields (both provider forms) must yield
+                    // the keyboard space itself — otherwise 保存并启用 and the
+                    // lower fields sit behind the keyboard and scroll-to-focus
+                    // cannot lift them clear.
+                    .imePadding()
+                    .padding(bottom = 32.dp),
+                content = content,
+            )
+        }
     }
 }
+
 /**
  * Theme preview card for the 外观 setting: a miniature paper/ink swatch over
  * the label. 所见即所得 — the swatch shows the actual background + primary

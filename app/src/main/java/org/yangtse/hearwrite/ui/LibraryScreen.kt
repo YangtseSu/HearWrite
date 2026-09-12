@@ -40,8 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.yangtse.hearwrite.HearWriteApplication
@@ -223,7 +222,11 @@ private fun SearchResults(
     onOpenList: (category: String, label: String) -> Unit,
 ) {
     val result = state.result
-    if (result.labelHits.isEmpty() && result.wordHits.isEmpty()) {
+    // A list whose label matched is listed under 词表 only: one id shown in
+    // both sections would render two checkboxes driving the same tick.
+    val labelIds = result.labelHits.mapTo(mutableSetOf<String>()) { it.id }
+    val wordHits = result.wordHits.filterNot { it.list.id in labelIds }
+    if (result.labelHits.isEmpty() && wordHits.isEmpty()) {
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,
@@ -249,9 +252,9 @@ private fun SearchResults(
                 HorizontalDivider()
             }
         }
-        if (result.wordHits.isNotEmpty()) {
+        if (wordHits.isNotEmpty()) {
             item { SectionHeader("词条") }
-            items(result.wordHits, key = { "w_${it.list.id}" }) { hit ->
+            items(wordHits, key = { "w_${it.list.id}" }) { hit ->
                 SearchListRow(
                     category = hit.list.category,
                     label = hit.list.label,
@@ -290,16 +293,18 @@ private fun SearchListRow(
     ListRow(
         title = label,
         subtitle = "$category · $subtitle",
-        onClick = onClick,
+        // 多选 flips the row's meaning: it ticks instead of opening. The
+        // toggle carries the state and the hit target, the Checkbox below is
+        // decorative — see [RowToggle].
+        onClick = if (selecting) null else onClick,
+        toggle = if (selecting) {
+            RowToggle(checked = selected, role = Role.Checkbox, onToggle = onToggle)
+        } else {
+            null
+        },
         trailing = {
             if (selecting) {
-                Checkbox(
-                    checked = selected,
-                    onCheckedChange = { onToggle() },
-                    modifier = Modifier.semantics {
-                        contentDescription = "选择词表 $label"
-                    },
-                )
+                Checkbox(checked = selected, onCheckedChange = null)
             } else {
                 RowChevron()
             }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
@@ -17,7 +18,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -25,10 +25,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import java.util.Locale
 import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
 
@@ -37,8 +37,8 @@ import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
  * 自动播放 / 随机顺序 switches and the primary 开始听写 button. 间隔 and
  * 自动播放 persist to the DataStore keys shared with 设置 and the dictation
  * session; 随机顺序 is session-local. The button stays enabled at 0 words so
- * the screen can toast why nothing starts, and shows the enrich/record
- * spinner while [starting].
+ * the screen can report why nothing starts (a Snackbar on the screen's message
+ * channel), and shows the enrich/record spinner while [starting].
  */
 @Composable
 fun HomePlaybackPanel(
@@ -83,10 +83,9 @@ fun HomePlaybackPanel(
                     Icon(Icons.Filled.Remove, contentDescription = "减少间隔")
                 }
                 Text(
-                    String.format(Locale.ROOT, "%.1fs", intervalSec),
+                    formatInterval(intervalSec),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.semantics { contentDescription = "听写间隔秒数" },
                 )
                 IconButton(
                     onClick = {
@@ -120,22 +119,43 @@ fun HomePlaybackPanel(
                     .padding(top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier
+                        .toggleable(
+                            value = autoNext,
+                            role = Role.Switch,
+                            onValueChange = { onAutoNextChange(!autoNext) },
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
                         "自动播放",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    // The row is the control and carries the state (one focus
+                    // stop that reports its own on/off); the Switch is only its
+                    // visual reflection. Its contentDescription still merges up
+                    // into the row's node, so the setting keeps its descriptive
+                    // name and the state is announced alongside it.
                     Switch(
                         checked = autoNext,
-                        onCheckedChange = onAutoNextChange,
+                        onCheckedChange = null,
                         modifier = Modifier
                             .padding(start = 4.dp)
                             .semantics { contentDescription = "自动播放下一个词" },
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier
+                        .toggleable(
+                            value = shuffle,
+                            role = Role.Switch,
+                            onValueChange = { onShuffleChange(!shuffle) },
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
                         "随机顺序",
                         style = MaterialTheme.typography.bodyMedium,
@@ -143,7 +163,7 @@ fun HomePlaybackPanel(
                     )
                     Switch(
                         checked = shuffle,
-                        onCheckedChange = onShuffleChange,
+                        onCheckedChange = null,
                         modifier = Modifier
                             .padding(start = 4.dp)
                             .semantics { contentDescription = "随机打乱词序" },

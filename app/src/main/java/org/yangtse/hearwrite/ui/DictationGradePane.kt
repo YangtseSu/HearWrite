@@ -33,7 +33,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.yangtse.hearwrite.data.OCR_DISCLAIMER
@@ -41,6 +40,7 @@ import org.yangtse.hearwrite.domain.AnswerVerdict
 import org.yangtse.hearwrite.domain.GradedAnswer
 import org.yangtse.hearwrite.domain.GradeResult
 import org.yangtse.hearwrite.ui.theme.hearWriteSemantics
+import org.yangtse.hearwrite.ui.theme.wordHead
 
 /**
  * 拍照批改 pane (Roadmap #11) — the finish card's photo-grading surface.
@@ -300,8 +300,13 @@ private fun GradeRow(
     onToggle: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
+    // The 正确 badge takes the container pair (successContainer background +
+    // onSuccessContainer label) exactly like errorContainer/onErrorContainer:
+    // the two travel together, so the label can never land on a background it
+    // does not contrast with.
+    val correct = item.verdict == AnswerVerdict.CORRECT
     val (label, color) = when (item.verdict) {
-        AnswerVerdict.CORRECT -> "正确" to hearWriteSemantics.success
+        AnswerVerdict.CORRECT -> "正确" to hearWriteSemantics.onSuccessContainer
         AnswerVerdict.WRONG -> (if (item.doubt) "错词 · 存疑" else "错词") to colors.error
         AnswerVerdict.MISSING -> (if (item.doubt) "漏答 · 存疑" else "漏答") to colors.tertiary
         AnswerVerdict.EXTRA -> "多余作答" to colors.outline
@@ -333,8 +338,7 @@ private fun GradeRow(
             Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
                 Text(
                     item.expected ?: "额外一行",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.wordHead,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -376,12 +380,29 @@ private fun GradeRow(
                     }
                 }
             }
-            Text(
-                label,
-                style = MaterialTheme.typography.labelLarge,
-                color = color,
-                modifier = Modifier.padding(horizontal = 6.dp),
-            )
+            if (correct) {
+                // Container pair, taken together like
+                // errorContainer/onErrorContainer: the 正确 label sits on its
+                // own success background instead of a bare coloured word.
+                Surface(
+                    color = hearWriteSemantics.successContainer,
+                    shape = CircleShape,
+                ) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = hearWriteSemantics.onSuccessContainer,
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                    )
+                }
+            } else {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = color,
+                    modifier = Modifier.padding(horizontal = 6.dp),
+                )
+            }
             if (bookable) {
                 Checkbox(
                     checked = checked,

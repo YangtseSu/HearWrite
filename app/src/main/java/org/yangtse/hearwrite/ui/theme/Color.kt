@@ -97,13 +97,22 @@ val OnSuccessContainerDark = Color(0xFFD7EDD8)
  * CJK vermilion (朱砂): marks Chinese-script identity only — the 汉字 tag, the
  * 组词 hint line, single-char CJK accents. Never used for errors or for
  * English/POS content.
+ *
+ * The palette was re-derived (2026-09-12): the original values sat ΔE₀₀ 4.1
+ * from the error red (#BA1A1A) — below the ~10 "clearly different" threshold,
+ * let alone the 15 "impossible to confuse" one — so a 汉字 hint read as an
+ * error, in direct contradiction to the rule above. It was shifted down into
+ * the ochre/burnt-vermilion family: ΔE₀₀ 11.6 vs error, 14.8 vs the favorite
+ * star (light), 16.1 / 17.2 (dark), while keeping body-text contrast on both
+ * the card (6.15:1 / 6.82:1) and paper (5.75:1) surfaces. The container pair
+ * clears the error container by 16.2 / 20.5.
  */
-val CjkAccentLight = Color(0xFFB23A2A)
-val CjkContainerLight = Color(0xFFF6DAD3)
-val OnCjkContainerLight = Color(0xFF48150E)
+val CjkAccentLight = Color(0xFF9C4A22)
+val CjkContainerLight = Color(0xFFE8DFC9)
+val OnCjkContainerLight = Color(0xFF3A1B0C)
 
-val CjkAccentDark = Color(0xFFE08A7A)
-val CjkContainerDark = Color(0xFF5A231C)
+val CjkAccentDark = Color(0xFFDB9A6B)
+val CjkContainerDark = Color(0xFF4A3220)
 val OnCjkContainerDark = Color(0xFFF8D9D2)
 
 /**

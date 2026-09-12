@@ -42,6 +42,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -90,6 +91,11 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // One message channel per screen window, hosted at the bottom of the root
+    // Box below: confirmations (已删除 / 已载入草稿 / OCR 结果…) used to be
+    // fire-and-forget system messages; now they anchor in the app's own surface
+    // (just above the playback panel) and land in the accessibility tree.
+    val messages = rememberMessageController()
     val colors = MaterialTheme.colorScheme
     val draft by viewModel.draft.collectAsStateWithLifecycle()
     val wordCount by viewModel.wordCount.collectAsStateWithLifecycle()
@@ -138,14 +144,14 @@ fun HomeScreen(
             viewModel.startOcrCrop(uri)
         },
         onError = { message ->
-            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+            messages.show(message)
         },
     )
 
-    // One-shot OCR success toast (已识别 N 个…), consumed once shown.
+    // One-shot OCR success message (已识别 N 个…), consumed once shown.
     LaunchedEffect(ocrOutcome) {
         ocrOutcome?.let { message ->
-            android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+            messages.show(message)
             viewModel.clearOcrOutcome()
         }
     }
@@ -169,7 +175,10 @@ fun HomeScreen(
             if (lines != null) {
                 viewModel.applyEntry(lines)
                 app.consumeDraftImport()
-                android.widget.Toast.makeText(context, "已载入草稿", android.widget.Toast.LENGTH_SHORT).show()
+                // No confirmation here: the import is confirmed at its source
+                // (the preview's 载入草稿), which is where the user acted. This
+                // consumer only applies the staged lines, possibly minutes
+                // later — echoing it here would replay a stale message.
             }
         }
     }
@@ -200,309 +209,332 @@ fun HomeScreen(
         label = "contentBottomPad",
     )
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.background),
-    ) {
-        Column(
+    // The screen body reads the message channel from any depth — the 更多
+    // sheet, the history/favorites/wrong-word sheets, the panel's 开始听写
+    // guard and the confirm dialogs. The host inside the root Box renders
+    // whatever it is handed; the sheets install their own host, since a
+    // ModalBottomSheet is a separate window drawn above this one.
+    CompositionLocalProvider(LocalMessages provides messages) {
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .padding(bottom = contentPad),
+                .background(colors.background),
         ) {
-            // ---- Header: brand · OCR progress pill · library/settings shortcuts ----
-            Row(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    // No .navigationBarsPadding() here: both values contentPad can
+                    // take already span the navigation bar — the playback panel's
+                    // measured height includes its own bottom padding and its
+                    // .navigationBarsPadding() (onSizeChanged sits before them in
+                    // that chain), and the IME's bottom edge extends past the
+                    // navigation bar too. Padding for it again would count the
+                    // bar twice and float the editor above the panel.
+                    .padding(bottom = contentPad),
             ) {
-                HearWriteWordmark()
-            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                if (ocrBusy) {
-                    Surface(
-                        shape = CircleShape,
-                        color = colors.primaryContainer,
-                        contentColor = colors.onPrimaryContainer,
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                // ---- Header: brand · OCR progress pill · library/settings shortcuts ----
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    HearWriteWordmark()
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    if (ocrBusy) {
+                        Surface(
+                            shape = CircleShape,
+                            color = colors.primaryContainer,
+                            contentColor = colors.onPrimaryContainer,
                         ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(14.dp),
-                                strokeWidth = 2.dp,
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = if (ocrPhase.isEmpty()) "识别中…" else ocrPhase,
-                                style = MaterialTheme.typography.labelMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = if (ocrPhase.isEmpty()) "识别中…" else ocrPhase,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
                     }
                 }
-            }
-            IconButton(onClick = onOpenLibrary) {
-                Icon(
-                    Icons.AutoMirrored.Filled.MenuBook,
-                    contentDescription = "词库",
-                    tint = colors.onBackground,
-                )
-            }
-            IconButton(onClick = onOpenSettings) {
-                Icon(
-                    Icons.Outlined.Settings,
-                    contentDescription = "设置",
-                    tint = colors.onBackground,
-                )
-            }
-            IconButton(onClick = { showMenu = true }) {
-                Icon(
-                    Icons.Filled.Menu,
-                    contentDescription = "菜单",
-                    tint = colors.onBackground,
-                )
-            }
-        }
-
-            // ---- Main: OCR error card + word-list section ---------
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 20.dp),
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    ocrError?.let { message ->
-                        OcrErrorCard(
-                            message = message,
-                            retryable = ocrRetryable,
-                            onClose = viewModel::clearOcrError,
-                            onRetry = viewModel::retryOcr,
-                            modifier = Modifier.padding(bottom = 8.dp),
-                        )
-                    }
-                    WordListSection(
-                        draft = draft,
-                        displayMode = displayMode,
-                        wordCount = wordCount,
-                        startIndex = startIndex,
-                        onDraftChange = viewModel::onDraftChange,
-                        onToggleDisplayMode = { viewModel.setDisplayMode(!displayMode) },
-                        onStartIndexChange = viewModel::setStartIndex,
-                        onDeleteWord = viewModel::deleteWord,
-                        onFillSample = viewModel::fillSample,
-                        onClear = viewModel::clearDraft,
-                        onScan = { showOcrSheet = true },
-                        modifier = Modifier.weight(1f),
+                IconButton(onClick = onOpenLibrary) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.MenuBook,
+                        contentDescription = "词库",
+                        tint = colors.onBackground,
+                    )
+                }
+                IconButton(onClick = onOpenSettings) {
+                    Icon(
+                        Icons.Outlined.Settings,
+                        contentDescription = "设置",
+                        tint = colors.onBackground,
+                    )
+                }
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(
+                        Icons.Filled.Menu,
+                        contentDescription = "菜单",
+                        tint = colors.onBackground,
                     )
                 }
             }
+
+                // ---- Main: OCR error card + word-list section ---------
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 20.dp),
+                ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        ocrError?.let { message ->
+                            OcrErrorCard(
+                                message = message,
+                                retryable = ocrRetryable,
+                                onClose = viewModel::clearOcrError,
+                                onRetry = viewModel::retryOcr,
+                                modifier = Modifier.padding(bottom = 8.dp),
+                            )
+                        }
+                        WordListSection(
+                            draft = draft,
+                            displayMode = displayMode,
+                            wordCount = wordCount,
+                            startIndex = startIndex,
+                            onDraftChange = viewModel::onDraftChange,
+                            onToggleDisplayMode = { viewModel.setDisplayMode(!displayMode) },
+                            onStartIndexChange = viewModel::setStartIndex,
+                            onDeleteWord = viewModel::deleteWord,
+                            onFillSample = viewModel::fillSample,
+                            onClear = viewModel::clearDraft,
+                            onScan = { showOcrSheet = true },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+
+            // ---- Bottom playback panel (overlay, measured for content pad) ----
+            // Drawn at the screen bottom BEHIND the keyboard while typing (the
+            // content pad above already reserves the IME space) and revealed when
+            // the keyboard hides. Its height is reported up so the content column
+            // pads by it when no keyboard is shown.
+            HomePlaybackPanel(
+                intervalSec = intervalSec,
+                autoNext = autoNext,
+                shuffle = shuffle,
+                wordCount = wordCount,
+                startIndex = startIndex,
+                starting = starting,
+                onIntervalChange = viewModel::onIntervalChange,
+                onAutoNextChange = viewModel::onAutoNextChange,
+                onShuffleChange = viewModel::onShuffleChange,
+                onStart = {
+                    if (wordCount == 0) {
+                        // Kept pressable so the app can explain why (alice).
+                        messages.show("请先输入单词列表")
+                    } else {
+                        scope.launch {
+                            viewModel.prepareAndRecord()?.let { prepared ->
+                                onStartDictation(prepared.lines, prepared.historyId)
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .onSizeChanged { panelHeightPx = it.height }
+                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 12.dp)
+                    .navigationBarsPadding(),
+            )
+
+            // Screen-level confirmations. The host rides the same animated pad
+            // the content yields to, so the message sits just above the panel.
+            // No extra .navigationBarsPadding(): contentPad is already the
+            // panel's full height (bottom padding + its own navigation-bar inset
+            // — see above) or the IME's bottom edge, so both values clear the
+            // navigation bar; padding for it again would push the message a bar
+            // height off the panel, exactly the double count B4 removes from the
+            // content column. (Messages raised inside a sheet are hosted by that
+            // sheet instead: the sheet is its own window, above this one.)
+            MessageHost(
+                messages,
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = contentPad),
+            )
         }
 
-        // ---- Bottom playback panel (overlay, measured for content pad) ----
-        // Drawn at the screen bottom BEHIND the keyboard while typing (the
-        // content pad above already reserves the IME space) and revealed when
-        // the keyboard hides. Its height is reported up so the content column
-        // pads by it when no keyboard is shown.
-        HomePlaybackPanel(
-            intervalSec = intervalSec,
-            autoNext = autoNext,
-            shuffle = shuffle,
-            wordCount = wordCount,
-            startIndex = startIndex,
-            starting = starting,
-            onIntervalChange = viewModel::onIntervalChange,
-            onAutoNextChange = viewModel::onAutoNextChange,
-            onShuffleChange = viewModel::onShuffleChange,
-            onStart = {
-                if (wordCount == 0) {
-                    // Kept pressable so the app can explain why (alice).
-                    android.widget.Toast.makeText(
-                        context, "请先输入单词列表", android.widget.Toast.LENGTH_SHORT,
-                    ).show()
-                } else {
-                    scope.launch {
-                        viewModel.prepareAndRecord()?.let { prepared ->
-                            onStartDictation(prepared.lines, prepared.historyId)
+        // ---- 更多 menu sheet -----------------------------------------------------
+        if (showMenu) {
+            ModalBottomSheet(onDismissRequest = { showMenu = false }) {
+                // Every sheet window hosts its own messages: this one raises none
+                // today, but the whole sheet covers the screen, so a future row
+                // reporting something must not route it to the host behind the
+                // scrim. Wrapping keeps that invariant uniform across sheets.
+                MessageHostScope {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
+                    ) {
+                        Text(
+                            "更多",
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        )
+                        MenuRow(Icons.Outlined.StarBorder, "收藏") {
+                            showMenu = false
+                            showFavorites = true
+                        }
+                        MenuRow(Icons.Outlined.History, "历史记录") {
+                            showMenu = false
+                            showHistory = true
+                        }
+                        MenuRow(Icons.Outlined.Cancel, "错词本") {
+                            showMenu = false
+                            showWrongWords = true
+                        }
+                        MenuRow(Icons.Outlined.BarChart, "听写统计") {
+                            showMenu = false
+                            onOpenStats()
                         }
                     }
                 }
-            },
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .onSizeChanged { panelHeightPx = it.height }
-                .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 12.dp)
-                .navigationBarsPadding(),
-        )
-    }
-
-    // ---- 更多 menu sheet -----------------------------------------------------
-    if (showMenu) {
-        ModalBottomSheet(onDismissRequest = { showMenu = false }) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
-            ) {
-                Text(
-                    "更多",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 4.dp),
-                )
-                MenuRow(Icons.Outlined.StarBorder, "收藏") {
-                    showMenu = false
-                    showFavorites = true
-                }
-                MenuRow(Icons.Outlined.History, "历史记录") {
-                    showMenu = false
-                    showHistory = true
-                }
-                MenuRow(Icons.Outlined.Cancel, "错词本") {
-                    showMenu = false
-                    showWrongWords = true
-                }
-                MenuRow(Icons.Outlined.BarChart, "听写统计") {
-                    showMenu = false
-                    onOpenStats()
-                }
             }
         }
-    }
 
-    if (showOcrSheet) {
-        OcrScanSheet(
-            lang = ocrLang,
-            onLangChange = { ocrLang = it },
-            configured = ocrConfigured,
-            modelName = ocrModel,
-            busy = ocrBusy || ocrPicker.busy,
-            onCamera = {
-                showOcrSheet = false
-                ocrPicker.launchCamera()
-            },
-            onGallery = {
-                showOcrSheet = false
-                ocrPicker.launchGallery()
-            },
-            onOpenSettings = {
-                showOcrSheet = false
-                // 修改/去设置 lands on the OCR provider form, not the hub.
-                onOpenOcrSettings()
-            },
-            onDismiss = { showOcrSheet = false },
-        )
-    }
+        if (showOcrSheet) {
+            OcrScanSheet(
+                lang = ocrLang,
+                onLangChange = { ocrLang = it },
+                configured = ocrConfigured,
+                modelName = ocrModel,
+                busy = ocrBusy || ocrPicker.busy,
+                onCamera = {
+                    showOcrSheet = false
+                    ocrPicker.launchCamera()
+                },
+                onGallery = {
+                    showOcrSheet = false
+                    ocrPicker.launchGallery()
+                },
+                onOpenSettings = {
+                    showOcrSheet = false
+                    // 修改/去设置 lands on the OCR provider form, not the hub.
+                    onOpenOcrSettings()
+                },
+                onDismiss = { showOcrSheet = false },
+            )
+        }
 
-    // 选定识别区域 step: shown from pick/capture until confirm or dismiss;
-    // a decode failure clears it by itself (bitmap null, loading done) and
-    // leaves the shared OCR error card to explain.
-    if (showOcrCrop && (ocrCropLoading || ocrCropBitmap != null)) {
-        OcrCropOverlay(
-            bitmap = ocrCropBitmap,
-            onConfirm = { rect ->
-                showOcrCrop = false
-                viewModel.confirmOcrCrop(rect, ocrLang)
-            },
-            onDismiss = {
-                showOcrCrop = false
-                viewModel.cancelOcrCrop()
-            },
-        )
-    }
+        // 选定识别区域 step: shown from pick/capture until confirm or dismiss;
+        // a decode failure clears it by itself (bitmap null, loading done) and
+        // leaves the shared OCR error card to explain.
+        if (showOcrCrop && (ocrCropLoading || ocrCropBitmap != null)) {
+            OcrCropOverlay(
+                bitmap = ocrCropBitmap,
+                onConfirm = { rect ->
+                    showOcrCrop = false
+                    viewModel.confirmOcrCrop(rect, ocrLang)
+                },
+                onDismiss = {
+                    showOcrCrop = false
+                    viewModel.cancelOcrCrop()
+                },
+            )
+        }
 
-    if (showHistory) {
-        HistorySheet(
-            entries = history,
-            favoriteIds = favorites,
-            onApply = viewModel::applyEntry,
-            onToggleFavorite = viewModel::toggleFavorite,
-            onDelete = { id ->
-                viewModel.deleteHistory(id)
-                android.widget.Toast.makeText(context, "已删除", android.widget.Toast.LENGTH_SHORT).show()
-            },
-            onClear = { clearHistoryConfirm = true },
-            onDismiss = { showHistory = false },
-        )
-    }
+        if (showHistory) {
+            HistorySheet(
+                entries = history,
+                favoriteIds = favorites,
+                onApply = viewModel::applyEntry,
+                onToggleFavorite = viewModel::toggleFavorite,
+                onDelete = viewModel::deleteHistory,
+                onClear = { clearHistoryConfirm = true },
+                onDismiss = { showHistory = false },
+            )
+        }
 
-    if (showFavorites) {
-        FavoritesSheet(
-            items = favoriteItems,
-            onApply = viewModel::applyEntry,
-            onToggleFavorite = viewModel::toggleFavorite,
-            onDismiss = { showFavorites = false },
-        )
-    }
-    if (showWrongWords) {
-        WrongWordsSheet(
-            groups = wrongGroups,
-            onDictate = {
-                showWrongWords = false
-                // Book marks keep their original lines (词性/释义 / 拼音/组词)
-                // where the source still resolves; the round itself is a
-                // bare-word run, so its marks carry no new provenance.
-                scope.launch {
-                    viewModel.prepareWrongWordRun()?.let { lines ->
-                        onStartDictation(lines, null)
+        if (showFavorites) {
+            FavoritesSheet(
+                items = favoriteItems,
+                onApply = viewModel::applyEntry,
+                onToggleFavorite = viewModel::toggleFavorite,
+                onDismiss = { showFavorites = false },
+            )
+        }
+        if (showWrongWords) {
+            WrongWordsSheet(
+                groups = wrongGroups,
+                onDictate = {
+                    showWrongWords = false
+                    // Book marks keep their original lines (词性/释义 / 拼音/组词)
+                    // where the source still resolves; the round itself is a
+                    // bare-word run, so its marks carry no new provenance.
+                    scope.launch {
+                        viewModel.prepareWrongWordRun()?.let { lines ->
+                            onStartDictation(lines, null)
+                        }
                     }
-                }
-            },
-            onDelete = { word ->
-                viewModel.removeWrongWord(word)
-                android.widget.Toast.makeText(
-                    context, "已移除", android.widget.Toast.LENGTH_SHORT,
-                ).show()
-            },
-            onClear = { clearWrongConfirm = true },
-            onJumpToSource = { category, label ->
-                showWrongWords = false
-                onOpenLibraryPreview(category, label)
-            },
-            onDismiss = { showWrongWords = false },
-        )
-    }
+                },
+                onDelete = viewModel::removeWrongWord,
+                onClear = { clearWrongConfirm = true },
+                onJumpToSource = { category, label ->
+                    showWrongWords = false
+                    onOpenLibraryPreview(category, label)
+                },
+                onDismiss = { showWrongWords = false },
+            )
+        }
 
 
-    if (clearWrongConfirm) {
-        AlertDialog(
-            onDismissRequest = { clearWrongConfirm = false },
-            title = { Text("清空错词本？") },
-            text = { Text("将删除全部 ${wrongWords.size} 个错词。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    clearWrongConfirm = false
-                    viewModel.clearWrongWords()
-                    android.widget.Toast.makeText(
-                        context, "已清空错词本", android.widget.Toast.LENGTH_SHORT,
-                    ).show()
-                }) { Text("清空", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { clearWrongConfirm = false }) { Text("取消") }
-            },
-        )
-    }
+        if (clearWrongConfirm) {
+            AlertDialog(
+                onDismissRequest = { clearWrongConfirm = false },
+                title = { Text("清空错词本？") },
+                text = { Text("将删除全部 ${wrongWords.size} 个错词。") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        clearWrongConfirm = false
+                        viewModel.clearWrongWords()
+                        messages.show("已清空错词本")
+                    }) { Text("清空", color = MaterialTheme.colorScheme.error) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { clearWrongConfirm = false }) { Text("取消") }
+                },
+            )
+        }
 
-    if (clearHistoryConfirm) {
-        AlertDialog(
-            onDismissRequest = { clearHistoryConfirm = false },
-            title = { Text("清空历史记录？") },
-            text = { Text("将清空全部 ${history.size} 条历史记录，收藏的词表会保留。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    clearHistoryConfirm = false
-                    viewModel.clearHistory()
-                    android.widget.Toast.makeText(context, "已清空历史记录", android.widget.Toast.LENGTH_SHORT).show()
-                }) { Text("清空", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { clearHistoryConfirm = false }) { Text("取消") }
-            },
-        )
+        if (clearHistoryConfirm) {
+            AlertDialog(
+                onDismissRequest = { clearHistoryConfirm = false },
+                title = { Text("清空历史记录？") },
+                text = { Text("将清空全部 ${history.size} 条历史记录，收藏的词表会保留。") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        clearHistoryConfirm = false
+                        viewModel.clearHistory()
+                        messages.show("已清空历史记录")
+                    }) { Text("清空", color = MaterialTheme.colorScheme.error) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { clearHistoryConfirm = false }) { Text("取消") }
+                },
+            )
+        }
     }
 }
 

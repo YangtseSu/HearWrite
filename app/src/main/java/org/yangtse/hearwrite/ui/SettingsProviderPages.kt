@@ -1,35 +1,17 @@
 package org.yangtse.hearwrite.ui
 
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,24 +19,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import org.yangtse.hearwrite.data.EDGE_VOICE_CATALOG
-import org.yangtse.hearwrite.data.EDGE_VOICE_EN
-import org.yangtse.hearwrite.data.EdgeVoice
-import org.yangtse.hearwrite.data.MIMO_VOICES
-import org.yangtse.hearwrite.data.SystemVoiceInfo
-import org.yangtse.hearwrite.data.edgeDefaultEnVoice
-import org.yangtse.hearwrite.data.edgeDefaultVoiceFor
 import org.yangtse.hearwrite.data.OCR_DISCLAIMER
 import org.yangtse.hearwrite.data.OCR_PROVIDER_PRESETS
 import org.yangtse.hearwrite.data.TTS_PROVIDER_PRESETS
@@ -68,18 +35,23 @@ import org.yangtse.hearwrite.domain.TtsSource
  * page grows the provider configuration form below: preset picker, optional
  * wire-shape choice, base URL / key / model / voices / format, 测试并试听
  * and 保存并启用.
+ *
+ * The provider form itself is one widget set shared with 拍照识词's OCR form
+ * (SettingsProviderForms.kt): the two pages used to be line-by-line copies,
+ * which is how only one of them ended up validating its base URL and its
+ * save result.
  */
 @Composable
 fun VoiceSourceSettingsPage(
     viewModel: SettingsViewModel,
     onBack: () -> Unit,
 ) {
-    val context = LocalContext.current
     val ttsSource by viewModel.ttsSource.collectAsStateWithLifecycle()
     val ttsForm by viewModel.ttsForm.collectAsStateWithLifecycle()
     val ttsPresetId by viewModel.ttsPresetId.collectAsStateWithLifecycle()
     val ttsStoredConfigs by viewModel.ttsStoredConfigs.collectAsStateWithLifecycle()
     val ttsActive by viewModel.ttsActive.collectAsStateWithLifecycle()
+    val ttsActivePresetId by viewModel.ttsActivePresetId.collectAsStateWithLifecycle()
     val ttsTestState by viewModel.ttsTestState.collectAsStateWithLifecycle()
     val youdaoPreviewState by viewModel.youdaoPreviewState.collectAsStateWithLifecycle()
     val systemPreviewState by viewModel.systemPreviewState.collectAsStateWithLifecycle()
@@ -93,6 +65,7 @@ fun VoiceSourceSettingsPage(
     val systemUseDefaultEn by viewModel.systemUseDefaultEn.collectAsStateWithLifecycle()
     val systemVoiceZh by viewModel.systemVoiceZh.collectAsStateWithLifecycle()
     val systemVoiceEn by viewModel.systemVoiceEn.collectAsStateWithLifecycle()
+    val saveMessage by viewModel.ttsSaveMessage.collectAsStateWithLifecycle()
     var showTtsKey by remember { mutableStateOf(false) }
     var showClearTtsConfirm by remember { mutableStateOf(false) }
     // A seeded-but-untouched key counts as present (the secret stays stored);
@@ -112,6 +85,18 @@ fun VoiceSourceSettingsPage(
     }
 
     SettingsSubPage(title = "发音来源", onBack = onBack) {
+        // The sub-page shell installs the message channel for exactly this
+        // content, so the page's own confirmations are raised from in here.
+        val messages = LocalMessages.current
+        // 保存并启用 is announced only once its write has actually landed: the
+        // view model reports 已保存发音配置 / 保存失败 as a one-shot message, so
+        // a failed write can never be shown as a success (it used to be,
+        // because the save swallowed its exception and returned Unit).
+        LaunchedEffect(saveMessage) {
+            val message = saveMessage ?: return@LaunchedEffect
+            messages.show(message)
+            viewModel.clearTtsSaveMessage()
+        }
         SettingsCard {
             SettingsRadioRow(
                 title = "有道词典",
@@ -139,9 +124,7 @@ fun VoiceSourceSettingsPage(
                     // each dictation language (中文 + 英文), with a 试听
                     // button per voice. A switch takes effect immediately.
                     // Android exposes no voice display names — see
-                    // SystemSpeaker's naming helpers. The expandedContent Box
-                    // stacks children, so everything lives inside the one
-                    // section composable (no sibling composables here).
+                    // SystemSpeaker's naming helpers.
                     SystemVoiceSection(
                         loading = systemVoicesLoading,
                         zhVoices = systemVoicesZh,
@@ -193,208 +176,147 @@ fun VoiceSourceSettingsPage(
                 onClick = { viewModel.onTtsSourceChange(TtsSource.CUSTOM) },
                 expanded = ttsSource == TtsSource.CUSTOM,
                 expandedContent = {
-                    Column {
-                        TTS_PROVIDER_PRESETS.forEachIndexed { index, preset ->
-                            SettingsRadioRow(
+                    ProviderPresetList(
+                        items = TTS_PROVIDER_PRESETS.map { preset ->
+                            ProviderPresetItem(
+                                id = preset.id,
                                 title = preset.label,
-                                supporting = listOfNotNull(
-                                    if (preset.id == "mimo") "限时免费，需自备 API Key" else null,
-                                    if (ttsStoredConfigs.containsKey(preset.id)) "已保存" else null,
-                                ).joinToString(" · ").ifEmpty { null },
-                                selected = ttsPresetId == preset.id,
-                                divider = index < TTS_PROVIDER_PRESETS.lastIndex,
-                                onClick = { viewModel.onTtsPresetChange(preset) },
+                                detail = if (preset.id == "mimo") {
+                                    "限时免费，需自备 API Key"
+                                } else {
+                                    null
+                                },
+                                saved = ttsStoredConfigs.containsKey(preset.id),
+                                inUse = ttsActivePresetId == preset.id,
                             )
-                        }
-                    }
+                        },
+                        selectedId = ttsPresetId,
+                        onSelect = { id ->
+                            TTS_PROVIDER_PRESETS.firstOrNull { it.id == id }
+                                ?.let(viewModel::onTtsPresetChange)
+                        },
+                    )
                 },
             )
         }
         if (ttsSource == TtsSource.CUSTOM) {
             SettingsSectionHeader("OpenAI 兼容语音接口设置")
-            SettingsCard {
-                Column(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
-                ) {
-                    // 接口类型 only matters for the hand-rolled preset; the named
-                    // presets fix the wire shape.
-                    if (ttsPresetId == "custom") {
-                        TtsApiKindDropdown(
-                            selected = ttsForm.api,
-                            onSelect = viewModel::onTtsApiChange,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                    OutlinedTextField(
-                        value = ttsForm.baseUrl,
-                        onValueChange = viewModel::onTtsBaseUrlChange,
-                        readOnly = ttsPresetId == "mimo",
-                        label = { Text("接口地址（Base URL）") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            ProviderFormBody {
+                // 接口类型 only matters for the hand-rolled preset; the named
+                // presets fix the wire shape.
+                if (ttsPresetId == "custom") {
+                    TtsApiKindDropdown(
+                        selected = ttsForm.api,
+                        onSelect = viewModel::onTtsApiChange,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    OutlinedTextField(
-                        value = if (ttsForm.apiKeyDirty) ttsForm.apiKey else "",
-                        onValueChange = viewModel::onTtsApiKeyChange,
-                        label = { Text("API Key") },
-                        supportingText = {
-                            if (!ttsForm.apiKeyDirty && ttsForm.apiKeySavedHint.isNotEmpty()) {
-                                Text("已保存 ••••${ttsForm.apiKeySavedHint}（输入即替换）· Key 仅保存在本机")
-                            } else {
-                                Text("Key 仅保存在本机，仅用于发音请求")
-                            }
-                        },
-                        visualTransformation = if (showTtsKey) {
-                            VisualTransformation.None
-                        } else {
-                            PasswordVisualTransformation()
-                        },
-                        trailingIcon = {
-                            IconButton(onClick = { showTtsKey = !showTtsKey }) {
-                                Icon(
-                                    if (showTtsKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                    contentDescription = if (showTtsKey) "隐藏 API Key" else "显示 API Key",
-                                )
-                            }
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        // A newline in the key would land inside
-                        // `Authorization: Bearer …` and surface as a bogus
-                        // 网络请求失败. OCR's twin already pins singleLine.
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp),
+                }
+                ProviderBaseUrlField(
+                    value = ttsForm.baseUrl,
+                    onValueChange = viewModel::onTtsBaseUrlChange,
+                    readOnly = ttsPresetId == "mimo",
+                )
+                ProviderApiKeyField(
+                    apiKey = ttsForm.apiKey,
+                    onValueChange = viewModel::onTtsApiKeyChange,
+                    dirty = ttsForm.apiKeyDirty,
+                    savedHint = ttsForm.apiKeySavedHint,
+                    purpose = "发音请求",
+                    visible = showTtsKey,
+                    onVisibleChange = { showTtsKey = it },
+                )
+                ProviderModelField(
+                    value = ttsForm.model,
+                    onValueChange = viewModel::onTtsModelChange,
+                    readOnly = ttsPresetId == "mimo",
+                )
+                if (ttsPresetId == "mimo") {
+                    MimoVoiceSection(
+                        defaultVoice = ttsForm.voiceZh,
+                        useDefaultEn = ttsForm.useDefaultEn,
+                        englishVoice = ttsForm.voiceEn,
+                        previewing = ttsTestState == TtsTestState.Testing,
+                        previewEnabled = ttsFormComplete,
+                        onDefaultVoiceChange = viewModel::onTtsVoiceZhChange,
+                        onUseDefaultEnChange = viewModel::onTtsUseDefaultEnChange,
+                        onEnglishVoiceChange = viewModel::onTtsVoiceEnChange,
+                        onPreview = viewModel::previewTtsVoice,
                     )
-                    OutlinedTextField(
-                        value = ttsForm.model,
-                        onValueChange = viewModel::onTtsModelChange,
-                        readOnly = ttsPresetId == "mimo",
-                        label = { Text("模型") },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp),
-                    )
-                    if (ttsPresetId == "mimo") {
-                        MimoVoiceSection(
-                            defaultVoice = ttsForm.voiceZh,
-                            useDefaultEn = ttsForm.useDefaultEn,
-                            englishVoice = ttsForm.voiceEn,
-                            previewing = ttsTestState == TtsTestState.Testing,
-                            previewEnabled = ttsFormComplete,
-                            onDefaultVoiceChange = viewModel::onTtsVoiceZhChange,
-                            onUseDefaultEnChange = viewModel::onTtsUseDefaultEnChange,
-                            onEnglishVoiceChange = viewModel::onTtsVoiceEnChange,
-                            onPreview = viewModel::previewTtsVoice,
-                        )
-                        TtsTestStatusLine(
-                            state = ttsTestState,
-                            testingText = "生成试听中…",
-                            okText = "连接成功，已播放试听",
-                        )
-                    } else {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            OutlinedTextField(
-                                value = ttsForm.voiceEn,
-                                onValueChange = viewModel::onTtsVoiceEnChange,
-                                label = { Text("英文音色") },
-                                placeholder = { Text("默认") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f),
-                            )
-                            OutlinedTextField(
-                                value = ttsForm.voiceZh,
-                                onValueChange = viewModel::onTtsVoiceZhChange,
-                                label = { Text("中文音色") },
-                                placeholder = { Text("默认") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        Text(
-                            "留空使用服务商默认音色；修改音色或语速后会重新生成发音。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 2.dp),
-                        )
-                    }
-                    if (ttsForm.api == TtsApiKind.SPEECH) {
-                        OutlinedTextField(
-                            value = ttsForm.responseFormat,
-                            onValueChange = viewModel::onTtsResponseFormatChange,
-                            label = { Text("响应格式") },
-                            placeholder = { Text("mp3") },
-                            supportingText = { Text("/audio/speech 返回的音频格式（mp3/wav…）") },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 4.dp),
-                        )
-                    }
-                    if (ttsPresetId != "mimo") {
-                        OutlinedButton(
-                            onClick = viewModel::testTtsVoice,
-                            enabled = ttsFormComplete && ttsTestState != TtsTestState.Testing,
-                            modifier = Modifier.padding(top = 16.dp),
-                        ) {
-                            Text("测试并试听")
-                        }
-                        TtsTestStatusLine(
-                            state = ttsTestState,
-                            testingText = "生成试听中…",
-                            okText = "连接成功，已播放试听",
-                        )
-                    }
+                } else {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 16.dp),
+                            .padding(top = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        if (ttsStoredConfigs.containsKey(ttsPresetId)) {
-                            OutlinedButton(onClick = { showClearTtsConfirm = true }) {
-                                Text("清除配置")
-                            }
-                        }
-                        Button(
-                            onClick = {
-                                viewModel.saveTtsConfig()
-                                Toast.makeText(
-                                    context, "已保存发音配置", Toast.LENGTH_SHORT,
-                                ).show()
-                            },
-                            enabled = ttsFormComplete,
+                        OutlinedTextField(
+                            value = ttsForm.voiceEn,
+                            onValueChange = viewModel::onTtsVoiceEnChange,
+                            label = { Text("英文音色") },
+                            placeholder = { Text("默认") },
+                            singleLine = true,
                             modifier = Modifier.weight(1f),
-                        ) {
-                            Text("保存并启用")
-                        }
+                        )
+                        OutlinedTextField(
+                            value = ttsForm.voiceZh,
+                            onValueChange = viewModel::onTtsVoiceZhChange,
+                            label = { Text("中文音色") },
+                            placeholder = { Text("默认") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
                     }
+                    Text(
+                        "留空使用服务商默认音色；修改音色或语速后会重新生成发音。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
                 }
+                if (ttsForm.api == TtsApiKind.SPEECH) {
+                    OutlinedTextField(
+                        value = ttsForm.responseFormat,
+                        onValueChange = viewModel::onTtsResponseFormatChange,
+                        label = { Text("响应格式") },
+                        placeholder = { Text("mp3") },
+                        supportingText = { Text("/audio/speech 返回的音频格式（mp3/wav…）") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                    )
+                }
+                // 小米 MiMo previews from its voice dropdowns; every other
+                // preset gets the explicit 测试并试听 button. Both report into
+                // the same status line below.
+                if (ttsPresetId != "mimo") {
+                    ProviderTestButton(
+                        text = "测试并试听",
+                        enabled = ttsFormComplete && ttsTestState != TtsTestState.Testing,
+                        onClick = viewModel::testTtsVoice,
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
+                }
+                ProviderTestStatus(
+                    state = ttsTestState,
+                    testingText = "生成试听中…",
+                    okText = "连接成功，已播放试听",
+                )
+                ProviderActionRow(
+                    clearEnabled = ttsStoredConfigs.containsKey(ttsPresetId),
+                    onClear = { showClearTtsConfirm = true },
+                    saveEnabled = ttsFormComplete,
+                    onSave = { viewModel.saveTtsConfig() },
+                )
             }
         }
     }
     if (showClearTtsConfirm) {
-        AlertDialog(
-            onDismissRequest = { showClearTtsConfirm = false },
-            title = { Text("清除该服务商的配置？") },
-            text = { Text("将删除已保存的接口地址、Key 与模型，草稿恢复为预设默认值。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showClearTtsConfirm = false
-                    viewModel.clearTtsConfig()
-                }) {
-                    Text("清除", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearTtsConfirm = false }) { Text("取消") }
+        ProviderClearConfirmDialog(
+            onDismiss = { showClearTtsConfirm = false },
+            onConfirm = {
+                showClearTtsConfirm = false
+                viewModel.clearTtsConfig()
             },
         )
     }
@@ -402,18 +324,21 @@ fun VoiceSourceSettingsPage(
 
 /**
  * 设置 → 拍照识词: the BYOK OpenAI-compatible vision provider form (preset
- * picker + base URL / key / model), 测试连接 and 保存并启用.
+ * picker + base URL / key / model), 测试连接 and 保存并启用. Same widget set
+ * as 发音来源's custom-TTS form — including the 清除该服务商的配置？
+ * confirmation, which used to be a byte-identical second copy.
  */
 @Composable
 fun OcrProviderSettingsPage(
     viewModel: SettingsViewModel,
     onBack: () -> Unit,
 ) {
-    val context = LocalContext.current
     val ocrForm by viewModel.ocrForm.collectAsStateWithLifecycle()
     val ocrPresetId by viewModel.ocrPresetId.collectAsStateWithLifecycle()
     val ocrStoredConfigs by viewModel.ocrStoredConfigs.collectAsStateWithLifecycle()
+    val ocrActivePresetId by viewModel.ocrActivePresetId.collectAsStateWithLifecycle()
     val ocrTestState by viewModel.ocrTestState.collectAsStateWithLifecycle()
+    val saveMessage by viewModel.ocrSaveMessage.collectAsStateWithLifecycle()
     var showApiKey by remember { mutableStateOf(false) }
     var showClearOcrConfirm by remember { mutableStateOf(false) }
     // A seeded-but-untouched key counts as present (the secret stays stored);
@@ -424,143 +349,74 @@ fun OcrProviderSettingsPage(
         ocrForm.baseUrl.trim().isNotBlank() && ocrKeyPresent && ocrForm.model.trim().isNotBlank()
 
     SettingsSubPage(title = "拍照识词", onBack = onBack) {
+        val messages = LocalMessages.current
+        // Same consume-once save message as 发音来源: 已保存 OCR 服务配置 is
+        // only announced for a write that landed, 保存失败 otherwise.
+        LaunchedEffect(saveMessage) {
+            val message = saveMessage ?: return@LaunchedEffect
+            messages.show(message)
+            viewModel.clearOcrSaveMessage()
+        }
         SettingsSectionHeader("服务商")
         SettingsCard {
-            OCR_PROVIDER_PRESETS.forEachIndexed { index, preset ->
-                SettingsRadioRow(
-                    title = preset.label,
-                    supporting = listOfNotNull(
-                        preset.model.ifBlank { null },
-                        if (ocrStoredConfigs.containsKey(preset.id)) "已保存" else null,
-                    ).joinToString(" · ").ifEmpty { null },
-                    selected = ocrPresetId == preset.id,
-                    divider = index < OCR_PROVIDER_PRESETS.lastIndex,
-                    onClick = { viewModel.onOcrPresetChange(preset) },
-                )
-            }
+            ProviderPresetList(
+                items = OCR_PROVIDER_PRESETS.map { preset ->
+                    ProviderPresetItem(
+                        id = preset.id,
+                        title = preset.label,
+                        detail = preset.model.ifBlank { null },
+                        saved = ocrStoredConfigs.containsKey(preset.id),
+                        inUse = ocrActivePresetId == preset.id,
+                    )
+                },
+                selectedId = ocrPresetId,
+                onSelect = { id ->
+                    OCR_PROVIDER_PRESETS.firstOrNull { it.id == id }
+                        ?.let(viewModel::onOcrPresetChange)
+                },
+            )
         }
 
         SettingsSectionHeader("接口设置")
-        SettingsCard {
-            Column(
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
-            ) {
-                OutlinedTextField(
-                    value = ocrForm.baseUrl,
-                    onValueChange = viewModel::onOcrBaseUrlChange,
-                    // Named presets pin their own endpoint — only 自定义 is
-                    // hand-typed (mirrors the TTS form's locked mimo URL).
-                    readOnly = ocrPresetId != "custom",
-                    label = { Text("接口地址（Base URL）") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = if (ocrForm.apiKeyDirty) ocrForm.apiKey else "",
-                    onValueChange = viewModel::onOcrApiKeyChange,
-                    label = { Text("API Key") },
-                    supportingText = {
-                        if (!ocrForm.apiKeyDirty && ocrForm.apiKeySavedHint.isNotEmpty()) {
-                            // An empty value keeps the label docked inside the
-                            // field, which covers placeholder — so the saved-key
-                            // hint lives here where it is always visible.
-                            Text("已保存 ••••${ocrForm.apiKeySavedHint}（输入即替换）· Key 仅保存在本机")
-                        } else {
-                            Text("Key 仅保存在本机，仅用于拍照识词请求")
-                        }
-                    },
-                    singleLine = true,
-                    visualTransformation = if (showApiKey) {
-                        VisualTransformation.None
-                    } else {
-                        PasswordVisualTransformation()
-                    },
-                    trailingIcon = {
-                        IconButton(onClick = { showApiKey = !showApiKey }) {
-                            Icon(
-                                if (showApiKey) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                contentDescription = if (showApiKey) "隐藏 API Key" else "显示 API Key",
-                            )
-                        }
-                    },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                )
-                OutlinedTextField(
-                    value = ocrForm.model,
-                    onValueChange = viewModel::onOcrModelChange,
-                    label = { Text("模型") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                )
-                OutlinedButton(
-                    onClick = viewModel::testOcrConnection,
-                    enabled = ocrComplete && ocrTestState != OcrTestState.Testing,
-                    modifier = Modifier.padding(top = 16.dp),
-                ) {
-                    Text("测试连接")
-                }
-                when (val state = ocrTestState) {
-                    OcrTestState.Idle -> Unit
-                    OcrTestState.Testing -> Row(
-                        modifier = Modifier.padding(top = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(14.dp),
-                            strokeWidth = 2.dp,
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "测试中…",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    OcrTestState.Ok -> Text(
-                        "连接成功，模型 ${ocrForm.model.trim()} 可用",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                    is OcrTestState.Failed -> Text(
-                        state.message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (ocrStoredConfigs.containsKey(ocrPresetId)) {
-                        OutlinedButton(onClick = { showClearOcrConfirm = true }) {
-                            Text("清除配置")
-                        }
-                    }
-                    Button(
-                        onClick = {
-                            val saved = viewModel.saveOcrConfig()
-                            if (saved) {
-                                Toast.makeText(
-                                    context, "已保存 OCR 服务配置", Toast.LENGTH_SHORT,
-                                ).show()
-                            }
-                        },
-                        enabled = ocrComplete,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text("保存并启用")
-                    }
-                }
-            }
+        ProviderFormBody {
+            ProviderBaseUrlField(
+                value = ocrForm.baseUrl,
+                onValueChange = viewModel::onOcrBaseUrlChange,
+                // Named presets pin their own endpoint — only 自定义 is
+                // hand-typed (mirrors the TTS form's locked mimo URL).
+                readOnly = ocrPresetId != "custom",
+            )
+            ProviderApiKeyField(
+                apiKey = ocrForm.apiKey,
+                onValueChange = viewModel::onOcrApiKeyChange,
+                dirty = ocrForm.apiKeyDirty,
+                savedHint = ocrForm.apiKeySavedHint,
+                purpose = "拍照识词请求",
+                visible = showApiKey,
+                onVisibleChange = { showApiKey = it },
+            )
+            ProviderModelField(
+                value = ocrForm.model,
+                onValueChange = viewModel::onOcrModelChange,
+                readOnly = false,
+            )
+            ProviderTestButton(
+                text = "测试连接",
+                enabled = ocrComplete && ocrTestState != OcrTestState.Testing,
+                onClick = viewModel::testOcrConnection,
+                modifier = Modifier.padding(top = 16.dp),
+            )
+            ProviderTestStatus(
+                state = ocrTestState,
+                testingText = "测试中…",
+                okText = "连接成功，模型 ${ocrForm.model.trim()} 可用",
+            )
+            ProviderActionRow(
+                clearEnabled = ocrStoredConfigs.containsKey(ocrPresetId),
+                onClear = { showClearOcrConfirm = true },
+                saveEnabled = ocrComplete,
+                onSave = { viewModel.saveOcrConfig() },
+            )
         }
         Text(
             OCR_DISCLAIMER,
@@ -570,377 +426,16 @@ fun OcrProviderSettingsPage(
         )
     }
     if (showClearOcrConfirm) {
-        AlertDialog(
-            onDismissRequest = { showClearOcrConfirm = false },
-            title = { Text("清除该服务商的配置？") },
-            text = { Text("将删除已保存的接口地址、Key 与模型，草稿恢复为预设默认值。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showClearOcrConfirm = false
-                    viewModel.clearOcrConfig()
-                }) {
-                    Text("清除", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearOcrConfirm = false }) { Text("取消") }
+        ProviderClearConfirmDialog(
+            onDismiss = { showClearOcrConfirm = false },
+            onConfirm = {
+                showClearOcrConfirm = false
+                viewModel.clearOcrConfig()
             },
         )
     }
 }
-/**
- * 微软 Edge 音色 picker (shown on the 发音来源 page when the Edge source is
- * selected): the 默认音色 dropdown (zh-CN voices — bilingual, they speak
- * both Chinese and English), an 英文使用默认音色 switch (default on), and —
- * only when the switch is off — the dedicated English voice in two levels:
- * 英文地区 (美式英语/英式英语) then the voice dropdown for that region.
- * Each dropdown carries a 试听 button that synthesizes a sample in the
- * current selection without changing it (the default voice previews a
- * mixed Chinese+English sample; English voices an English sample).
- * Selections apply immediately (cache keys bind voice+rate so clips
- * regenerate) and persist as explicit shortNames: a blank stored value only
- * survives from older versions and resolves to the built-in default for
- * display.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun EdgeVoiceSection(
-    defaultVoice: String,
-    useDefaultEn: Boolean,
-    englishVoice: String,
-    previewState: TtsTestState,
-    onDefaultVoiceChange: (String) -> Unit,
-    onUseDefaultEnChange: (Boolean) -> Unit,
-    onEnglishVoiceChange: (String) -> Unit,
-    onPreview: (shortName: String, lang: String) -> Unit,
-) {
-    val zhVoices = EDGE_VOICE_CATALOG.filter { it.locale == "zh-CN" }
-    // One merged English list: 美式/英式 prefixes come from the friendly
-    // names (美式 Aria / 英式 Sonia…), so a single dropdown reads as one
-    // ordered choice list without a separate 英文地区 step.
-    val enVoices = EDGE_VOICE_CATALOG.filter { it.locale == "en-US" || it.locale == "en-GB" }
-    val effectiveEn = enVoices.firstOrNull { it.shortName == englishVoice }
-        ?: enVoices.firstOrNull { it.shortName == EDGE_VOICE_EN }
-        ?: enVoices.firstOrNull()
-    val previewing = previewState is TtsTestState.Testing
 
-    Column {
-        EdgeVoiceDropdown(
-            label = "默认音色",
-            lang = "zh",
-            voices = zhVoices,
-            selectedShortName = defaultVoice,
-            previewing = previewing,
-            onSelect = onDefaultVoiceChange,
-            onPreview = onPreview,
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "英文使用默认音色",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f),
-            )
-            Switch(
-                checked = useDefaultEn,
-                onCheckedChange = onUseDefaultEnChange,
-                modifier = Modifier.semantics { contentDescription = "英文使用默认音色" },
-            )
-        }
-        if (!useDefaultEn) {
-            EdgeVoiceDropdown(
-                label = "英文音色",
-                lang = "en",
-                voices = enVoices,
-                selectedShortName = effectiveEn?.shortName.orEmpty(),
-                defaultShortName = EDGE_VOICE_EN,
-                previewing = previewing,
-                onSelect = onEnglishVoiceChange,
-                onPreview = onPreview,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
-        // Preview status lives under the dropdowns; a transient per-voice
-        // result is shown once here (the dropdowns re-render but state is a
-        // single shared flow).
-        TtsTestStatusLine(
-            state = previewState,
-            testingText = "试听生成中…",
-            okText = "已播放试听",
-        )
-    }
-}
-/**
- * 系统语音音色 picker (shown on the 发音来源 page when 系统语音 is
- * selected): the 默认音色 dropdown (zh voices — a zh-capable voice speaks
- * both Chinese and English), an 英文使用默认音色 switch (default on) and —
- * only when the switch is off — the dedicated 英文音色 dropdown with all
- * English voices merged in one list (美式英语1/英式英语1-style labels,
- * [systemEnVoiceInfosAll]). Each dropdown carries a 试听 button. Voice
- * labels come from [SystemVoiceInfo] (a real engine name when meaningful,
- * otherwise 中文男声1/中文女声1-style naming — engines like Google expose
- * raw ids only). The current selection is shown in the field; a voice
- * switch applies immediately and persists ([SystemSpeaker] live-follows).
- * While the engine enumerates (a spinner replaces the dropdowns) the
- * selected label stays visible so the picker never blanks mid-session.
- * When the engine exposes no selectable voices the section shows nothing —
- * the source still speaks with the engine's default.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SystemVoiceSection(
-    loading: Boolean,
-    zhVoices: List<SystemVoiceInfo>?,
-    enVoices: List<SystemVoiceInfo>?,
-    useDefaultEn: Boolean,
-    zhKey: String,
-    enKey: String,
-    onZhChange: (String) -> Unit,
-    onUseDefaultEnChange: (Boolean) -> Unit,
-    onEnChange: (String) -> Unit,
-    onPreviewZh: (String) -> Unit,
-    onPreviewEn: (String) -> Unit,
-    previewState: TtsTestState,
-) {
-    val enEmpty = enVoices.isNullOrEmpty()
-    if (!loading && zhVoices.isNullOrEmpty() && enEmpty && previewState == TtsTestState.Idle) return
-
-    Column {
-        if (loading) {
-            Row(
-                modifier = Modifier.padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(14.dp),
-                    strokeWidth = 2.dp,
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "正在读取系统音色…",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        val previewing = previewState == TtsTestState.Testing
-        val zhList = zhVoices.orEmpty()
-        val zhCurrent = zhList.firstOrNull { it.key == zhKey }
-        // A single selectable voice adds nothing over 默认（引擎选择） — hide
-        // the picker entirely (e.g. MiBrain exposes one bare zh voice).
-        if (zhList.size >= 2 && !loading) {
-            SystemVoiceDropdown(
-                label = "默认音色",
-                voices = zhList,
-                selectedKey = zhKey,
-                current = zhCurrent,
-                previewing = previewing,
-                onSelect = onZhChange,
-                onPreview = onPreviewZh,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
-        // 英文使用默认音色: same switch semantics as the Edge source.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                "英文使用默认音色",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f),
-            )
-            Switch(
-                checked = useDefaultEn,
-                onCheckedChange = onUseDefaultEnChange,
-                modifier = Modifier.semantics { contentDescription = "英文使用默认音色" },
-            )
-        }
-        if (!useDefaultEn) {
-            val enList = enVoices.orEmpty()
-            val enCurrent = enList.firstOrNull { it.key == enKey }
-            // Same single-voice rule as the zh picker: one candidate is not
-            // a choice, so no dropdown (engine default already covers it).
-            if (enList.size >= 2 && !loading) {
-                SystemVoiceDropdown(
-                    label = "英文音色",
-                    voices = enList,
-                    selectedKey = enKey,
-                    current = enCurrent,
-                    previewing = previewing,
-                    onSelect = onEnChange,
-                    onPreview = onPreviewEn,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-        }
-        if (!loading) {
-            Text(
-                "默认音色未选择时使用系统默认；音色列表因系统语音引擎而异。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-        // Per-voice 试听 feedback (shared by both languages' buttons): a
-        // spinner while speaking, then 已播放试听 or the failure message.
-        TtsTestStatusLine(
-            state = previewState,
-            testingText = "试听播放中…",
-            okText = "已播放试听",
-        )
-    }
-}
-
-/**
- * One language's system-voice dropdown: a read-only outlined field showing
- * the current voice's label, opening the engine's voice menu, plus a 试听
- * button on the right. The stored key is the engine [Voice.name]; a key
- * that left the engine (voice removed) resolves to the engine default for
- * display and the next utterance falls back to the locale voice.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SystemVoiceDropdown(
-    label: String,
-    voices: List<SystemVoiceInfo>,
-    selectedKey: String,
-    current: SystemVoiceInfo?,
-    previewing: Boolean,
-    onSelect: (String) -> Unit,
-    onPreview: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = it },
-            modifier = Modifier.weight(1f),
-        ) {
-            OutlinedTextField(
-                value = current?.label ?: "默认（引擎选择）",
-                onValueChange = {},
-                readOnly = true,
-                label = { Text(label) },
-                singleLine = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                modifier = Modifier
-                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                    .fillMaxWidth(),
-            )
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-            ) {
-                DropdownMenuItem(
-                    text = { Text("默认（引擎选择）") },
-                    onClick = {
-                        onSelect("")
-                        expanded = false
-                    },
-                )
-                voices.forEach { voice ->
-                    DropdownMenuItem(
-                        text = { Text(voice.label) },
-                        onClick = {
-                            onSelect(voice.key)
-                            expanded = false
-                        },
-                    )
-                }
-            }
-        }
-        IconButton(
-            // 默认（引擎选择）is a real choice too — preview it with the
-            // empty key so the engine's own default voice speaks.
-            onClick = { onPreview(current?.key.orEmpty()) },
-            enabled = !previewing,
-        ) {
-            Icon(
-                Icons.Filled.PlayArrow,
-                contentDescription = "试听 ${current?.label ?: "默认（引擎选择）"}",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-/**
- * 小米 MiMo 音色 picker: 默认音色 dropdown (8 个官方音色, 均支持中英文),
- * 英文使用默认音色 switch (default on), 关掉后出现英文音色 dropdown
- * (同样 8 个). 每个 dropdown 右侧有试听按钮, 用当前表单配置合成
- * (默认音色试听混合句, 英文音色试听英文句) 而不改动草稿. 自定义预设
- * 不用此组件 (手填 voice id).
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun MimoVoiceSection(
-    defaultVoice: String,
-    useDefaultEn: Boolean,
-    englishVoice: String,
-    previewing: Boolean,
-    previewEnabled: Boolean,
-    onDefaultVoiceChange: (String) -> Unit,
-    onUseDefaultEnChange: (Boolean) -> Unit,
-    onEnglishVoiceChange: (String) -> Unit,
-    onPreview: (voice: String, english: Boolean) -> Unit,
-) {
-    MimoVoiceDropdown(
-        label = "默认音色",
-        selectedVoice = defaultVoice.ifBlank { "冰糖" },
-        previewing = previewing,
-        previewEnabled = previewEnabled,
-        onSelect = onDefaultVoiceChange,
-        onPreview = { onPreview(it, false) },
-        modifier = Modifier.padding(top = 4.dp),
-    )
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            "英文使用默认音色",
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-        )
-        Switch(
-            checked = useDefaultEn,
-            onCheckedChange = onUseDefaultEnChange,
-            modifier = Modifier.semantics { contentDescription = "英文使用默认音色" },
-        )
-    }
-    if (!useDefaultEn) {
-        MimoVoiceDropdown(
-            label = "英文音色",
-            selectedVoice = englishVoice.ifBlank { "Chloe" },
-            previewing = previewing,
-            previewEnabled = previewEnabled,
-            onSelect = onEnglishVoiceChange,
-            onPreview = { onPreview(it, true) },
-            modifier = Modifier.padding(top = 4.dp),
-        )
-    }
-    Text(
-        "8 个官方音色均支持中英文；修改音色或语速后会重新生成发音。",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 2.dp),
-    )
-}
 /**
  * 接口类型 dropdown (TTS API form, 自定义 preset only): /audio/speech vs
  * Chat Completions. The menu descriptions carry the old radio supporting
@@ -1016,201 +511,6 @@ private fun TtsApiKindDropdown(
 }
 
 /**
- * One MiMo voice dropdown: a read-only outlined field opening the 8-voice
- * menu, plus a 试听 button synthesizing a sample in the current selection.
- * Unknown stored ids (hand-typed before the dropdown era) fall back to the
- * first voice for display but keep the stored value until reselected.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun MimoVoiceDropdown(
-    label: String,
-    selectedVoice: String,
-    previewing: Boolean,
-    previewEnabled: Boolean,
-    onSelect: (String) -> Unit,
-    onPreview: (voice: String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val effective = MIMO_VOICES.firstOrNull { it.first == selectedVoice }
-        ?: MIMO_VOICES.first()
-
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = it },
-            modifier = Modifier.weight(1f),
-        ) {
-            OutlinedTextField(
-                value = effective.second,
-                onValueChange = {},
-                readOnly = true,
-                label = { Text(label) },
-                singleLine = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                modifier = Modifier
-                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                    .fillMaxWidth(),
-            )
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-            ) {
-                MIMO_VOICES.forEach { (id, display) ->
-                    DropdownMenuItem(
-                        text = { Text(display) },
-                        onClick = {
-                            onSelect(id)
-                            expanded = false
-                        },
-                    )
-                }
-            }
-        }
-        IconButton(
-            onClick = { onPreview(effective.first) },
-            enabled = previewEnabled && !previewing,
-        ) {
-            Icon(
-                Icons.Filled.PlayArrow,
-                contentDescription = "试听 ${effective.second}",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-/**
- * One language's voice dropdown (TTS API form style): a read-only outlined
- * field opening the voice menu, plus a 试听 button on the right that plays a
- * sample in the current selection. Selections persist as explicit shortNames
- * (a blank stored value only survives from older versions and resolves to
- * the built-in default for display).
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun EdgeVoiceDropdown(
-    label: String,
-    lang: String,
-    voices: List<EdgeVoice>,
-    selectedShortName: String,
-    previewing: Boolean,
-    onSelect: (String) -> Unit,
-    onPreview: (shortName: String, lang: String) -> Unit,
-    modifier: Modifier = Modifier,
-    defaultShortName: String = edgeDefaultVoiceFor(lang),
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val effective = voices.firstOrNull { it.shortName == selectedShortName }
-        ?: voices.firstOrNull { it.shortName == defaultShortName }
-        ?: voices.firstOrNull()
-
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ExposedDropdownMenuBox(
-            expanded = expanded,
-            onExpandedChange = { expanded = it },
-            modifier = Modifier.weight(1f),
-        ) {
-            OutlinedTextField(
-                value = effective?.friendlyName ?: "",
-                onValueChange = {},
-                readOnly = true,
-                label = { Text(label) },
-                singleLine = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                modifier = Modifier
-                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                    .fillMaxWidth(),
-            )
-            ExposedDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-            ) {
-                voices.forEach { voice ->
-                    DropdownMenuItem(
-                        text = { Text(voice.friendlyName) },
-                        onClick = {
-                            // Store the explicit shortName: a blank cannot
-                            // remember its region (en-GB Sonia blanked
-                            // reads back as US and bounces the picker).
-                            onSelect(voice.shortName)
-                            expanded = false
-                        },
-                    )
-                }
-            }
-        }
-        IconButton(
-            onClick = {
-                val voice = effective
-                if (voice != null) onPreview(voice.shortName, lang)
-            },
-            enabled = !previewing && effective != null,
-        ) {
-            Icon(
-                Icons.Filled.PlayArrow,
-                contentDescription = "试听 ${effective?.friendlyName ?: label}",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-/**
- * One shared Testing/Ok/Failed status line for every TTS 试听 button
- * (MiMo/Edge dropdown previews, the custom-form 测试并试听, and the
- * 有道/系统 preview sections). The OCR form keeps its own block:
- * [OcrTestState] is a different type and its copy mentions the model name.
- */
-@Composable
-private fun TtsTestStatusLine(
-    state: TtsTestState,
-    testingText: String,
-    okText: String,
-) {
-    val lineModifier = Modifier.padding(top = 8.dp)
-    when (state) {
-        TtsTestState.Idle -> Unit
-        TtsTestState.Testing -> Row(
-            modifier = lineModifier,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(14.dp),
-                strokeWidth = 2.dp,
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                testingText,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        TtsTestState.Ok -> Text(
-            okText,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = lineModifier,
-        )
-        is TtsTestState.Failed -> Text(
-            state.message,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error,
-            modifier = lineModifier,
-        )
-    }
-}
-
-/**
  * 测试并试听 button + status line for the 有道词典 / 系统语音 sources (no
  * config form to test — just plays the word samples in that source's voice).
  */
@@ -1222,13 +522,12 @@ private fun SourcePreviewSection(
     onPreview: () -> Unit,
 ) {
     Column {
-        OutlinedButton(
-            onClick = onPreview,
+        ProviderTestButton(
+            text = "测试并试听",
             enabled = state != TtsTestState.Testing,
-        ) {
-            Text("测试并试听")
-        }
-        TtsTestStatusLine(
+            onClick = onPreview,
+        )
+        ProviderTestStatus(
             state = state,
             testingText = testingText,
             okText = okText,

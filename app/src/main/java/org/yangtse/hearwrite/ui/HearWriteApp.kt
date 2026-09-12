@@ -132,10 +132,14 @@ fun HearWriteApp() {
             )
             LibraryPreviewScreen(
                 onLoadToDraft = { lines ->
-                    // Stage the import before leaving; HomeScreen consumes it
-                    // on return and lands in 展示态 with the list loaded.
+                    // Stage only — do NOT navigate. The list is handed to
+                    // Home's draft and lands in the editor on the next Home
+                    // entry (the bus is consumed there), so the user keeps
+                    // their place in the 词库 instead of being thrown back to
+                    // Home and having to re-walk four taps (B8). The preview
+                    // screen confirms in place; navigating here would destroy
+                    // that confirmation with the screen.
                     app.requestDraftImport(lines.joinToString("\n"))
-                    navController.popBackStack(Routes.HOME, false)
                 },
                 onStartDictation = { lines ->
                     startSession(lines, previewSource)

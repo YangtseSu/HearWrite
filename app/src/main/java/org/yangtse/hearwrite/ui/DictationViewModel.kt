@@ -581,9 +581,9 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     /** True when the last sheet reached the network — 重试 can re-run it. */
     val gradeRetryable: StateFlow<Boolean> = _gradeRetryable.asStateFlow()
 
-    private val _gradeToast = MutableStateFlow<String?>(null)
-    /** One-shot confirmation text, consumed by the screen ([clearGradeToast]). */
-    val gradeToast: StateFlow<String?> = _gradeToast.asStateFlow()
+    private val _gradeNotice = MutableStateFlow<String?>(null)
+    /** One-shot confirmation text, consumed by the screen ([clearGradeNotice]). */
+    val gradeNotice: StateFlow<String?> = _gradeNotice.asStateFlow()
 
     /**
      * Open the 拍照批改 pane. The recognition language follows this run's own
@@ -620,8 +620,8 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         _cropBitmap.value = null
     }
 
-    fun clearGradeToast() {
-        _gradeToast.value = null
+    fun clearGradeNotice() {
+        _gradeNotice.value = null
     }
 
     /**
@@ -768,7 +768,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
             .mapNotNull { it.expected }
             .distinct()
         if (words.isEmpty()) {
-            _gradeToast.value = "没有勾选任何错词"
+            _gradeNotice.value = "没有勾选任何错词"
             return
         }
         val fresh = words.filter { it !in runWrongWords }
@@ -786,7 +786,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
         }
-        _gradeToast.value = "已记入错词本 ${words.size} 个词"
+        _gradeNotice.value = "已记入错词本 ${words.size} 个词"
         closeGradePane()
     }
 

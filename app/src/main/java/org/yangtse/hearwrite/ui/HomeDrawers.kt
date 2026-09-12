@@ -1,7 +1,5 @@
 package org.yangtse.hearwrite.ui
 
-import android.content.Context
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,27 +29,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.yangtse.hearwrite.data.HistoryEntry
 import org.yangtse.hearwrite.domain.parseWords
 import org.yangtse.hearwrite.ui.theme.hearWriteSemantics
-import java.time.Instant
-import java.time.LocalDateTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 private val SHEET_LIST_MAX_HEIGHT = 440.dp
-
-private fun toast(context: Context, message: String) {
-    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-}
-
-private fun formatStamp(epochMs: Long): String {
-    val time = LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMs), ZoneId.systemDefault())
-    return DateTimeFormatter.ofPattern("MM-dd HH:mm").format(time)
-}
 
 private fun wordCount(text: String): Int = parseWords(text).size
 
@@ -71,61 +55,70 @@ fun HistorySheet(
     onClear: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val context = LocalContext.current
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 20.dp, end = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "历史记录（${entries.size}）",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                if (entries.isNotEmpty()) {
-                    TextButton(onClick = onClear) {
-                        Text("清空", color = MaterialTheme.colorScheme.error)
+        // Messages raised inside the sheet must be hosted by the sheet: a
+        // ModalBottomSheet is its own window and would cover a screen-level host.
+        MessageHostScope {
+            val messages = LocalMessages.current
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "历史记录（${entries.size}）",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (entries.isNotEmpty()) {
+                        TextButton(onClick = onClear) {
+                            Text("清空", color = MaterialTheme.colorScheme.error)
+                        }
                     }
                 }
-            }
-            if (entries.isEmpty()) {
-                EmptyHint("暂无历史记录")
-            } else {
-                LazyColumn(modifier = Modifier.heightIn(max = SHEET_LIST_MAX_HEIGHT)) {
-                    items(entries, key = { it.id }) { entry ->
-                        val text = entry.enrichedText ?: entry.text
-                        val favorited = entry.id in favoriteIds
-                        ListRow(
-                            title = entry.text.lineSequence().first { it.isNotBlank() }.trim(),
-                            subtitle = "${wordCount(entry.text)} 词 · ${formatStamp(entry.createdAt)}",
-                            onClick = {
-                                onApply(text)
-                                toast(context, "已载入历史记录")
-                            },
-                            trailing = {
-                                IconButton(
-                                    onClick = { onToggleFavorite(entry.id) },
-                                    modifier = Modifier.size(48.dp),
-                                ) {
-                                    Icon(
-                                        if (favorited) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                        contentDescription = if (favorited) "取消收藏" else "收藏",
-                                        tint = if (favorited) hearWriteSemantics.star else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                IconButton(onClick = { onDelete(entry.id) }) {
-                                    Icon(
-                                        Icons.Filled.Delete,
-                                        contentDescription = "删除",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            },
-                        )
-                        HorizontalDivider()
+                if (entries.isEmpty()) {
+                    EmptyHint("暂无历史记录")
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = SHEET_LIST_MAX_HEIGHT)) {
+                        items(entries, key = { it.id }) { entry ->
+                            val text = entry.enrichedText ?: entry.text
+                            val favorited = entry.id in favoriteIds
+                            ListRow(
+                                title = entry.text.lineSequence().first { it.isNotBlank() }.trim(),
+                                subtitle = "${wordCount(entry.text)} 词 · ${formatStamp(entry.createdAt)}",
+                                onClick = {
+                                    onApply(text)
+                                    messages.show("已载入历史记录")
+                                },
+                                trailing = {
+                                    IconButton(
+                                        onClick = { onToggleFavorite(entry.id) },
+                                        modifier = Modifier.size(48.dp),
+                                    ) {
+                                        Icon(
+                                            if (favorited) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                            contentDescription = if (favorited) "取消收藏" else "收藏",
+                                            tint = if (favorited) hearWriteSemantics.star else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            onDelete(entry.id)
+                                            messages.show("已删除")
+                                        },
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Delete,
+                                            contentDescription = "删除",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                },
+                            )
+                            HorizontalDivider()
+                        }
                     }
                 }
             }
@@ -146,37 +139,40 @@ fun FavoritesSheet(
     onToggleFavorite: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val context = LocalContext.current
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                "收藏（${items.size}）",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 4.dp),
-            )
-            if (items.isEmpty()) {
-                EmptyHint("暂无收藏")
-            } else {
-                LazyColumn(modifier = Modifier.heightIn(max = SHEET_LIST_MAX_HEIGHT)) {
-                    items(items, key = { it.id }) { item ->
-                        ListRow(
-                            title = item.title,
-                            subtitle = item.subtitle,
-                            onClick = {
-                                onApply(item.linesText)
-                                toast(context, "已载入收藏")
-                            },
-                            trailing = {
-                                IconButton(onClick = { onToggleFavorite(item.id) }) {
-                                    Icon(
-                                        Icons.Filled.Star,
-                                        contentDescription = "取消收藏",
-                                        tint = hearWriteSemantics.star,
-                                    )
-                                }
-                            },
-                        )
-                        HorizontalDivider()
+        // Same window-routing reason as [HistorySheet]: the sheet hosts its own messages.
+        MessageHostScope {
+            val messages = LocalMessages.current
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "收藏（${items.size}）",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 4.dp),
+                )
+                if (items.isEmpty()) {
+                    EmptyHint("暂无收藏")
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = SHEET_LIST_MAX_HEIGHT)) {
+                        items(items, key = { it.id }) { item ->
+                            ListRow(
+                                title = item.title,
+                                subtitle = item.subtitle,
+                                onClick = {
+                                    onApply(item.linesText)
+                                    messages.show("已载入收藏")
+                                },
+                                trailing = {
+                                    IconButton(onClick = { onToggleFavorite(item.id) }) {
+                                        Icon(
+                                            Icons.Filled.Star,
+                                            contentDescription = "取消收藏",
+                                            tint = hearWriteSemantics.star,
+                                        )
+                                    }
+                                },
+                            )
+                            HorizontalDivider()
+                        }
                     }
                 }
             }
@@ -202,98 +198,105 @@ fun WrongWordsSheet(
 ) {
     val total = groups.sumOf { it.marks.size }
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 20.dp, end = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "错词本（$total）",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                if (total > 0) {
-                    TextButton(onClick = onClear) {
-                        Text("清空", color = MaterialTheme.colorScheme.error)
+        // Same window-routing reason as [HistorySheet]: the sheet hosts its own messages.
+        MessageHostScope {
+            val messages = LocalMessages.current
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "错词本（$total）",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (total > 0) {
+                        TextButton(onClick = onClear) {
+                            Text("清空", color = MaterialTheme.colorScheme.error)
+                        }
                     }
                 }
-            }
-            if (total == 0) {
-                EmptyHint("暂无错词")
-            } else {
-                LazyColumn(modifier = Modifier.heightIn(max = SHEET_LIST_MAX_HEIGHT)) {
-                    groups.forEach { group ->
-                        // Source section header: resolved label (未知来源 for
-                        // manual / orphaned sources) + wrong-count; built-in
-                        // sources carry a jump back to their list preview.
-                        item(key = "src_${group.sourceId.orEmpty()}") {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                if (total == 0) {
+                    EmptyHint("暂无错词")
+                } else {
+                    LazyColumn(modifier = Modifier.heightIn(max = SHEET_LIST_MAX_HEIGHT)) {
+                        groups.forEach { group ->
+                            // Source section header: resolved label (未知来源 for
+                            // manual / orphaned sources) + wrong-count; built-in
+                            // sources carry a jump back to their list preview.
+                            item(key = "src_${group.sourceId.orEmpty()}") {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                        )
+                                        .padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        group.sourceTitle ?: "未知来源",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f),
                                     )
-                                    .padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    group.sourceTitle ?: "未知来源",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                Text(
-                                    "×${group.marks.size}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                if (group.jumpCategory != null && group.jumpLabel != null) {
-                                    TextButton(
-                                        onClick = { onJumpToSource(group.jumpCategory, group.jumpLabel) },
-                                        modifier = Modifier.height(36.dp),
-                                    ) {
-                                        Text("查看词表")
+                                    Text(
+                                        "×${group.marks.size}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    if (group.jumpCategory != null && group.jumpLabel != null) {
+                                        TextButton(
+                                            onClick = { onJumpToSource(group.jumpCategory, group.jumpLabel) },
+                                            modifier = Modifier.height(36.dp),
+                                        ) {
+                                            Text("查看词表")
+                                        }
                                     }
                                 }
                             }
-                        }
-                        items(group.marks, key = { it.word }) { mark ->
-                            ListRow(
-                                title = mark.word,
-                                subtitle = buildString {
-                                    append("错 ${mark.errorCount} 次 · 最近 ")
-                                    append(formatStamp(mark.lastWrongAt))
-                                },
-                                trailing = {
-                                    IconButton(
-                                        onClick = { onDelete(mark.word) },
-                                        modifier = Modifier.size(48.dp),
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.Delete,
-                                            contentDescription = "移除错词",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                },
-                            )
-                            HorizontalDivider()
+                            items(group.marks, key = { it.word }) { mark ->
+                                ListRow(
+                                    title = mark.word,
+                                    subtitle = buildString {
+                                        append("错 ${mark.errorCount} 次 · 最近 ")
+                                        append(formatStamp(mark.lastWrongAt))
+                                    },
+                                    trailing = {
+                                        IconButton(
+                                            onClick = {
+                                                onDelete(mark.word)
+                                                messages.show("已移除")
+                                            },
+                                            modifier = Modifier.size(48.dp),
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.Delete,
+                                                contentDescription = "移除错词",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    },
+                                )
+                                HorizontalDivider()
+                            }
                         }
                     }
-                }
-                Button(
-                    onClick = onDictate,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 16.dp),
-                ) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("听写错词（$total 词）")
+                    Button(
+                        onClick = onDictate,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 16.dp),
+                    ) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("听写错词（$total 词）")
+                    }
                 }
             }
         }

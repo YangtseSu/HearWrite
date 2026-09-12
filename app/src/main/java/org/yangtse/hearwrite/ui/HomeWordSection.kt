@@ -45,11 +45,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.yangtse.hearwrite.domain.glossNeedsExpansion
 import org.yangtse.hearwrite.domain.parseWordEntries
+import org.yangtse.hearwrite.ui.theme.wordHead
 
 /** 示例 content: English words with gloss columns (朗读释义 demo-able). */
 private const val SAMPLE_EN = "apple | n. | 苹果\nbanana | n. | 香蕉\nschool | n. | 学校\nbook | n. | 书\ncar | n. | 汽车"
@@ -333,8 +333,7 @@ private fun WordDisplayList(
                     ) {
                         Text(
                             text = entry.word,
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.wordHead,
                             color = if (isCursor) {
                                 MaterialTheme.colorScheme.primary
                             } else {

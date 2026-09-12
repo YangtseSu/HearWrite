@@ -1,7 +1,5 @@
 package org.yangtse.hearwrite.ui
 
-import android.content.Context
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -58,6 +56,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -69,7 +68,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import org.yangtse.hearwrite.ui.theme.hearWriteSemantics
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -88,16 +86,8 @@ import org.yangtse.hearwrite.domain.PlayState
 import org.yangtse.hearwrite.domain.WordEntry
 import org.yangtse.hearwrite.domain.isCjkEntry
 import org.yangtse.hearwrite.domain.parseWordLine
-import java.util.Locale
 import kotlin.math.ceil
 
-
-private fun formatElapsed(sec: Long): String =
-    if (sec >= 60) "${sec / 60} 分 ${sec % 60} 秒" else "$sec 秒"
-
-private fun toast(context: Context, message: String) {
-    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-}
 
 /**
  * The dictation surface: countdown ring with the current word hidden by
@@ -168,47 +158,56 @@ fun DictationScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("听写") },
-                navigationIcon = {
-                    IconButton(onClick = { requestStop() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "退出听写")
+    // The screen-level confirmation channel (replacing the floating system
+    // pop-ups app-wide): Scaffold hosts it above the bottom content and applies
+    // navigation-bar/IME insets, so a message lands where the tap happened
+    // instead of floating over the window.
+    val messages = rememberMessageController()
+
+    CompositionLocalProvider(LocalMessages provides messages) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("听写") },
+                    navigationIcon = {
+                        IconButton(onClick = { requestStop() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "退出听写")
+                        }
+                    },
+                    actions = { StatusPill(ui) },
+                )
+            },
+            snackbarHost = { MessageHost(messages) },
+        ) { innerPadding ->
+            when {
+                !ui.ready -> Box(
+                    modifier = Modifier.fillMaxSize().padding(innerPadding),
+                    contentAlignment = Alignment.Center,
+                ) { CircularProgressIndicator() }
+
+                ui.total == 0 -> Box(
+                    modifier = Modifier.fillMaxSize().padding(innerPadding),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("没有可听写的词表")
+                        TextButton(onClick = onClose) { Text("返回") }
                     }
-                },
-                actions = { StatusPill(ui) },
-            )
-        },
-    ) { innerPadding ->
-        when {
-            !ui.ready -> Box(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
-                contentAlignment = Alignment.Center,
-            ) { CircularProgressIndicator() }
-
-            ui.total == 0 -> Box(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("没有可听写的词表")
-                    TextButton(onClick = onClose) { Text("返回") }
                 }
-            }
 
-            else -> DictationContent(
-                ui = ui,
-                runLines = runLines,
-                viewModel = viewModel,
-                showWord = showWord,
-                onToggleWord = { showWord = !showWord },
-                metaExpanded = metaExpanded,
-                onToggleMeta = { metaExpanded = !metaExpanded },
-                onRequestStop = { requestStop() },
-                onClose = onClose,
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
-            )
+                else -> DictationContent(
+                    ui = ui,
+                    runLines = runLines,
+                    viewModel = viewModel,
+                    showWord = showWord,
+                    onToggleWord = { showWord = !showWord },
+                    metaExpanded = metaExpanded,
+                    onToggleMeta = { metaExpanded = !metaExpanded },
+                    onRequestStop = { requestStop() },
+                    onClose = onClose,
+                    modifier = Modifier.fillMaxSize().padding(innerPadding),
+                )
+            }
         }
     }
 }
@@ -248,7 +247,7 @@ private fun DictationContent(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
+    val messages = LocalMessages.current
     // ---- 拍照批改 (Roadmap #11) --------------------------------------------
     val gradePane by viewModel.gradePane.collectAsStateWithLifecycle()
     val gradeResult by viewModel.gradeResult.collectAsStateWithLifecycle()
@@ -257,12 +256,12 @@ private fun DictationContent(
     val gradePhase by viewModel.gradePhase.collectAsStateWithLifecycle()
     val gradeError by viewModel.gradeError.collectAsStateWithLifecycle()
     val gradeRetryable by viewModel.gradeRetryable.collectAsStateWithLifecycle()
-    val gradeToast by viewModel.gradeToast.collectAsStateWithLifecycle()
+    val gradeNotice by viewModel.gradeNotice.collectAsStateWithLifecycle()
     val cropBitmap by viewModel.cropBitmap.collectAsStateWithLifecycle()
     val cropLoading by viewModel.cropLoading.collectAsStateWithLifecycle()
     val gradePicker = rememberOcrImagePicker(
         onPicked = { uri -> viewModel.startCrop(uri) },
-        onError = { message -> toast(context, message) },
+        onError = { message -> messages.show(message) },
     )
     // The crop overlay owns system back while it is up (back leaves the region
     // selection, not the dictation): this handler is registered after the
@@ -276,10 +275,10 @@ private fun DictationContent(
         viewModel.closeGradePane()
     }
     // One-shot confirmation of a 拍照批改 write (记入错词本 N 个词).
-    LaunchedEffect(gradeToast) {
-        gradeToast?.let { message ->
-            toast(context, message)
-            viewModel.clearGradeToast()
+    LaunchedEffect(gradeNotice) {
+        gradeNotice?.let { message ->
+            messages.show(message)
+            viewModel.clearGradeNotice()
         }
     }
 
@@ -439,7 +438,7 @@ private fun FinishCard(
     onGrade: () -> Unit,
     onClose: () -> Unit,
 ) {
-    val context = LocalContext.current
+    val messages = LocalMessages.current
     val wrong = ui.wrongWords
     var clearWrongConfirm by remember { mutableStateOf(false) }
     Column(
@@ -462,7 +461,7 @@ private fun FinishCard(
             modifier = Modifier.padding(top = 8.dp),
         )
         Text(
-            "共 ${ui.total} 词 · 用时 ${ui.elapsedSec?.let(::formatElapsed) ?: "—"}",
+            "共 ${ui.total} 词 · 用时 ${ui.elapsedSec?.let(::formatDuration) ?: "—"}",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp),
@@ -512,7 +511,7 @@ private fun FinishCard(
             OutlinedButton(
                 onClick = {
                     val n = onExportWrong()
-                    if (n > 0) toast(context, "已复制 $n 个错词到剪贴板")
+                    if (n > 0) messages.show("已复制 $n 个错词到剪贴板")
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -538,7 +537,7 @@ private fun FinishCard(
                     AssistChip(
                         onClick = {
                             onRemoveWrong(word)
-                            toast(context, "已移除 $word")
+                            messages.show("已移除 $word")
                         },
                         label = { Text(word) },
                         trailingIcon = {
@@ -565,7 +564,7 @@ private fun FinishCard(
                         TextButton(onClick = {
                             clearWrongConfirm = false
                             onClearWrong()
-                            toast(context, "已清空错词本")
+                            messages.show("已清空错词本")
                         }) { Text("清空", color = MaterialTheme.colorScheme.error) }
                     },
                     dismissButton = {
@@ -695,6 +694,15 @@ private fun DialCenter(
     val borderColor = if (markedFlash) flashColor else MaterialTheme.colorScheme.outlineVariant
     val meaning = entry?.meaning
     val meaningLong = (meaning?.length ?: 0) > 26
+    // The vermilion marks Chinese-script identity only (Color.kt): a Chinese
+    // single char's `pos` line is its pinyin and its `meaning` line is the
+    // 组词, so both carry the accent; an English entry's POS/释义 stay
+    // onSurfaceVariant — the accent is never a part-of-speech label.
+    val hintColor = if (isCjk) {
+        hearWriteSemantics.cjkAccent
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
 
     Surface(
         modifier = Modifier
@@ -724,7 +732,7 @@ private fun DialCenter(
                     Text(
                         pos,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = hintColor,
                         modifier = Modifier.padding(top = 6.dp),
                     )
                 }
@@ -735,7 +743,7 @@ private fun DialCenter(
                         textAlign = TextAlign.Center,
                         maxLines = if (metaExpanded) Int.MAX_VALUE else 2,
                         overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = hintColor,
                         modifier = Modifier.padding(top = 2.dp),
                     )
                     if (meaningLong) {
@@ -809,10 +817,9 @@ private fun PlaybackPanel(
                     Icon(Icons.Filled.Remove, contentDescription = "减少间隔")
                 }
                 Text(
-                    String.format(Locale.ROOT, "%.1fs", ui.intervalSec),
+                    formatInterval(ui.intervalSec),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.semantics { contentDescription = "听写间隔秒数" },
                 )
                 IconButton(
                     onClick = {

@@ -1,6 +1,7 @@
 package org.yangtse.hearwrite.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,8 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.ui.theme.hearWriteSemantics
 import androidx.compose.ui.unit.dp
@@ -94,16 +94,29 @@ fun LibraryListsScreen(
             }
         },
     ) { innerPadding ->
-        when (val current = lists) {
-            null -> Column(
+        val current = lists
+        when {
+            current == null -> Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
                     .padding(32.dp),
-                verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+                verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 CircularProgressIndicator()
+            }
+            // An empty asset scan would otherwise be a blank screen with no
+            // explanation (every sibling list has an EmptyHint).
+            current.isEmpty() -> Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(32.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                EmptyHint("该分类暂无词表")
             }
             else -> LazyColumn(
                 modifier = Modifier
@@ -115,19 +128,26 @@ fun LibraryListsScreen(
                     val ticked = list.id in selectedIds
                     ListRow(
                         title = list.label,
-                        subtitle = wordCounts[list.id]?.let { "$it 词" },
-                        onClick = {
-                            if (selecting) selection.toggle(list.id) else onOpenList(list.label)
+                        // The count arrives per list, asynchronously: the
+                        // placeholder keeps the row height from popping in
+                        // (same treatment as the preview's —— meta line).
+                        subtitle = wordCounts[list.id]?.let { "$it 词" } ?: "——",
+                        // 多选 flips the row's meaning: it ticks instead of
+                        // opening the preview. The toggle owns the state and
+                        // the hit target — see [RowToggle].
+                        onClick = if (selecting) null else ({ onOpenList(list.label) }),
+                        toggle = if (selecting) {
+                            RowToggle(
+                                checked = ticked,
+                                role = Role.Checkbox,
+                                onToggle = { selection.toggle(list.id) },
+                            )
+                        } else {
+                            null
                         },
                         trailing = {
                             if (selecting) {
-                                Checkbox(
-                                    checked = ticked,
-                                    onCheckedChange = { selection.toggle(list.id) },
-                                    modifier = Modifier.semantics {
-                                        contentDescription = "选择词表 ${list.label}"
-                                    },
-                                )
+                                Checkbox(checked = ticked, onCheckedChange = null)
                             } else {
                                 IconButton(onClick = { viewModel.toggleFavorite(list.id) }) {
                                     Icon(

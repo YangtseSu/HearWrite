@@ -424,8 +424,43 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 
 **门禁**：`testDebugUnitTest` 327/327 绿；`lintDebug` 仅剩 6 条改动前的 `GradleDependency`（版本目录有新版本），无新增告警。
 
-### 阶段 B — 一致性收口（9 项，一次做完收益最大）
-`B1`（字阶，覆盖 85% 文字）+ `B2`（Snackbar 取代全部 Toast）+ `B3`（`toggleable` 统一）+ `B4`（insets 去重）+ `B5`（单位/格式化合一）+ `B6`（**换色 + 接上朱砂与 successContainer，`isCjk` 转为实际判据**，见 §0.1 D-2/D-3）+ `B7`（success token + `heading()`）+ `B8`（词库交互一致性）+ `B9`（provider 表单抽公共件）。
+### 阶段 B — 一致性收口（9 项）—— ✅ 已完成
+`B1`–`B9`（§2）。净 **−347 行**（+1434 / −1781）——收口主要是删除：两套 provider 表单合一、15 处 `Toast` 归零、格式化器与字阶各归一。
+
+**新增的共享件**（后续阶段复用，勿再自造第二套）：
+- `ui/theme/Type.kt`：补齐全部 12 个字阶（原先只定义 5 个 → 85% 文字落到 M3 拉丁默认值），并新增 `Typography.wordHead` token（3 处手拼的"行词头"合一）。
+- `ui/Format.kt`：`formatInterval` / `formatDuration` / `formatDay` / `formatStamp` / `formatPercent` 单一来源（`formatStamp` 非当年时自动补年份）。
+- `ui/Feedback.kt`：一次性确认通道。`ModalBottomSheet` / `AlertDialog` 是 `ComponentDialog`（**独立窗口**），屏幕级 `SnackbarHost` 会被其遮罩盖住，故提供 `MessageHostScope` 让面板内的消息落在面板自己的窗口里。
+- `ui/ListRows.kt` + `SettingsComponents.kt`：`RowToggle(checked, role, onToggle)` —— 整行即控件、指示器纯视觉（单焦点停靠点）。
+- `ui/SettingsProviderForms.kt`（771 行）：两套 provider 表单的全部公共件。
+
+**验收证据（2026-09-12，模拟器 `pixel_9a_api37`）**：
+
+| 项 | 断言 | 结果 |
+|---|---|---|
+| B1 | 12 个字阶全部有定义；`wordHead` 被 3 处调用 | ✅ 源码 |
+| B2 | 全仓 `Toast.makeText` **0** 处（基线 15）；面板内消息落在面板窗口 | ✅ 设备 |
+| B3 | 开关行 `checkable=true` 且承载状态、`Switch` 不再是独立节点；点**标签**即翻转（听写间隔/提示音 均验证） | ✅ 设备 |
+| B4 | 首页内容列不再重复计导航栏；`开始听写` bottom=2255 < 导航栏 2361 | ✅ 设备 |
+| B5 | 间隔读数 `5.0s` → **`5 秒`**；时长/日期走单一格式化器 | ✅ 设备 |
+| B6 | 朱砂**换色并接线**：暗色 `#DB9A6B` 由 **0 → 661 px**（表盘拼音+组词行）；亮色 `#9C4A22` **0 → 601 px**；英文场次朱砂 **0 px**（POS/释义仍 `onSurfaceVariant`，`Color.kt` 硬规则成立） | ✅ 像素采样 |
+| B7 | `SettingsSectionHeader` 带 `heading()`；provider 状态块用 `hearWriteSemantics.success` | ✅ 源码 |
+| B8 | 搜索同一词表不再两处出现；选中行整行 `checkable` 且勾选随行；`载入草稿` **不再把用户抛出浏览上下文**（停留在预览页并就地提示，清单在下次进首页时落到编辑器） | ✅ 设备 |
+| B9 | 两套表单抽公共件（`SettingsProviderPages.kt` 1237 → 537 行）；清除对话框不再重复；TTS 不再"保存失败也报成功"；TTS 补 base URL 校验；`正在使用` 与实际生效配置对齐 | ✅ 源码 + 编译 |
+
+**过程中发现并修掉的既有缺陷**（超出审计清单，均为真 bug）：
+- **OCR 保存同样会误报成功**：原 `Boolean` 返回值由 `viewModelScope.launch{…}` 立即返回 `true`，DataStore 写入尚未落定——即"已加固"的 OCR 路径其实一直在撒谎。两套 provider 现各自改用一次性 `StateFlow` 报告结果（镜像仓库既有的 `providerKeyWarning` 惯例），失败时报 `保存失败，请重试`。
+- **`DictationViewModel.gradeToast` 是遗留命名**：Toast 换成 Snackbar 后该标识符仍在（13 处），已重命名为 `gradeNotice` / `clearGradeNotice`。
+
+**两处刻意的行为变更**（审计要求的一致性统一，非回归）：
+- 超过 1 小时的场次在成绩卡也显示 `1 小时 15 分`（此前成绩卡 `75 分 30 秒`、统计页 `1 小时 15 分`，一屏两制）。
+- 记录时间戳在**非当年**时补年份（错词本/听写记录无上限，否则两年前的记录与昨天的无法区分）。
+
+**未能闭环项（如实记录）**：
+- **B4 的 IME 路径未在设备上验证**：该 AVD 为硬件键盘配置，软键盘不渲染（`mInputShown=true` 但无键盘可截），故"键盘弹起时内容列不再重复计导航栏"只有代码级确认。
+- `A10`（阶段 A）的忙碌态瞬态仍未能采样：`uiautomator dump` 延迟 ≈2 s 长于富化窗口。
+
+**门禁**：`testDebugUnitTest` 327/327 绿；`lintDebug` 仅剩 6 条改动前的 `GradleDependency`，无新增告警。
 
 ### 阶段 C — 状态覆盖与内容层
 `C1`（缺失状态：首页草稿加载态、听写准备态、语音失败提示、OCR 可取消、空态补齐）→ `C2`（听写页：词语展开、表盘圆裁切、暂停文案、满分成绩、错词不可撤销、错词本 chip 惰性化）→ `C3`（统计页：柱子下限、列表惰性/上限、错误态、图表可读）→ `C4`（抽词行 `FlowRow`、摘要固定、OCR 语言持久化、覆盖草稿前确认、错误卡加 `去设置`、裁剪把手与缩放）→ `C6`（`WindowSizeClass`、表盘随约束、旋转不丢状态）。
@@ -442,34 +477,49 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 
 ---
 
-## 6. 验证方案（不依赖截图）
+## 6. 验证方案
 
-截图被排除后，验证走**布局树 + 语义树**；这恰好也是无障碍的验收手段。
+最初排除截图，是为了避开"让视觉模型读图再下结论"的误判风险。**该限制已于 2026-09-12 放宽**，但方法要求不变：结论必须落在**可复现的测量**上，而不是模型对图像的主观描述。三层手段，按可信度排序：
+
+**1) 布局树 + 语义树（主验收手段，也就是无障碍验收本身）**
 
 ```bash
-# 1) 语义断言（A 阶段主验收）
 adb shell uiautomator dump /sdcard/ui.xml && adb pull /sdcard/ui.xml
-#    断言目标节点存在且携带状态，例如：
-#      content-desc="起始词" / selected="true"      → A1
-#      主题卡片 checked/selected 属性               → A11
-#      复选框节点同时含 checked 与自身名称          → B3
+#      content-desc="起始词" / selected="true"        → A1
+#      主题卡片 checked/selected 属性                 → A11
+#      整行 checkable=true 而 Checkbox checkable=false → B3
+```
 
-# 2) 遮挡断言（A6 / A7 / B4）
-#    取 dump 中各节点的 bounds，与 `adb shell dumpsys window displays` 的
-#    导航栏 / IME 高度比较，断言无按钮 bounds.bottom > 导航栏上沿。
+**2) 像素采样（截图允许后新增；B6 的唯一可行验收）**
 
-# 3) 几何断言（C2 表盘裁切 / C4 320dp 溢出 / C3 零高柱）
-#    在 dump 出的 bounds 上直接断言：子节点 bounds 落在父节点之内；
-#    0 词日期的柱高 ≥ 下限值。纯几何，无需任何像素。
+颜色不在语义树里（`uiautomator dump` 不含颜色属性），"接线是否正确"只能用像素判定。做法是**程序化取色比对，不靠眼睛**：
 
-# 4) 大字号 / 横屏
+```bash
+adb exec-out screencap -p > /tmp/x.png
+python3 -c "from PIL import Image; ... 统计目标色值的像素数 ..."
+#    基线 vs 改后必须可定量：B6 的判据是朱砂像素数
+#    0 → 661（暗）/ 0 → 601（亮），且英文场次保持 0。
+```
+
+截图只用于**辅助确认"是哪个元素"取了色**；读图给出的是定性描述，不作结论依据。
+
+**3) 几何断言（C2 表盘裁切 / C4 320dp 溢出 / C3 零高柱）**
+
+在 dump 出的 bounds 上直接断言：子节点 bounds 落在父节点之内；0 词日期的柱高 ≥ 下限值。
+
+**4) 大字号 / 横屏**
+
+```bash
 adb shell settings put system font_scale 1.5
 adb shell settings put system user_rotation 1
 #    重新 dump 后重复 (3)。
+```
 
-# 5) 回归
+**5) 回归**
+
+```bash
 ./gradlew :app:testDebugUnitTest :app:lintDebug
-#    A 阶段不触碰 domain/，单测应全绿；lint 不应新增告警（对比基线 4c40ab7）。
+#    单测应全绿；lint 不应新增告警（对比基线 4c40ab7）。
 ```
 
 `StatsScreen` 的零高柱、`LibraryDrawScreen` 的固定行溢出、表盘圆形裁切属于纯几何问题，用 `bounds` 三元组即可证伪/证实。

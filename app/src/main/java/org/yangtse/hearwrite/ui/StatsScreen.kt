@@ -1,6 +1,5 @@
 package org.yangtse.hearwrite.ui
 
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,7 +38,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -47,32 +46,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import org.yangtse.hearwrite.domain.DayStat
 import org.yangtse.hearwrite.domain.SessionKind
-import org.yangtse.hearwrite.ui.theme.hearWriteSemantics
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 private val TREND_BARS_HEIGHT = 120.dp
-
-private val DAY_LABEL = DateTimeFormatter.ofPattern("M/d")
-private val TIME_LABEL = DateTimeFormatter.ofPattern("MM-dd HH:mm")
-
-private fun formatDay(date: LocalDate): String = DAY_LABEL.format(date)
-
-private fun formatStamp(epochMs: Long): String =
-    TIME_LABEL.format(
-        Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()).toLocalDateTime(),
-    )
-
-private fun formatDuration(sec: Long): String =
-    if (sec >= 3600) "${sec / 3600} 小时 ${sec % 3600 / 60} 分"
-    else if (sec >= 60) "${sec / 60} 分 ${sec % 60} 秒"
-    else "$sec 秒"
-
-private fun formatPercent(rate: Double): String =
-    String.format(Locale.US, "%.0f%%", rate * 100)
 
 /**
  * 听写统计 (Roadmap #3) — the local record of every completed run: headline
@@ -88,12 +63,12 @@ fun StatsScreen(
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val cleared by viewModel.cleared.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+    val messages = rememberMessageController()
     var showClearDialog by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(cleared) {
         if (cleared) {
-            Toast.makeText(context, "已清空听写记录", Toast.LENGTH_SHORT).show()
+            messages.show("已清空听写记录")
             viewModel.consumeCleared()
         }
     }
@@ -117,60 +92,66 @@ fun StatsScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("听写统计") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                actions = {
-                    if (ui.summary.runs > 0) {
-                        IconButton(onClick = { showClearDialog = true }) {
+    CompositionLocalProvider(LocalMessages provides messages) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("听写统计") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
                             Icon(
-                                Icons.Outlined.DeleteSweep,
-                                contentDescription = "清空听写记录",
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "返回",
                             )
                         }
+                    },
+                    actions = {
+                        if (ui.summary.runs > 0) {
+                            IconButton(onClick = { showClearDialog = true }) {
+                                Icon(
+                                    Icons.Outlined.DeleteSweep,
+                                    contentDescription = "清空听写记录",
+                                )
+                            }
+                        }
+                    },
+                )
+            },
+            snackbarHost = { MessageHost(messages) },
+        ) { innerPadding ->
+            when {
+                ui.loading -> Box(
+                    modifier = Modifier.fillMaxSize().padding(innerPadding),
+                    contentAlignment = Alignment.Center,
+                ) { CircularProgressIndicator() }
+
+                ui.summary.runs == 0 -> EmptyStats(modifier = Modifier.padding(innerPadding))
+
+                else -> Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = 32.dp),
+                ) {
+                    OverviewCard(ui)
+                    TrendCard(ui.trend)
+                    if (ui.topWrong.isNotEmpty()) {
+                        SettingsSectionHeader("高频错词")
+                        SettingsCard {
+                            ui.topWrong.forEachIndexed { index, mark ->
+                                WrongWordRow(
+                                    mark = mark,
+                                    divider = index != ui.topWrong.lastIndex,
+                                )
+                            }
+                        }
                     }
-                },
-            )
-        },
-    ) { innerPadding ->
-        when {
-            ui.loading -> Box(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
-                contentAlignment = Alignment.Center,
-            ) { CircularProgressIndicator() }
-
-            ui.summary.runs == 0 -> EmptyStats(modifier = Modifier.padding(innerPadding))
-
-            else -> Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .verticalScroll(rememberScrollState())
-                    .padding(bottom = 32.dp),
-            ) {
-                OverviewCard(ui)
-                TrendCard(ui.trend)
-                if (ui.topWrong.isNotEmpty()) {
-                    SettingsSectionHeader("高频错词")
+                    SettingsSectionHeader("最近记录")
                     SettingsCard {
-                        ui.topWrong.forEachIndexed { index, mark ->
-                            WrongWordRow(
-                                mark = mark,
-                                divider = index != ui.topWrong.lastIndex,
-                            )
+                        ui.recent.forEachIndexed { index, row ->
+                            SessionRowItem(row = row, divider = index != ui.recent.lastIndex)
                         }
-                    }
-                }
-                SettingsSectionHeader("最近记录")
-                SettingsCard {
-                    ui.recent.forEachIndexed { index, row ->
-                        SessionRowItem(row = row, divider = index != ui.recent.lastIndex)
                     }
                 }
             }
