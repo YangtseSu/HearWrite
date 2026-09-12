@@ -144,7 +144,7 @@ The same BYOK vision provider — no fifth outbound endpoint — reads a **stude
 | --- | --- |
 | `app/` | The Android application (Compose UI, domain, data); bundled assets under `app/src/main/assets/` ship verbatim into the APK |
 | `scripts/` | Data tooling (Python stdlib, never shipped): `generate-compounds.py` — compounds.json generator; `build-ecdict-meta.py` — 英文词典 asset builder (downloads ECDICT to `.cache/` on first run); `build-hanzi-meta.py` — 汉字读音/组词 asset builder; `check-assets.py` — validates the whole asset tree (CI gate, contract in `docs/WORDLIST.md`); `import-wordlist.py` — normalizes a pasted/OCR'd list into an acceptable file; `verify-kebiao-scan.py` — re-runs the 课标 字表 vs official-scan positional check; `scripts/data/` — regeneration sources (frequency table, hanzi overrides) |
-| `docs/` | `DEVELOPMENT.md` build/signing/packaging guide; `WORDLIST.md` word-list data contract & contribution guide; `ROADMAP.md` feature planning |
+| `docs/` | `DEVELOPMENT.md` build/signing/packaging guide; `WORDLIST.md` word-list data contract & contribution guide; `ROADMAP.md` feature planning; `UI-AUDIT.md` source-only UI/UX audit + fix plan |
 
 ## Data Assets (formats & provenance — never hand-edit derived files)
 
