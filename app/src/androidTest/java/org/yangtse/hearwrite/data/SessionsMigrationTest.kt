@@ -76,11 +76,13 @@ class SessionsMigrationTest {
     fun sessionRow_roundTripsThroughRoomOnRealSqlite() = runBlocking {
         helper.createDatabase(DB_NAME_ROOM, 2).close()
         helper.runMigrationsAndValidate(DB_NAME_ROOM, 3, true, MIGRATION_2_3).close()
+        // Walk on to the current version (v4 renamed 八上 labels) before Room opens it.
+        helper.runMigrationsAndValidate(DB_NAME_ROOM, 4, true, MIGRATION_3_4).close()
         val room = Room.databaseBuilder(
             InstrumentationRegistry.getInstrumentation().targetContext,
             HearWriteDatabase::class.java,
             DB_NAME_ROOM,
-        ).addMigrations(MIGRATION_2_3).build()
+        ).addMigrations(MIGRATION_2_3, MIGRATION_3_4).build()
         try {
             val repository = SessionRepository(room.sessionDao())
             repository.record(

@@ -13,6 +13,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
+import org.yangtse.hearwrite.domain.BUILTIN_LIST_ID_PREFIX
 
 /** A headword marked wrong during dictation; keyed by the speakable headword
  *  exactly like `alice/src/lib/storage.ts` (AGENTS.md "Persistence").
@@ -217,6 +218,84 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+private const val RENAME_CATEGORY = "人教版初中语文"
+
+/** Old 八上 label → new label, in the same order the files were renamed. */
+private val EIGHT_UP_LABEL_RENAMES = mapOf(
+    "八上 读读写写 1" to "八上 1 消息二则 读读写写",
+    "八上 读读写写 2" to "八上 2 中国人首次进入自己的空间站 读读写写",
+    "八上 读读写写 3" to "八上 3 首届诺贝尔奖颁发 读读写写",
+    "八上 读读写写 4" to "八上 4 “飞天”凌空 读读写写",
+    "八上 读读写写 5" to "八上 5 一着惊海天 读读写写",
+    "八上 读读写写 6" to "八上 6 国行公祭，为佑世界和平 读读写写",
+    "八上 读读写写 7" to "八上 7 藤野先生 读读写写",
+    "八上 读读写写 8" to "八上 8 回忆鲁迅先生（节选） 读读写写",
+    "八上 读读写写 9" to "八上 9 天上有颗“南仁东星” 读读写写",
+    "八上 读读写写 10" to "八上 10 美丽的颜色 读读写写",
+    "八上 读读写写 15" to "八上 15 背影 读读写写",
+    "八上 读读写写 16" to "八上 16 白杨礼赞 读读写写",
+    "八上 读读写写 17" to "八上 17 散文二篇 读读写写",
+    "八上 读读写写 18" to "八上 18 昆明的雨 读读写写",
+    "八上 读读写写 19" to "八上 19 中国石拱桥 读读写写",
+    "八上 读读写写 20" to "八上 20 苏州园林 读读写写",
+    "八上 读读写写 21" to "八上 21 人民英雄永垂不朽 读读写写",
+    "八上 读读写写 22" to "八上 22 梦回繁华 读读写写",
+)
+
+/**
+ * v3 → v4 (八上 读读写写 labels gain their lesson titles): the built-in list
+ * labels were renamed `八上 读读写写 <N>` → `八上 <N> <标题> 读读写写`, so every
+ * stored id pointing at one of them is rewritten in place. The schema is
+ * untouched — this is a pure data migration over the three id-holding columns
+ * (`favorites.id`, `wrong_words.sourceLabel`, `sessions.sourceLabel`).
+ *
+ * Why migrate instead of leaving the old ids: id resolution is exact-match
+ * (library browser, favorite titles, 错词本 groups, the 查看词表 jump, the
+ * `sessions` titles), so an unrewritten id silently degrades to a bare
+ * headword / 未知来源. These labels shipped in v0.6.0, so real installs hold
+ * them. Favorites are `INSERT OR IGNORE` + `DELETE` so an id the user already
+ * holds under its new name is not duplicated. A `multi:<id>,<id>,…` label
+ * (Roadmap #9 抽词听写) embeds member ids and is not expressible as one
+ * equality update: those degrade to NULL — "a bare headword, never drops the
+ * row" (AGENTS.md "Persistence") — rather than pointing at a dead id.
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        for ((old, new) in EIGHT_UP_LABEL_RENAMES) {
+            val oldId = "$BUILTIN_LIST_ID_PREFIX$RENAME_CATEGORY" + "_" + old
+            val newId = "$BUILTIN_LIST_ID_PREFIX$RENAME_CATEGORY" + "_" + new
+
+            db.execSQL(
+                "INSERT OR IGNORE INTO `favorites` (`id`) " +
+                    "SELECT REPLACE(`id`, ?, ?) FROM `favorites` WHERE `id` = ?",
+                arrayOf(old, new, oldId),
+            )
+            db.execSQL("DELETE FROM `favorites` WHERE `id` = ?", arrayOf(oldId))
+
+            // `instr` on the comma-wrapped member list avoids LIKE wildcards
+            // entirely (labels are data, never patterns).
+            db.execSQL(
+                "UPDATE `wrong_words` SET `sourceLabel` = ? WHERE `sourceLabel` = ?",
+                arrayOf(newId, oldId),
+            )
+            db.execSQL(
+                "UPDATE `wrong_words` SET `sourceLabel` = NULL WHERE `sourceLabel` LIKE 'multi:%' " +
+                    "AND instr(',' || substr(`sourceLabel`, 7) || ',', ?) > 0",
+                arrayOf(",$oldId,"),
+            )
+            db.execSQL(
+                "UPDATE `sessions` SET `sourceLabel` = ? WHERE `sourceLabel` = ?",
+                arrayOf(newId, oldId),
+            )
+            db.execSQL(
+                "UPDATE `sessions` SET `sourceLabel` = NULL WHERE `sourceLabel` LIKE 'multi:%' " +
+                    "AND instr(',' || substr(`sourceLabel`, 7) || ',', ?) > 0",
+                arrayOf(",$oldId,"),
+            )
+        }
+    }
+}
+
 @Database(
     entities = [
         WrongWordEntity::class,
@@ -224,7 +303,7 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         FavoriteEntity::class,
         SessionEntity::class,
     ],
-    version = 3,
+    version = 4,
     // Schema JSON is exported to app/schemas (ksp arg in app/build.gradle.kts)
     // and committed — the v1 baseline future migrations diff against. When a
     // later version changes entities, bump `version` and add an
@@ -244,7 +323,7 @@ abstract class HearWriteDatabase : RoomDatabase() {
         /** Production builder with the registered migrations. */
         fun create(context: Context): HearWriteDatabase =
             Room.databaseBuilder(context, HearWriteDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }

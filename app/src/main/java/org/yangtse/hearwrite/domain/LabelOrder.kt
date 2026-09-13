@@ -98,6 +98,23 @@ private val HANZI = mapOf(
     '则' to ("ze" to 6), '章' to ("zhang" to 11), '长' to ("zhang" to 4), '之' to ("zhi" to 3),
     '竹' to ("zhu" to 6), '装' to ("zhuang" to 12), '紫' to ("zi" to 12), '最' to ("zui" to 12),
     '做' to ("zuo" to 11),
+    // 八年级上册 lesson titles.
+    '世' to ("shi" to 5), '东' to ("dong" to 5), '丽' to ("li" to 7), '佑' to ("you" to 7),
+    '入' to ("ru" to 2), '公' to ("gong" to 4), '凌' to ("ling" to 10), '华' to ("hua" to 6),
+    '发' to ("fa" to 5), '垂' to ("chui" to 8), '奖' to ("jiang" to 9), '届' to ("jie" to 8),
+    '州' to ("zhou" to 6), '己' to ("ji" to 3), '平' to ("ping" to 5), '影' to ("ying" to 15),
+    '息' to ("xi" to 10), '惊' to ("jing" to 11), '拱' to ("gong" to 9), '昆' to ("kun" to 8),
+    '明' to ("ming" to 8), '星' to ("xing" to 9), '朽' to ("xiu" to 6), '杨' to ("yang" to 7),
+    '林' to ("lin" to 8), '桥' to ("qiao" to 10), '梦' to ("meng" to 11), '次' to ("ci" to 6),
+    '民' to ("min" to 5), '永' to ("yong" to 5), '消' to ("xiao" to 10), '着' to ("zhe" to 11),
+    '石' to ("shi" to 5), '礼' to ("li" to 5), '祭' to ("ji" to 11), '站' to ("zhan" to 10),
+    '篇' to ("pian" to 15), '繁' to ("fan" to 17), '美' to ("mei" to 9), '背' to ("bei" to 9),
+    '自' to ("zi" to 6), '色' to ("se" to 6), '节' to ("jie" to 5), '苏' to ("su" to 7),
+    '英' to ("ying" to 8), '行' to ("xing" to 6), '诺' to ("nuo" to 10), '贝' to ("bei" to 4),
+    '赞' to ("zan" to 16), '迅' to ("xun" to 6), '进' to ("jin" to 7), '选' to ("xuan" to 9),
+    '野' to ("ye" to 11), '间' to ("jian" to 7), '雄' to ("xiong" to 12), '颁' to ("ban" to 10),
+    '颗' to ("ke" to 14), '颜' to ("yan" to 15), '飞' to ("fei" to 3), '鲁' to ("lu" to 12),
+
 )
 
 private fun hanziKey(c: Char): Pair<String, Int>? = HANZI[c]
