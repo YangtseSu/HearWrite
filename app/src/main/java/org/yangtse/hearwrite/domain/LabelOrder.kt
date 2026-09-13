@@ -60,7 +60,7 @@ private val HANZI = mapOf(
     '常' to ("chang" to 11), '册' to ("ce" to 5), '园' to ("yuan" to 7), '地' to ("di" to 6),
     '字' to ("zi" to 6), '表' to ("biao" to 8), '见' to ("jian" to 4), '识' to ("shi" to 7),
     '词' to ("ci" to 7), '语' to ("yu" to 9), '读' to ("du" to 10), '写' to ("xie" to 5),
-    '阅' to ("yue" to 10),
+    '阅' to ("yue" to 10), '汉' to ("han" to 5), '拼' to ("pin" to 9), '音' to ("yin" to 9),
     // 义务教育语文课程标准 category + its 字表 labels
     '义' to ("yi" to 3), '务' to ("wu" to 5), '育' to ("yu" to 8), '课' to ("ke" to 10),
     '程' to ("cheng" to 12), '标' to ("biao" to 9), '准' to ("zhun" to 10),
