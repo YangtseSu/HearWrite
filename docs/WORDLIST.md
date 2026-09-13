@@ -38,6 +38,7 @@ you're = you are           ← 展开式：只朗读等号左侧
 - 词性列不校验词表：ECDICT 的 `n.`、课本里的 `n. & v.`、`v.aux.`、`pl, n` 都合法，朗读不会读它。
 - **英文行**：词性+释义可留空，应用会用内置 ECDICT 离线补齐（`dict/ecdict-meta.json`）。ECDICT 查不到的是**词组**（`be good at`、`a bottle of`），补不出来，建议直接写全三列。
 - **生字行**：拼音必须是**带声调**的拼音字母（`lǚ`，ü 写作 `ü`），不是数字调（`lv3`）——多音字筛选靠它（见 AGENTS.md 组词朗读）。组词必须含本字，否则该行朗读时会被丢弃。
+- **两种拼音写法不要混用**：词表行用带声调符号（`yuè`，ü 写作 `ü`），而 `compounds/compounds.json` 与 `scripts/data/xiandaihanyuchangyongcibiao.txt` 用数字调（`yue4`，ü 写作 `v`）。跨源比较（例如核对某字的组词候选是否匹配本行读音）**必须先转写成同一种写法再比**，否则一条也匹配不上，看起来像"该字没有任何候选"。
 - **裸汉字行**（只有字、没有拼音/组词）：合法，应用会用 `dict/hanzi-meta.json` 补常用读音与默认组词（若无组词可补，则只补读音，输出 `字 | 拼音` 两列）。拍照识词的中文结果就是这种形态（OCR 只保留汉字）。
 - `dict/hanzi-meta.json` 的取值顺序：① `scripts/data/hanzi-meta-overrides.tsv` 的人工条目；② 内置词表里的 `字 | 拼音 | 组词` 行（课本注音优先）；③ 常用词表的**二字词**证据（取该字在多音候选里的常用读音，声调读音优先于轻声）；④ 该字的**单字条目**（仅当词表里没有任何含该字的词时，如 很/您/刘）。组词取"读音一致的最常用二字词"；找不到就只留读音。**不臆造读音**：两层证据都没有的字不进表，应用中保持裸字。
 - 词头只有单个汉字时才走"生字"逻辑（组词朗读、拼音提示）；多个汉字的行必须写成裸词语，不能带拼音/组词列。
@@ -51,7 +52,7 @@ python3 scripts/check-assets.py --verbose  # 打印全部 warning
 python3 scripts/check-assets.py --strict   # warning 也当失败
 ```
 
-- **error**（退出码 1）：BOM、CRLF、空行、列数不是 1/3、空词头、同表内重复词头、生字行拼音格式非法、组词不含本字、多字中文行带列、生成资产（`ecdict-meta.json` / `hanzi-meta.json` / `compounds.json`）缺失或结构损坏。
+- **error**（退出码 1）：BOM、CRLF、空行、列数不是 1/2/3、空词头、同表内重复词头、生字行拼音格式非法、组词不含本字、多字中文行带列、生成资产（`ecdict-meta.json` / `hanzi-meta.json` / `compounds.json`）缺失或结构损坏。
 - **warning**：词头带 `* # ^` 等记号、`/` 或省略号式词头、前导括号、结尾数字。历史来源原样带进来的这一类有几十条，**不要求为它们改动数据**；新提交别再增加。
 - 生成资产由脚本产出，不要手改：`scripts/build-ecdict-meta.py`（离线英文词典）、`scripts/build-hanzi-meta.py`（裸汉字读音/组词）、`scripts/generate-compounds.py`（组词候选池）。
 - 外部来源（粘贴 / OCR / 表格导出）先用第 8 节的 `scripts/import-wordlist.py` 规范化，再手工核对报告。
@@ -61,8 +62,21 @@ python3 scripts/check-assets.py --strict   # warning 也当失败
 1. 新建 `app/src/main/assets/<分类>/<词表名>.txt`，按第 3 节写行。
 2. `python3 scripts/check-assets.py` — 0 errors。
 3. 若分类名或词表名引入了新的汉字，把该字补进 `domain/LabelOrder.kt` 的 `HANZI` 表（拼音 + 笔画数），并同步 `app/src/test/resources/library-label-order.json`；否则该字会掉进拉丁比较分支、排序错乱。
+   新字要**算差集**，不要凭印象列举：`{分类名与全部词表名里的汉字} − {HANZI 的键}`（`grep -c "'X' to (" domain/LabelOrder.kt` 可逐个确认）。漏一个不会报错，只会静默错序。
 4. `./gradlew :app:testDebugUnitTest` — `LabelOrderTest` 会用手写顺序与比较器输出对拍，顺序写错就红。
 5. 跑一次 `./gradlew :app:assembleDebug` 确认打包无误；真机上从「更多 → 词库」进新分类走查（列表能打开、能预览、能起听写）。
+
+### 词表是生成资产的输入（语文识字表/写字表尤其注意）
+
+两个生成器都读词表，但**范围不同**：`scripts/build-hanzi-meta.py` 扫**全部**词表分类的 `字 | 拼音 | 组词` 行（`ASSETS_DIR.rglob("*.txt")`，跳过 `dict`/`compounds`/`audio`），把其中的**课本读音**当作 `dict/hanzi-meta.json` 的高优先级来源（仅次于人工 override）；`scripts/generate-compounds.py` 只读 `人教版小学语文/*.txt`，把其中的组词收进 `compounds/compounds.json` 的 `learned` 池。
+
+因此给语文词表加第三列**不是"顺手补全"**，而是改写两份全体分类共享的派生资产：一个多音字行的读音会翻转该字的全局默认（如 `行 | háng` → `xíng`），一批组词会重写 `learned` 池——而新写的组词又只能从这些池里取，构成循环。行动前先决定这两件事：
+
+- **行格式**：`人教版小学语文` 现有 730 行是 `字 | 拼音 | 组词`（识字表/写字表），383 行是 `字 | 拼音`（一上，教材未印组词列）——两种都在用。跟着**本册教材印了什么**走：教材有组词列就写三列，没有就写两列（两列行的组词朗读候选来自第 2、3 层池，照样有词组可读）。同一册内的写法保持一致。
+- **派生资产**：三列行会改动 `hanzi-meta.json` / `compounds.json`。落地前在临时目录复制一份 `app/src/main/assets` 与 `scripts/`，跑一遍两个生成器，与已提交的资产逐字节对比：
+  - 差异**符合预期**（确实是本册新字/新读音带来的）→ 按第 4 节重新生成这两份资产**并一起提交**；
+  - 差异**超出预期**（翻动了其他册次的读音、改写了大量无关 `learned` 键）→ 说明行格式或组词取值有问题，先改数据。
+  注意 `check-assets.py` 只校验生成资产的**结构**，不校验它与词表是否同步——漂移只能靠这一步发现。
 
 ## 6. 授权与来源
 
