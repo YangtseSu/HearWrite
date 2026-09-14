@@ -47,7 +47,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -121,22 +120,30 @@ fun LibraryPreviewScreen(
                             .padding(start = 20.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            "随机顺序",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Switch(
-                            checked = shuffle,
-                            onCheckedChange = null,
-                            modifier = Modifier
-                                .padding(start = 4.dp)
-                                .toggleable(
-                                    value = shuffle,
-                                    role = Role.Switch,
-                                    onValueChange = viewModel::onShuffleChange,
-                                ),
-                        )
+                        // Same one-focus-stop row as Home's 随机顺序: the row
+                        // carries the state and the visible 随机顺序 label
+                        // names it, the Switch is only its visual reflection
+                        // (a contentDescription on the decorative Switch
+                        // would replace that label in the semantics tree).
+                        Row(
+                            modifier = Modifier.toggleable(
+                                value = shuffle,
+                                role = Role.Switch,
+                                onValueChange = viewModel::onShuffleChange,
+                            ),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "随机顺序",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Switch(
+                                checked = shuffle,
+                                onCheckedChange = null,
+                                modifier = Modifier.padding(start = 4.dp),
+                            )
+                        }
                         Spacer(Modifier.weight(1f))
                         Text(
                             if (startIndex == 0) {
