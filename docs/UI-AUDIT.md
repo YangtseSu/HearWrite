@@ -422,10 +422,10 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 
 **A10 的验证缺口**：`uiautomator dump` 单次约 2 s，而词表预览的 ECDICT 富化窗口（含冷启动）短于该延迟，采样不到 `整理词表…` 这一瞬态。代码路径与首页 `开始听写` 的忙碌态同构（同一 `starting` 标志 + 同一文案 + 同款 `CircularProgressIndicator`），且已确认按钮在 `starting` 期间 `enabled=false`。**残余风险低**；若要闭环，可加一条 Compose UI 测试或把 `LibraryPreviewViewModel.starting` 做成 JVM 单测（`startLines()` 挂起期间断言为 true）。
 
-**门禁**：`testDebugUnitTest` 327/327 绿；`lintDebug` 仅剩 6 条改动前的 `GradleDependency`（版本目录有新版本），无新增告警。
+**门禁**：`testDebugUnitTest` 327/327 绿；`lintDebug` 无新增告警（当时的"6 条 `GradleDependency`"在本机不可复现，三棵树重跑均为 `No issues found.`，见 `ERRATA.md` §3）。
 
 ### 阶段 B — 一致性收口（9 项）—— ✅ 已完成
-`B1`–`B9`（§2）。净 **−347 行**（+1434 / −1781）——收口主要是删除：两套 provider 表单合一、15 处 `Toast` 归零、格式化器与字阶各归一。
+`B1`–`B9`（§2）。净 **+581 行**（`app/` 内 +2362 / −1781；含 docs 为 +2430 / −1799）——`u/SettingsProviderPages` 的 1237 行拆成 537 行页面 + 770 行公共件，加上新建的 `Format.kt`(58) / `Feedback.kt`(100)，总量是**增**不是减。收口本身确在删除：两套 provider 表单合一、15 处 `Toast` 归零、格式化器与字阶各归一。
 
 **新增的共享件**（后续阶段复用，勿再自造第二套）：
 - `ui/theme/Type.kt`：补齐全部 12 个字阶（原先只定义 5 个 → 85% 文字落到 M3 拉丁默认值），并新增 `Typography.wordHead` token（3 处手拼的"行词头"合一）。
@@ -441,6 +441,7 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 | B1 | 12 个字阶全部有定义；`wordHead` 被 3 处调用 | ✅ 源码 |
 | B2 | 全仓 `Toast.makeText` **0** 处（基线 15）；面板内消息落在面板窗口 | ✅ 设备 |
 | B3 | 开关行 `checkable=true` 且承载状态、`Switch` 不再是独立节点；点**标签**即翻转（听写间隔/提示音 均验证） | ✅ 设备 |
+| B3b | 词表预览底栏的 随机顺序 也已改成整行 `toggleable`（`LibraryPreviewScreen.kt`）：节点子树文本 `随机顺序`、点标签即翻转、`NAF` 消失（此前是无名的 `Switch` 叶子） | ✅ 设备 |
 | B4 | 首页内容列不再重复计导航栏；`开始听写` bottom=2255 < 导航栏 2361 | ✅ 设备 |
 | B5 | 间隔读数 `5.0s` → **`5 秒`**；时长/日期走单一格式化器 | ✅ 设备 |
 | B6 | 朱砂**换色并接线**：暗色 `#DB9A6B` 由 **0 → 661 px**（表盘拼音+组词行）；亮色 `#9C4A22` **0 → 601 px**；英文场次朱砂 **0 px**（POS/释义仍 `onSurfaceVariant`，`Color.kt` 硬规则成立） | ✅ 像素采样 |
@@ -460,7 +461,7 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 - **B4 的 IME 路径未在设备上验证**：该 AVD 为硬件键盘配置，软键盘不渲染（`mInputShown=true` 但无键盘可截），故"键盘弹起时内容列不再重复计导航栏"只有代码级确认。
 - `A10`（阶段 A）的忙碌态瞬态仍未能采样：`uiautomator dump` 延迟 ≈2 s 长于富化窗口。
 
-**门禁**：`testDebugUnitTest` 327/327 绿；`lintDebug` 仅剩 6 条改动前的 `GradleDependency`，无新增告警。
+**门禁**：`testDebugUnitTest` 327/327 绿；`lintDebug` 无新增告警（参见 `ERRATA.md` §3）。
 
 ### 阶段 C — 状态覆盖与内容层
 `C1`（缺失状态：首页草稿加载态、听写准备态、语音失败提示、OCR 可取消、空态补齐）→ `C2`（听写页：词语展开、表盘圆裁切、暂停文案、满分成绩、错词不可撤销、错词本 chip 惰性化）→ `C3`（统计页：柱子下限、列表惰性/上限、错误态、图表可读）→ `C4`（抽词行 `FlowRow`、摘要固定、OCR 语言持久化、覆盖草稿前确认、错误卡加 `去设置`、裁剪把手与缩放）→ `C6`（`WindowSizeClass`、表盘随约束、旋转不丢状态）。
