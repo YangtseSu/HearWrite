@@ -23,7 +23,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -61,12 +64,15 @@ private const val SAMPLE_CJK = "香蕉\n学校\n苹果\n月亮\n生日"
 /**
  * 单词列表 section (alice's WordInputSection + section header): the header row
  * carries the title, the parsed-count badge and the 编辑/完成 toggle; the body
- * is the parsed display list (展示态, non-empty) where tapping a row selects
- * the 起始词 and long meta text expands, or the paste textarea otherwise —
- * both 编辑态 and an empty 展示态 look like the editor (textarea + 共 N 词 /
- * 示例 / 清空 footer), so starting from scratch is seamless; typing on the
- * empty 展示态 flips it to 编辑态 before the first change lands. Deletion
- * rewrites the draft line by line.
+ * is the parsed display list (展示态, non-empty) where tapping a row moves the
+ * 起始词 and long glosses expand from their own trailing chevron, or the paste
+ * textarea otherwise — both 编辑态 and an empty 展示态 look like the editor
+ * (textarea + 示例 / 清空 footer), so starting from scratch is seamless;
+ * typing on the empty 展示态 flips it to 编辑态 before the first change lands.
+ * Entering 编辑态 focuses that textarea (the 完成/编辑 toggle is the only way
+ * in). 清空 and the 示例 presets overwrite user text, so each confirms first
+ * over a non-blank draft and fills straight away over a blank one; the count
+ * is shown once, by the header badge. Deletion rewrites the draft line by line.
  */
 @Composable
 fun WordListSection(
@@ -85,13 +91,40 @@ fun WordListSection(
     onScan: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Auto-focus when 完成 lands on an empty draft: with no list to show,
-    // the section drops straight back to the textarea, and the user's first
-    // keystroke must land in it — not require a second tap on the field.
     val fieldFocus = remember { FocusRequester() }
+    // 编辑 must land on a field that is already focused with the keyboard up.
+    // Keyed on the mode flipping into 编辑态 rather than on the textarea
+    // appearing: over an empty draft the section renders that textarea in
+    // 展示态 too, so "the editor is on screen" cannot distinguish the two and
+    // 完成 would pop the IME back up over a list the user never asked to edit.
+    // The flag starts at the mode of the first composition, so composing the
+    // section in 编辑态 (already focused elsewhere, or restored state) is not
+    // treated as entering it.
+    var wasEditing by remember { mutableStateOf(!displayMode) }
     LaunchedEffect(displayMode) {
-        if (!displayMode && draft.isBlank()) {
+        if (!displayMode && !wasEditing) {
             fieldFocus.requestFocus()
+        }
+        wasEditing = !displayMode
+    }
+    // 清空/示例 replace whatever the user typed, so they ask first — except
+    // over a draft that is blank, where the 示例 presets fill straight away
+    // (清空 is disabled there: see the footer).
+    var confirmClear by remember { mutableStateOf(false) }
+    var pendingSample by remember { mutableStateOf<Pair<String, String>?>(null) }
+    // A 展示态 whose list is empty renders the editor, so filling it is the
+    // sample preset's job and the mode must flip with it (see emptyDisplay use).
+    val emptyDisplay = displayMode && wordCount == 0
+
+    fun requestSample(
+        label: String,
+        sample: String,
+    ) {
+        if (draft.isBlank()) {
+            if (emptyDisplay) onToggleDisplayMode()
+            onFillSample(sample)
+        } else {
+            pendingSample = label to sample
         }
     }
     Column(modifier = modifier) {
@@ -170,7 +203,6 @@ fun WordListSection(
             // header becomes 完成 and the parsed list never snaps in
             // mid-keystroke; entering via the 编辑 button changes nothing but
             // the header and focus (smooth by construction).
-            val emptyDisplay = displayMode && wordCount == 0
             // One-shot empty→edit flip: burst keystrokes (IME commits, fast
             // typing, injected text) can all arrive before the recomposition,
             // each re-running this old lambda — an unguarded toggle would
@@ -227,26 +259,61 @@ fun WordListSection(
                     .padding(top = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    "共 $wordCount 词",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(
-                    onClick = {
-                        if (emptyDisplay) onToggleDisplayMode()
-                        onFillSample(SAMPLE_EN)
-                    },
-                ) { Text("英文示例") }
-                TextButton(
-                    onClick = {
-                        if (emptyDisplay) onToggleDisplayMode()
-                        onFillSample(SAMPLE_CJK)
-                    },
-                ) { Text("汉字示例") }
-                TextButton(onClick = onClear) { Text("清空") }
+                // Alignment spacer only: 共 N 词 already sits in the header's
+                // CountBadge right above this row, so repeating it here would
+                // state the same number twice in one view.
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { requestSample("英文示例", SAMPLE_EN) }) {
+                    Text("英文示例")
+                }
+                TextButton(onClick = { requestSample("汉字示例", SAMPLE_CJK) }) {
+                    Text("汉字示例")
+                }
+                // Pressable at 0 words this button only opened a confirm dialog
+                // for an already-empty draft — nothing to clear.
+                TextButton(onClick = { confirmClear = true }, enabled = wordCount > 0) {
+                    Text("清空")
+                }
             }
+        }
+
+        // The two destructive footer actions ask first, because both throw away
+        // text the user typed: the dialog names what is lost and colors 清空 /
+        // 覆盖 as the app's other clear confirms do. A blank draft has nothing
+        // to lose — the 示例 presets fill it straight away (and 清空 is disabled).
+        if (confirmClear) {
+            AlertDialog(
+                onDismissRequest = { confirmClear = false },
+                title = { Text("清空草稿？") },
+                text = { Text("当前草稿将被清空，内容无法恢复。") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmClear = false
+                        onClear()
+                    }) { Text("清空", color = MaterialTheme.colorScheme.error) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmClear = false }) { Text("取消") }
+                },
+            )
+        }
+        pendingSample?.let { (label, sample) ->
+            AlertDialog(
+                onDismissRequest = { pendingSample = null },
+                title = { Text("覆盖当前草稿？") },
+                text = { Text("将用${label}替换当前的草稿内容，原有内容不会保留。") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        pendingSample = null
+                        // Replacing an existing list keeps 展示态: the sample
+                        // lands as the new parsed list, same as 完成 would show.
+                        onFillSample(sample)
+                    }) { Text("覆盖", color = MaterialTheme.colorScheme.error) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingSample = null }) { Text("取消") }
+                },
+            )
         }
     }
 }
@@ -269,11 +336,15 @@ private fun CountBadge(count: Int) {
 }
 
 /**
- * 展示态 word list: index + word + 词性/释义 meta (2-line clamp, tap the row
- * again to expand) + a per-row delete button. The cursor row (起始词) is
- * tinted with a leading primary bar. Rows are keyed positionally — content
- * shifts with the draft, never remounting mid-typing (there is no typing
- * here; the textarea owns editing).
+ * 展示态 word list: index + word + 词性/释义 meta (2-line clamp) + a per-row
+ * delete button. A row tap does exactly one thing — it moves the 起始词
+ * (the row's radio state, echoed by the panel's 从第 N 词开始). Long glosses
+ * expand from their own trailing chevron, shown only when
+ * [glossNeedsExpansion] says the text would truncate, so a tap on the row
+ * never both reorders the listening and reshapes the row. The cursor row
+ * (起始词) is tinted with a leading primary bar. Rows are keyed positionally —
+ * content shifts with the draft, never remounting mid-typing (there is no
+ * typing here; the textarea owns editing).
  */
 @Composable
 private fun WordDisplayList(
@@ -294,7 +365,10 @@ private fun WordDisplayList(
         contentColor = MaterialTheme.colorScheme.onSurface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
     ) {
-        LazyColumn(contentPadding = PaddingValues(bottom = 72.dp)) {
+        // No bottom slack: the section's column already yields the playback
+        // panel's measured height (see HomeScreen), so extra trailing space
+        // here only parked an unexplained gap under the last row.
+        LazyColumn(contentPadding = PaddingValues(bottom = 8.dp)) {
             itemsIndexed(entries) { index, entry ->
                 val isCursor = index == startIndex
                 val meta = listOfNotNull(entry.pos, entry.meaning).joinToString(" ")
@@ -316,16 +390,7 @@ private fun WordDisplayList(
                         .selectable(
                             selected = isCursor,
                             role = Role.RadioButton,
-                            onClick = {
-                                onStartIndexChange(index)
-                                if (expandable) {
-                                    expanded = if (index in expanded) {
-                                        expanded - index
-                                    } else {
-                                        expanded + index
-                                    }
-                                }
-                            },
+                            onClick = { onStartIndexChange(index) },
                         ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -377,6 +442,29 @@ private fun WordDisplayList(
                                 maxLines = if (index in expanded) Int.MAX_VALUE else 2,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
+                    }
+                    // Expansion has its own control so the row tap stays a
+                    // single action (起始词). Rendered only for glosses the
+                    // 2-line clamp would actually truncate: a chevron on every
+                    // row would promise content that is not there. Same nested
+                    // IconButton-in-selectable-row pattern as 删除 below.
+                    if (expandable) {
+                        IconButton(
+                            onClick = {
+                                expanded = if (index in expanded) {
+                                    expanded - index
+                                } else {
+                                    expanded + index
+                                }
+                            },
+                        ) {
+                            Icon(
+                                if (index in expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                contentDescription = if (index in expanded) "收起释义" else "展开释义",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
                             )
                         }
                     }

@@ -34,8 +34,12 @@ data class LibrarySearchResult(
  */
 class BuiltinLibraryRepository(private val assets: AssetManager) {
 
-    /** Asset top-level dirs that are not library categories (non-.txt siblings). */
-    private val nonLibrary = setOf("dict", "compounds", "audio")
+    /**
+     * Asset top-level dirs that are not library categories (non-.txt siblings).
+     * `licenses/` ships the in-app GPL text ([LICENSES] in the settings hub),
+     * which must never surface as a browsable category.
+     */
+    private val nonLibrary = setOf("dict", "compounds", "audio", "licenses")
 
     private val entriesCache = ConcurrentHashMap<String, List<WordEntry>>()
 

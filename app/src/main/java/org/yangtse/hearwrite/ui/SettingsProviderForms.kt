@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -40,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -143,7 +145,10 @@ fun ProviderBaseUrlField(
         readOnly = readOnly,
         label = { Text("接口地址（Base URL）") },
         singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Uri,
+            imeAction = ImeAction.Next,
+        ),
         modifier = modifier.fillMaxWidth(),
     )
 }
@@ -194,7 +199,10 @@ fun ProviderApiKeyField(
                 )
             }
         },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Password,
+            imeAction = ImeAction.Next,
+        ),
         // A newline in the key would land inside `Authorization: Bearer …`
         // and surface as a bogus 网络请求失败.
         singleLine = true,
@@ -218,6 +226,10 @@ fun ProviderModelField(
         readOnly = readOnly,
         label = { Text("模型") },
         singleLine = true,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Text,
+            imeAction = ImeAction.Next,
+        ),
         modifier = modifier
             .fillMaxWidth()
             .padding(top = 4.dp),
@@ -321,6 +333,10 @@ private fun ProviderStatusLine(
  * 清除配置 / 保存并启用 row. The clear button exists only when the selected
  * preset has a stored config ([clearEnabled]); the save button takes the
  * remaining width — it is the row's primary action.
+ *
+ * 清除配置 destroys stored data and cannot be undone, so it is tinted as the
+ * destructive action (error content colour) rather than looking like a second
+ * neutral button sitting next to 保存并启用.
  */
 @Composable
 fun ProviderActionRow(
@@ -336,7 +352,12 @@ fun ProviderActionRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (clearEnabled) {
-            OutlinedButton(onClick = onClear) {
+            OutlinedButton(
+                onClick = onClear,
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error,
+                ),
+            ) {
                 Text("清除配置")
             }
         }
@@ -351,19 +372,32 @@ fun ProviderActionRow(
 }
 
 /**
+ * Default [ProviderClearConfirmDialog] body when the preset being cleared is
+ * not the one in effect. Shared with the TTS call site, which appends the
+ * 发音来源 consequence to it instead of restating the sentences.
+ */
+internal const val DEFAULT_CLEAR_BODY =
+    "将删除已保存的接口地址、Key 与模型，草稿恢复为预设默认值。"
+
+/**
  * The 清除配置 confirmation, shared by both forms (it used to exist twice,
  * which kept the copies identical only by luck). [onConfirm] owns closing the
  * dialog and the actual clear.
+ *
+ * [text] is the body: clearing the preset that is currently in effect has an
+ * extra consequence (发音来源 falls back to 有道词典), so the TTS call site
+ * passes a body that says so; the OCR call site keeps [DEFAULT_CLEAR_BODY].
  */
 @Composable
 fun ProviderClearConfirmDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
+    text: String = DEFAULT_CLEAR_BODY,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("清除该服务商的配置？") },
-        text = { Text("将删除已保存的接口地址、Key 与模型，草稿恢复为预设默认值。") },
+        text = { Text(text) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text("清除", color = MaterialTheme.colorScheme.error)

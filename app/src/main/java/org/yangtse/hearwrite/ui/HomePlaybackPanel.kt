@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
@@ -36,10 +37,16 @@ import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
  * Home bottom playback panel (alice's PlaybackControls): the 间隔 slider,
  * 自动播放 / 随机顺序 switches and the primary 开始听写 button. 间隔 and
  * 自动播放 persist to the DataStore keys shared with 设置 and the dictation
- * session; 随机顺序 is session-local. The button stays enabled at 0 words (for
- * a settled list) so the screen can report why nothing starts (a Snackbar on
- * the screen's message channel); when the list is not settled yet it is held
- * busy with [startBusyLabel] instead.
+ * session; 随机顺序 is session-local.
+ *
+ * The start button stays enabled at 0 words (for a settled list) so the screen
+ * can report why nothing starts (a message on the screen's channel) — but it
+ * must not look like a working start: with no words its caption is 请先输入词表
+ * (no `N 词` badge), and only a non-empty list reads 开始听写. While the list is
+ * not settled the button is held busy with [startBusyLabel] instead.
+ *
+ * A 起始词 moved off the first word shows a trailing 重置 control next to 从第
+ * N 词开始, which returns the count-in to word 1.
  */
 @Composable
 fun HomePlaybackPanel(
@@ -60,6 +67,7 @@ fun HomePlaybackPanel(
     onIntervalChange: (Double) -> Unit,
     onAutoNextChange: (Boolean) -> Unit,
     onShuffleChange: (Boolean) -> Unit,
+    onResetStart: () -> Unit,
     onStart: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -120,6 +128,23 @@ fun HomePlaybackPanel(
                             MaterialTheme.colorScheme.primary
                         },
                     )
+                    // The row is the only place the count-in can be seen (the
+                    // list itself sits far above it), so it also owns the way
+                    // back to word 1 — mirroring the library preview's reset.
+                    // The slot is always laid out so 从第 N 词开始 never shifts,
+                    // and the real button is a full 48dp touch target.
+                    if (startIndex > 0) {
+                        IconButton(onClick = onResetStart, modifier = Modifier.size(48.dp)) {
+                            Icon(
+                                Icons.Filled.Clear,
+                                contentDescription = "重置为从第 1 词开始",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    } else {
+                        Spacer(Modifier.size(48.dp))
+                    }
                 }
             }
             Row(
@@ -198,7 +223,11 @@ fun HomePlaybackPanel(
                 } else {
                     Icon(Icons.Filled.PlayArrow, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text("开始听写")
+                    // 0 words: the button is still pressable (the screen then
+                    // explains why nothing starts), but it must not advertise
+                    // 开始听写 over an empty list — the caption itself states
+                    // what is missing.
+                    Text(if (wordCount == 0) "请先输入词表" else "开始听写")
                     if (wordCount > 0) {
                         Spacer(Modifier.width(10.dp))
                         Surface(

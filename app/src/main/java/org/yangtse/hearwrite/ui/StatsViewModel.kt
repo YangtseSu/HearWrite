@@ -43,11 +43,22 @@ data class StatsUiState(
     val loading: Boolean = true,
     val summary: StatsSummary,
     val trend: List<DayStat>,
+    /**
+     * True when today already carries a run — today's is the window's last row
+     * (`dailyStats` zero-fills up to and including today). Derived here rather
+     * than read off [trend] in the composable so the 连续天数 hint stays a
+     * function of the same window the chart draws.
+     */
+    val todayStudied: Boolean,
     val topWrong: List<WrongWordMark>,
     val recent: List<SessionRow>,
 )
 
-/** How many wrong words the 高频错词 section lists. */
+/**
+ * How many wrong words the 高频错词 section lists. The page cannot see the
+ * book's true size (it is handed this capped list), so the screen prints its
+ * 「仅显示…」 note exactly when the list hits this cap.
+ */
 const val TOP_WRONG_LIMIT = 10
 
 /**
@@ -86,10 +97,14 @@ class StatsViewModel(application: Application) : AndroidViewModel(application) {
         // functions stay a function of their arguments.
         val zone = ZoneId.systemDefault()
         val today = LocalDate.now(zone)
+        val trend = dailyStats(sessions, zone, endDay = today, days = TREND_DAYS)
         StatsUiState(
             loading = false,
             summary = summarize(sessions, zone, today),
-            trend = dailyStats(sessions, zone, endDay = today, days = TREND_DAYS),
+            trend = trend,
+            // The window's last row is today by construction; a run there is
+            // exactly 今日已打卡.
+            todayStudied = (trend.lastOrNull()?.runs ?: 0) > 0,
             topWrong = marks.take(TOP_WRONG_LIMIT),
             recent = sessions.map { it.toRow(history, titles) },
         )
@@ -162,6 +177,7 @@ class StatsViewModel(application: Application) : AndroidViewModel(application) {
             loading = loading,
             summary = summarize(emptyList(), ZoneId.systemDefault(), LocalDate.now()),
             trend = emptyList(),
+            todayStudied = false,
             topWrong = emptyList(),
             recent = emptyList(),
         )

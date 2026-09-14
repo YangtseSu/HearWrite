@@ -28,8 +28,8 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.BarChart
-import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Spellcheck
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -66,15 +66,22 @@ import org.yangtse.hearwrite.HearWriteApplication
 
 /**
  * Home (alice layout, Material 3 tokens): a brand header with the OCR
- * progress pill and a 更多 menu sheet (收藏 / 历史记录 / 词库 / 设置), the
- * 单词列表 section ([WordListSection] — 编辑/展示 two-state word list where
- * tapping a display row selects the 起始词), a 拍照识词 TextButton and the
- * bottom playback panel ([HomePlaybackPanel] — 间隔 / 自动播放 / 随机顺序 /
- * 开始听写). The draft persists with a 500 ms debounce flushed on dispose;
- * IME padding is applied to the content area only, so the playback panel
- * stays pinned to the screen bottom (covered by the keyboard while typing)
- * and its slot is never freed to the editor — dismissing the IME causes no
- * "fill then pop back" jump.
+ * progress strip and a 更多 menu sheet (收藏 / 历史记录 / 错词本 / 听写统计),
+ * the 单词列表 section ([WordListSection] — 编辑/展示 two-state word list where
+ * tapping a display row moves the 起始词 and a trailing chevron expands a
+ * truncated gloss), a 拍照识词 TextButton and the bottom playback panel
+ * ([HomePlaybackPanel] — 间隔 / 自动播放 / 随机顺序 / 开始听写). The draft
+ * persists with a 500 ms debounce flushed on dispose; IME padding is applied
+ * to the content area only, so the playback panel stays pinned to the screen
+ * bottom (covered by the keyboard while typing) and its slot is never freed to
+ * the editor — dismissing the IME causes no "fill then pop back" jump.
+ *
+ * The panel's start button is pressable at 0 words on purpose (its caption
+ * reads 请先输入词表 and the tap answers 请先输入单词列表) and is held busy
+ * while the list is not settled. Loads from 历史记录 / 收藏 close their sheet
+ * first and then confirm on this screen's host, so the message is never left
+ * behind the sheet's scrim; the screen-level host also carries the OCR,
+ * 清空错词本 / 清空历史记录 confirmations.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -333,6 +340,7 @@ fun HomeScreen(
                 onIntervalChange = viewModel::onIntervalChange,
                 onAutoNextChange = viewModel::onAutoNextChange,
                 onShuffleChange = viewModel::onShuffleChange,
+                onResetStart = { viewModel.setStartIndex(0) },
                 onStart = {
                     if (wordCount == 0) {
                         // Kept pressable so the app can explain why (alice).
@@ -381,6 +389,11 @@ fun HomeScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
+                        // The four rows share the sheet's own container colour,
+                        // so with no gap they read as one tall block instead of
+                        // four targets. 8dp between them restores the grouping
+                        // without touching MenuRow's styling.
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(
                             "更多",
@@ -395,7 +408,10 @@ fun HomeScreen(
                             showMenu = false
                             showHistory = true
                         }
-                        MenuRow(Icons.Outlined.Cancel, "错词本") {
+                        // 错词本 is a spelling-mistake book, so it gets its own
+                        // glyph: Cancel already means 删除这一行 inside the word
+                        // list, and the two marks were confusable one menu apart.
+                        MenuRow(Icons.Outlined.Spellcheck, "错词本") {
                             showMenu = false
                             showWrongWords = true
                         }
@@ -456,9 +472,20 @@ fun HomeScreen(
             HistorySheet(
                 entries = history,
                 favoriteIds = favorites,
-                onApply = viewModel::applyEntry,
+                // Dismiss before confirming: the sheet is its own window on top
+                // of this one, so a 已载入历史记录 raised while it is still up
+                // would sit behind the sheet's scrim — and show for its
+                // dismissal animation only. Closing first lands the message on
+                // the screen-level host, just above the playback panel, where
+                // the user is now looking (same as 查看词表 does from 错词本).
+                onApply = { text ->
+                    viewModel.applyEntry(text)
+                    showHistory = false
+                    messages.show("已载入历史记录")
+                },
                 onToggleFavorite = viewModel::toggleFavorite,
                 onDelete = viewModel::deleteHistory,
+                onUndoDelete = viewModel::undoDeleteHistory,
                 onClear = { clearHistoryConfirm = true },
                 onDismiss = { showHistory = false },
             )
@@ -467,7 +494,12 @@ fun HomeScreen(
         if (showFavorites) {
             FavoritesSheet(
                 items = favoriteItems,
-                onApply = viewModel::applyEntry,
+                // Same close-then-confirm ordering as 历史记录 above.
+                onApply = { text ->
+                    viewModel.applyEntry(text)
+                    showFavorites = false
+                    messages.show("已载入收藏")
+                },
                 onToggleFavorite = viewModel::toggleFavorite,
                 onDismiss = { showFavorites = false },
             )
@@ -487,6 +519,7 @@ fun HomeScreen(
                     }
                 },
                 onDelete = viewModel::removeWrongWord,
+                onUndoDelete = viewModel::undoRemoveWrongWord,
                 onClear = { clearWrongConfirm = true },
                 onJumpToSource = { category, label ->
                     showWrongWords = false

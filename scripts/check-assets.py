@@ -31,8 +31,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 ASSETS_DIR = REPO_ROOT / "app" / "src" / "main" / "assets"
 
 # Top-level asset dirs that are not word-list categories (AGENTS.md
-# "Built-in library").
-NON_LIBRARY_DIRS = {"dict", "compounds", "audio"}
+# "Built-in library"). `licenses/` ships the in-app GPL text, not a word list.
+NON_LIBRARY_DIRS = {"dict", "compounds", "audio", "licenses"}
 
 PIPE_RE = re.compile(r"[|｜]")
 CJK_RE = re.compile(r"[\u4e00-\u9fff]")

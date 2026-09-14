@@ -37,25 +37,27 @@ fun HearWriteApp() {
     /** Stage the prepared session (lines + provenance) and start dictation. */
     val startSession: (List<String>, String?) -> Unit = { lines, sourceLabel ->
         app.dictationSession.stage(lines, sourceLabel)
-        navController.navigate(Routes.DICTATION)
+        navController.navigate(Routes.DICTATION) { launchSingleTop = true }
     }
 
-    /** Start a session over [lines] with no provenance (manual / review runs). */
-    val startDictation: (List<String>) -> Unit = { lines ->
-        startSession(lines, null)
+    // Every top-level push is single-top: a double tap used to stack the screen
+    // twice, so one 返回 left the user on the same page. LIBRARY_DRAW already
+    // did this; STATS / SETTINGS / LIBRARY / DICTATION did not.
+    val openTop: (String) -> Unit = { route ->
+        navController.navigate(route) { launchSingleTop = true }
     }
 
     NavHost(navController = navController, startDestination = Routes.HOME) {
         composable(Routes.HOME) {
             HomeScreen(
                 onStartDictation = startSession,
-                onOpenLibrary = { navController.navigate(Routes.LIBRARY) },
+                onOpenLibrary = { openTop(Routes.LIBRARY) },
                 onOpenLibraryPreview = { category, label ->
                     // 错词本 source jump: lands on the list's preview directly.
                     navController.navigate(Routes.libraryPreview(category, label))
                 },
-                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
-                onOpenStats = { navController.navigate(Routes.STATS) },
+                onOpenSettings = { openTop(Routes.SETTINGS) },
+                onOpenStats = { openTop(Routes.STATS) },
                 // 拍照识词 sheet 的 修改/去设置: one entry opened on the OCR
                 // provider form. Back first lands on the in-screen hub
                 // (goHub), then pops to Home — no second hub entry beneath,

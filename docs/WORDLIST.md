@@ -17,7 +17,7 @@
 app/src/main/assets/<分类目录>/<词表名>.txt
 ```
 
-- 分类目录即词库里的一个分类；`dict/`、`compounds/`、`audio/` 是保留目录，不是分类。
+- 分类目录即词库里的一个分类；`dict/`、`compounds/`、`audio/`、`licenses/` 是保留目录，不是分类（`licenses/` 放应用内 GPL 全文，由「设置 → 关于 → 开源许可」读取）。
 - 词表名 = 文件名去掉 `.txt`，就是**存储键**的一部分（`default_<分类>_<词表名>`），收藏、错词来源、听写记录都指向它。
   **改名 = 孤立用户已有的收藏与错词来源**（它们降级成"未知来源"）。只增不改名。
 - 列表排序由 `domain/LabelOrder.kt` 的 `compareLabels` 决定：`第X册` 按册号，其余按"年级 → 上下全"，再按中文拼音 → 笔画 → 码点，拉丁串按字母。**文件名决定显示位置**，所以按册次写全（`三上 Unit 2`），不要用 `Unit2`。
@@ -69,7 +69,7 @@ python3 scripts/check-assets.py --strict   # warning 也当失败
 
 ### 词表是生成资产的输入（语文识字表/写字表尤其注意）
 
-两个生成器都读词表，但**范围不同**：`scripts/build-hanzi-meta.py` 扫**全部**词表分类的 `字 | 拼音 | 组词` 行（`ASSETS_DIR.rglob("*.txt")`，跳过 `dict`/`compounds`/`audio`），把其中的**课本读音**当作 `dict/hanzi-meta.json` 的高优先级来源（仅次于人工 override）；`scripts/generate-compounds.py` 只读 `人教版小学语文/*.txt`，把其中的组词收进 `compounds/compounds.json` 的 `learned` 池。
+两个生成器都读词表，但**范围不同**：`scripts/build-hanzi-meta.py` 扫**全部**词表分类的 `字 | 拼音 | 组词` 行（`ASSETS_DIR.rglob("*.txt")`，跳过 `dict`/`compounds`/`audio`/`licenses`），把其中的**课本读音**当作 `dict/hanzi-meta.json` 的高优先级来源（仅次于人工 override）；`scripts/generate-compounds.py` 只读 `人教版小学语文/*.txt`，把其中的组词收进 `compounds/compounds.json` 的 `learned` 池。
 
 因此给语文词表加第三列**不是"顺手补全"**，而是改写两份全体分类共享的派生资产：一个多音字行的读音会翻转该字的全局默认（如 `行 | háng` → `xíng`），一批组词会重写 `learned` 池——而新写的组词又只能从这些池里取，构成循环。行动前先决定这两件事：
 

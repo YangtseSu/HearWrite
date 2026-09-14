@@ -45,6 +45,10 @@ class RowToggle(
  * [toggle] turns the whole row into a `toggleable` (state + Role in the
  * semantics tree); pass it *instead of* `onClick` when the row's own trailing
  * control drives the state.
+ *
+ * [titleMaxLines] is the title's line budget: the default of 1 keeps rows
+ * uniform, and the 词库 screens raise it to 2 for the list labels, which run
+ * to 11–12 CJK characters and would otherwise ellipsise mid-word.
  */
 @Composable
 fun ListRow(
@@ -53,6 +57,7 @@ fun ListRow(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     toggle: RowToggle? = null,
+    titleMaxLines: Int = 1,
     trailing: @Composable RowScope.() -> Unit = {},
 ) {
     Row(
@@ -76,7 +81,7 @@ fun ListRow(
             Text(
                 title,
                 style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
+                maxLines = titleMaxLines,
                 overflow = TextOverflow.Ellipsis,
             )
             if (subtitle != null) {

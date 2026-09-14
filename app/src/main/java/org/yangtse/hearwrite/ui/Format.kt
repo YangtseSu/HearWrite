@@ -13,12 +13,15 @@ import java.util.Locale
 // card and `1 小时 15 分` on 听写统计; and two copies of the record timestamp
 // drifted apart. The rules are now single-sourced here.
 
-/** Trend-axis day label: compact, no year — the window is 14 days. */
-private val DAY_LABEL = DateTimeFormatter.ofPattern("M/d")
+// One date style for the whole app. The 听写统计 screen used to mix an `M/d`
+// axis with `MM-dd HH:mm` records — two spellings of the same day side by side.
+// Both labels read `9月14日` now, and timestamps append the clock time.
+/** Day label (trend axis, bar descriptions, chart readout). */
+private val DAY_LABEL = DateTimeFormatter.ofPattern("M月d日")
 
 /** Record timestamps within the current year; the year returns when it differs. */
-private val STAMP_LABEL = DateTimeFormatter.ofPattern("MM-dd HH:mm")
-private val STAMP_LABEL_WITH_YEAR = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+private val STAMP_LABEL = DateTimeFormatter.ofPattern("M月d日 HH:mm")
+private val STAMP_LABEL_WITH_YEAR = DateTimeFormatter.ofPattern("yyyy年M月d日 HH:mm")
 
 /**
  * The 听写间隔 stepper readout: `7 秒` / `7.5 秒` — the same unit the countdown

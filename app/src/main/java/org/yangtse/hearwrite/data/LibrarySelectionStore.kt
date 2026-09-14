@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 /**
- * 多选词库 state for 抽词听写 (Roadmap #9): which built-in lists the user
+ * 多选词表 state for 抽词听写 (Roadmap #9): which built-in lists the user
  * ticked, across categories (the category/list screens are separate
  * navigation destinations, so the selection cannot live in one of their
  * ViewModels). Process-scoped and in-memory, like [DictationSessionStore] —

@@ -23,11 +23,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 /**
- * 多选词库 action bar for 抽词听写 (Roadmap #9), pinned to the bottom of both
+ * 多选词表 action bar for 抽词听写 (Roadmap #9), pinned to the bottom of both
  * library screens while selection mode is on: the ticked-list count, 退出多选
  * and the 抽词听写 entry (disabled with nothing ticked). The two screens are
  * separate destinations, so the bar is shared — the selection itself lives in
  * the process-scoped store both screens observe.
+ *
+ * [selectedCount] counts *lists*, and the label says so (已选 N 个词表): the
+ * user cares about words, but a cross-category word total would mean loading
+ * every ticked list right here. It stays on the draw page instead, where the
+ * merged pool is loaded anyway and the 合计 M 词 line is authoritative.
  */
 @Composable
 fun LibrarySelectionBar(
@@ -64,7 +69,7 @@ fun LibrarySelectionBar(
 }
 
 /**
- * Guarded exit from 多选词库. Leaving the mode wipes every tick
+ * Guarded exit from 多选词表. Leaving the mode wipes every tick
  * ([LibrarySelectionStore.setActive]), and the tick set can span categories —
  * so a non-empty selection is confirmed like every other destructive action in
  * the app; an empty one exits straight away. Returns the action to wire into

@@ -9,18 +9,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -141,6 +139,7 @@ fun DictationGradePane(
                 result = result,
                 selected = selected,
                 busy = busy,
+                pickerBusy = pickerBusy,
                 onToggle = onToggle,
                 onRecapture = onCamera,
                 onConfirm = onConfirm,
@@ -211,6 +210,8 @@ private fun GradeReview(
     result: GradeResult,
     selected: Set<Int>,
     busy: Boolean,
+    /** True while a new picture is being picked/decoded — 重新拍照 waits for it. */
+    pickerBusy: Boolean,
     onToggle: (Int) -> Unit,
     onRecapture: () -> Unit,
     onConfirm: () -> Unit,
@@ -253,7 +254,10 @@ private fun GradeReview(
             modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            itemsIndexed(ordered) { _, (index, item) ->
+            // Keyed by the item's original index in [GradeResult.items]: the
+            // list re-sorts (题号 order) and a tick flips, so positional keys
+            // would let one row's state land on another's slot.
+            items(ordered, key = { it.index }) { (index, item) ->
                 GradeRow(
                     item = item,
                     checked = index in selected,
@@ -268,7 +272,9 @@ private fun GradeReview(
         ) {
             OutlinedButton(
                 onClick = onRecapture,
-                enabled = !busy,
+                // Same condition as the error block's 重新拍照: a pick/decode
+                // already in flight must not be stacked by a second press.
+                enabled = !busy && !pickerBusy,
                 modifier = Modifier.weight(1f),
             ) { Text("重新拍照") }
             Button(
@@ -406,9 +412,12 @@ private fun GradeRow(
                     },
                 )
             } else {
+                // Non-interactive marker: the row's own 多余作答 label already
+                // carries the meaning, so the icon stays out of the
+                // accessibility tree (C1c).
                 Icon(
                     Icons.Filled.WarningAmber,
-                    contentDescription = "多余的作答，无法对应到词",
+                    contentDescription = null,
                     tint = colors.outline,
                     modifier = Modifier.padding(horizontal = 12.dp).size(18.dp),
                 )

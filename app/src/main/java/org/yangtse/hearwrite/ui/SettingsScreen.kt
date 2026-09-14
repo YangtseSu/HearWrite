@@ -1,6 +1,7 @@
 package org.yangtse.hearwrite.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -55,7 +55,7 @@ import org.yangtse.hearwrite.domain.ThemeMode
 import org.yangtse.hearwrite.domain.TtsSource
 
 /** One sub-page reachable from the settings hub (each draws its own top bar). */
-enum class SettingsSubPage { VOICE_SOURCE, OCR_PROVIDER, ABOUT }
+enum class SettingsSubPage { VOICE_SOURCE, OCR_PROVIDER, ABOUT, LICENSES }
 
 /**
  * 设置 — an Android-settings-style hub. Grouped cards list every setting;
@@ -75,6 +75,17 @@ fun SettingsScreen(
 ) {
     var subPage by rememberSaveable { mutableStateOf(initialPage) }
 
+    // The hub leaves composition while a sub-page is shown (the when() below
+    // swaps it out), and nothing performs a save on that branch switch — the
+    // NavHost's SaveableStateProvider only saves when the whole destination
+    // goes away. rememberScrollState() is itself just
+    // `rememberSaveable(saver = ScrollState.Saver)`, so kept inside the hub
+    // it would be forgotten on the way to a sub-page and the user would come
+    // back to the top of 设置. Owned here, one composable above the swap, the
+    // state is neither forgotten (same node, hub or sub-page) nor lost on
+    // rotation / process death.
+    val hubScrollState = rememberSaveable(saver = ScrollState.Saver) { ScrollState(0) }
+
     fun goHub() {
         subPage = null
         // A provider page may have played a test clip → refresh the cache row.
@@ -84,7 +95,12 @@ fun SettingsScreen(
     BackHandler(enabled = subPage != null) { goHub() }
 
     when (subPage) {
-        null -> SettingsHub(onClose = onClose, viewModel = viewModel, onOpen = { subPage = it })
+        null -> SettingsHub(
+            onClose = onClose,
+            viewModel = viewModel,
+            onOpen = { subPage = it },
+            scrollState = hubScrollState,
+        )
         SettingsSubPage.VOICE_SOURCE -> VoiceSourceSettingsPage(
             viewModel = viewModel,
             onBack = { goHub() },
@@ -93,17 +109,26 @@ fun SettingsScreen(
             viewModel = viewModel,
             onBack = { goHub() },
         )
-        SettingsSubPage.ABOUT -> AboutSettingsPage(onBack = { goHub() })
+        SettingsSubPage.ABOUT -> AboutSettingsPage(
+            onBack = { goHub() },
+            onOpenLicenses = { subPage = SettingsSubPage.LICENSES },
+        )
+        SettingsSubPage.LICENSES -> LicensesSettingsPage(onBack = { goHub() })
     }
 }
 
-/** The top-level hub: grouped list cards + the 清空发音缓存 confirm dialog. */
+/**
+ * The top-level hub: grouped list cards + the 清空发音缓存 confirm dialog.
+ * [scrollState] is owned by [SettingsScreen] — the hub is swapped out for a
+ * sub-page and would otherwise lose its scroll position on the way back.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsHub(
     onClose: () -> Unit,
     onOpen: (SettingsSubPage) -> Unit,
     viewModel: SettingsViewModel,
+    scrollState: ScrollState,
 ) {
     val messages = rememberMessageController()
     val theme by viewModel.theme.collectAsStateWithLifecycle()
@@ -127,6 +152,12 @@ private fun SettingsHub(
     val providerKeyWarning by viewModel.providerKeyWarning.collectAsStateWithLifecycle()
 
     var showClearCacheDialog by rememberSaveable { mutableStateOf(false) }
+    // 清空发音缓存 against an empty cache is a no-op that still announced 已清空
+    // — a lie. With nothing cached the row therefore loses its click, so
+    // neither the confirm dialog nor the confirmation can fire. A null
+    // cacheInfo means the scan has not landed yet (trailing shows 计算中…),
+    // which counts as "nothing cached" too.
+    val hasCache = (cacheInfo?.fileCount ?: 0) > 0 || (cacheInfo?.bytes ?: 0L) > 0L
 
     LaunchedEffect(cacheCleared) {
         if (cacheCleared > 0) {
@@ -195,7 +226,7 @@ private fun SettingsHub(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(scrollState)
                     .padding(bottom = 24.dp),
             ) {
                 SettingsSectionHeader("外观")
@@ -333,7 +364,11 @@ private fun SettingsHub(
                             )
                         },
                         divider = false,
-                        onClick = { showClearCacheDialog = true },
+                        onClick = if (hasCache) {
+                            { showClearCacheDialog = true }
+                        } else {
+                            null
+                        },
                     )
                 }
 

@@ -85,6 +85,26 @@ class HistoryRepository(
         favoritesDao.pruneHistoryOrphans()
     }
 
+    /**
+     * Undo a [delete]: put [entry] back as the same row id (so a 错词本 source
+     * or favorite pointing at it resolves again). Deleting a favorited row also
+     * prunes its favorite ([pruneHistoryOrphans]), so [wasFavorited] restores
+     * that too — a 撤销 that silently dropped the star would be worse than no
+     * undo. No [trimTo]: restoring one just-removed row cannot exceed the cap
+     * the delete itself brought the list under.
+     */
+    suspend fun restore(entry: HistoryEntry, wasFavorited: Boolean) {
+        historyDao.insertExact(
+            HistoryEntity(
+                id = entry.id,
+                text = entry.text,
+                enrichedText = entry.enrichedText,
+                createdAt = entry.createdAt,
+            )
+        )
+        if (wasFavorited) favoritesDao.insert(FavoriteEntity(entry.id))
+    }
+
     suspend fun clear() {
         historyDao.clear()
         favoritesDao.pruneHistoryOrphans()

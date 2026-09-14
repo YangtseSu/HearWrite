@@ -1,5 +1,6 @@
 package org.yangtse.hearwrite.ui
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.clickable
@@ -159,7 +160,11 @@ fun SettingsRow(
  *
  * [expandedContent] renders inline under the row (same card, no rounded
  * break) when [expanded] is true — for per-option config that belongs to
- * this row so the ownership needs no guessing.
+ * this row so the ownership needs no guessing. The reveal animates its height
+ * ([animateContentSize]), so the card grows into the extra config instead of
+ * jumping. Scrolling the config into view is deliberately left to the page:
+ * only the page owns the scroll container, so a requester here would have to
+ * be plumbed through every call site for a shared widget's convenience.
  */
 @Composable
 fun SettingsRadioRow(
@@ -194,13 +199,22 @@ fun SettingsRadioRow(
             Spacer(Modifier.width(16.dp))
             RadioButton(selected = selected, onClick = null)
         }
-        if (expanded && expandedContent != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-            ) {
-                expandedContent()
+        // Always composed — even collapsed, at zero height — so this node
+        // outlives the toggle. animateContentSize only animates a size change
+        // it can see: a Box created fresh when `expanded` flips true starts
+        // its animation data at the size it is first measured at and would
+        // snap open instead. The padding sits on the inner Box, so a collapsed
+        // row still measures 0 and an expanded one measures exactly as before;
+        // a null [expandedContent] renders nothing at all, as it used to.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .animateContentSize(),
+        ) {
+            if (expanded && expandedContent != null) {
+                Box(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
+                    expandedContent()
+                }
             }
         }
         if (divider) {

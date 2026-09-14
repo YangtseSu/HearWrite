@@ -34,7 +34,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ASSETS_DIR = REPO_ROOT / "app" / "src" / "main" / "assets"
-NON_LIBRARY_DIRS = {"dict", "compounds", "audio"}
+NON_LIBRARY_DIRS = {"dict", "compounds", "audio", "licenses"}
 
 CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 # Pinyin letters: a–z plus ü and its tone-marked forms.

@@ -279,6 +279,20 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
             _ready.value = true
             beginRun(sessionLines, runSourceLabel)
         }
+        // OCR provider config feeds [openGradePane]'s pre-check: the finish
+        // card must be able to say "configure OCR first" without a photo.
+        viewModelScope.launch {
+            try {
+                settings.ocrProviderConfig.collect { cfg ->
+                    // The repository flow already drops incomplete configs.
+                    _ocrConfigured.value = cfg != null
+                }
+            } catch (e: Exception) {
+                // An unreadable config reads as unconfigured — the press then
+                // reports it instead of opening a pane that cannot grade.
+                Log.w(TAG, "OCR provider config unavailable; 拍照批改 pre-check stays off", e)
+            }
+        }
         // Score summary + completion chime: capture the elapsed time once when
         // the run completes (a review round resets it via beginRun). The same
         // capture records the local stats row (Roadmap #3) — only a run that
@@ -595,15 +609,38 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     val gradeRetryable: StateFlow<Boolean> = _gradeRetryable.asStateFlow()
 
     private val _gradeNotice = MutableStateFlow<String?>(null)
-    /** One-shot confirmation text, consumed by the screen ([clearGradeNotice]). */
+    /**
+     * One-shot text consumed by the screen ([clearGradeNotice]): a confirmed
+     * 拍照批改 write, or [openGradePane]'s pre-check refusal (no OCR config).
+     */
     val gradeNotice: StateFlow<String?> = _gradeNotice.asStateFlow()
+
+    private val _ocrConfigured = MutableStateFlow(false)
+
+    /**
+     * True when a complete BYOK OCR provider config is stored, mirrored from
+     * the settings repository (same shape as `HomeViewModel.ocrConfigured`).
+     * [openGradePane] gates on it so an unconfigured service is reported
+     * before the user takes and crops a photo.
+     */
+    val ocrConfigured: StateFlow<Boolean> = _ocrConfigured.asStateFlow()
 
     /**
      * Open the 拍照批改 pane. The recognition language follows this run's own
      * list ([isCjkRun]) — a 汉字/词语 run needs the Chinese prompt — so there
      * is no language picker here.
+     *
+     * Pre-check: with no stored OCR provider config the pane would only fail
+     * after a photo had been taken and cropped, so the card's 拍照批改 press
+     * shows "请先在设置中配置 OCR 服务（需自备 API Key）" through the screen's
+     * message host ([gradeNotice]) and leaves the score card up. The pane's
+     * own empty state stays reachable for a config cleared while it is open.
      */
     fun openGradePane() {
+        if (!_ocrConfigured.value) {
+            _gradeNotice.value = "请先在设置中配置 OCR 服务（需自备 API Key）"
+            return
+        }
         _gradePane.value = true
     }
 

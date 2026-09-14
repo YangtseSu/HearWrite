@@ -9,12 +9,18 @@ import kotlinx.coroutines.flow.map
  * (`default_<category>_<label>`), a history row id, or null = manual input /
  * bare-word review. Display titles and library jumps resolve in the UI layer,
  * which holds the history rows and asset access.
+ *
+ * [addedAt] is the first-mark time (written once, on insert). The row is the
+ * unit a single-tap 移除 deletes, so carrying every stored column makes that
+ * removal undoable — [WrongWordsRepository.restore] puts the same row back
+ * without inflating its count as a fresh mark would.
  */
 data class WrongWordMark(
     val word: String,
     val errorCount: Int,
     val lastWrongAt: Long,
     val sourceLabel: String?,
+    val addedAt: Long = lastWrongAt,
 ) {
     /** Sort groups the book by most-wrong first, then most-recent mark. */
     val sortKey: Pair<Int, Long> get() = errorCount to lastWrongAt
@@ -39,7 +45,15 @@ class WrongWordsRepository(private val dao: WrongWordsDao) {
     /** Book rows with their raw source ids, most-wrong first — the 错词本. */
     fun observeMarks(): Flow<List<WrongWordMark>> =
         dao.observeAll().map { rows ->
-            rows.map { WrongWordMark(it.word, it.errorCount, it.lastWrongAt, it.sourceLabel) }
+            rows.map {
+                WrongWordMark(
+                    word = it.word,
+                    errorCount = it.errorCount,
+                    lastWrongAt = it.lastWrongAt,
+                    sourceLabel = it.sourceLabel,
+                    addedAt = it.addedAt,
+                )
+            }
         }
 
     /**
@@ -55,6 +69,24 @@ class WrongWordsRepository(private val dao: WrongWordsDao) {
     }
 
     suspend fun remove(word: String) = dao.delete(word)
+
+    /**
+     * Undo a [remove]: put [mark] back with its exact count, times and source.
+     * A row deleted moments ago is restored as the same mark — re-inserting it
+     * through [add] would count as a fresh run and leave the book wrong.
+     */
+    suspend fun restore(mark: WrongWordMark) {
+        if (mark.word.isEmpty()) return
+        dao.insertExact(
+            WrongWordEntity(
+                word = mark.word,
+                addedAt = mark.addedAt,
+                errorCount = mark.errorCount,
+                lastWrongAt = mark.lastWrongAt,
+                sourceLabel = mark.sourceLabel,
+            )
+        )
+    }
 
     suspend fun clear() = dao.clear()
 }

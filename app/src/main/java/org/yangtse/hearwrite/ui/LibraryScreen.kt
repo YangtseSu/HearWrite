@@ -136,7 +136,7 @@ fun LibraryScreen(
                 state is LibrarySearchState.Idle -> Column {
                     if (selecting) {
                         Text(
-                            "多选模式：进入分类勾选词表（可跨分类）",
+                            "多选词表：进入分类勾选（可跨分类）",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
@@ -194,7 +194,6 @@ private fun CategoryCard(category: LibraryCategory, onClick: () -> Unit) {
                 category.name,
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 2,
-                minLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(8.dp))
@@ -293,6 +292,8 @@ private fun SearchListRow(
     ListRow(
         title = label,
         subtitle = "$category · $subtitle",
+        // Same long labels as the category list rows: two lines.
+        titleMaxLines = 2,
         // 多选 flips the row's meaning: it ticks instead of opening. The
         // toggle carries the state and the hit target, the Checkbox below is
         // decorative — see [RowToggle].

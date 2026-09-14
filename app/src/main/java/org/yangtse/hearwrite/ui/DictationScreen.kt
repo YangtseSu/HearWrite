@@ -468,11 +468,15 @@ private fun DictationContent(
 
 /**
  * Score card of a finished run: 词数 / 正确数 / 用时, then the 错词本 actions —
- * 再听一遍 replays this run's words in its own order, 复习错词 re-runs a
+ * 再听一遍 (primary) replays this run's words in its own order, 复习错词
+ * (tonal = secondary, only shown when the book is non-empty) re-runs a
  * dictation over exactly the wrong set (each mark restored to its original
- * line), 拍照批改 grades the student's photographed answer sheet against this
- * run's words, 导出错词 copies the words to the clipboard (pasteable back into
- * the Home input), chips remove single words and 清空错词本 empties the book.
+ * line) — a scope line under the pair spells out that difference. 拍照批改
+ * grades the student's photographed answer sheet against this run's words
+ * (pre-checked against the stored OCR config, see
+ * [DictationViewModel.openGradePane]), 导出错词 copies the words to the
+ * clipboard (pasteable back into the Home input), chips remove single words
+ * and 清空错词本 empties the book.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -544,14 +548,31 @@ private fun FinishCard(
         ) {
             // 再听一遍: the same words in the same order (起始序号 slice +
             // 随机顺序 already baked into the run's lines) — no re-preparation.
+            // It leads the row (solid Button) because it is the plain repeat;
+            // 复习错词 is the narrower follow-up (tonal = secondary).
             Button(onClick = onReplay, modifier = Modifier.weight(1f)) {
                 Text("再听一遍")
             }
             if (wrong.isNotEmpty()) {
-                Button(onClick = onReviewWrong, modifier = Modifier.weight(1f)) {
+                FilledTonalButton(onClick = onReviewWrong, modifier = Modifier.weight(1f)) {
                     Text("复习错词")
                 }
             }
+        }
+        // Scope line (AUDIT C1c): the two buttons looked equally weighted with
+        // no hint of what each one replays — 再听一遍 = this run's words in its
+        // order, 复习错词 = only the wrong words the 错词本 holds. Both counts
+        // are spelled out because the two are different sets: the book is
+        // persisted across sessions, the run is not.
+        if (wrong.isNotEmpty()) {
+            Text(
+                "再听一遍按本场顺序重播本场 ${ui.total} 词；" +
+                    "复习错词只练错词本里的 ${wrong.size} 个词",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 6.dp),
+            )
         }
 
         // 拍照批改: photograph the student's answer sheet and grade it against
@@ -836,7 +857,13 @@ private fun DialCenter(
     }
 }
 
-/** Bottom panel: live interval stepper + auto-next + transport buttons (stop/prev/play/next). */
+/**
+ * Bottom panel: live interval stepper + auto-next + transport buttons. Each
+ * transport control (结束 / 上一个 / play / 下一个) carries a `labelMedium`
+ * caption under its icon, so the destructive 结束 does not read as just
+ * another icon next to the two skips; the caption text is the icon's
+ * `contentDescription` verbatim.
+ */
 @Composable
 private fun PlaybackPanel(
     ui: DictationUiState,
@@ -911,20 +938,43 @@ private fun PlaybackPanel(
             // under the button and the icon's contentDescription must match
             // (A3 — TalkBack reads the same state the screen shows).
             val playLabel = if (playing) "暂停" else if (paused) "继续" else "播放"
+            // Every transport control carries a visible label (C1c): the row
+            // used to caption only the play button, which left the destructive
+            // 结束 reading as just another icon next to the two skips. Each
+            // label doubles as the icon's contentDescription, so the screen
+            // reader can never hear something the visible text does not say.
+            val stopLabel = "结束"
+            val prevLabel = "上一个"
+            val nextLabel = "下一个"
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onStop, enabled = active) {
-                    Icon(
-                        Icons.Filled.Stop,
-                        contentDescription = "结束",
-                        tint = MaterialTheme.colorScheme.error,
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(onClick = onStop, enabled = active) {
+                        Icon(
+                            Icons.Filled.Stop,
+                            contentDescription = stopLabel,
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    Text(
+                        stopLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 2.dp),
                     )
                 }
-                IconButton(onClick = onPrevious, enabled = active && ui.index > 0) {
-                    Icon(Icons.Filled.SkipPrevious, contentDescription = "上一个")
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(onClick = onPrevious, enabled = active && ui.index > 0) {
+                        Icon(Icons.Filled.SkipPrevious, contentDescription = prevLabel)
+                    }
+                    Text(
+                        prevLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     FilledIconButton(
@@ -944,8 +994,15 @@ private fun PlaybackPanel(
                         modifier = Modifier.padding(top = 2.dp),
                     )
                 }
-                IconButton(onClick = onNext, enabled = active) {
-                    Icon(Icons.Filled.SkipNext, contentDescription = "下一个")
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(onClick = onNext, enabled = active) {
+                        Icon(Icons.Filled.SkipNext, contentDescription = nextLabel)
+                    }
+                    Text(
+                        nextLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
                 }
             }
         }

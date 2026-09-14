@@ -43,6 +43,13 @@ private fun wordCount(text: String): Int = parseWords(text).size
  * 历史记录 bottom sheet: rows of user-pasted lists (newest first) — tap to
  * load into the Home draft, star to favorite, trash to delete; 清空 with a
  * confirm dialog owned by the caller.
+ *
+ * Applying a row hands the text to [onApply] and the sheet is expected to be
+ * dismissed by that callback: the confirmation ("已载入历史记录") belongs on
+ * the Home host, which means the sheet must be gone before it is raised — a
+ * message shown from in here would be hidden behind the sheet's own scrim
+ * (and vanish with this window). Only the rows that keep the sheet open
+ * (收藏 / 删除) report from inside it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,6 +59,8 @@ fun HistorySheet(
     onApply: (String) -> Unit,
     onToggleFavorite: (String) -> Unit,
     onDelete: (String) -> Unit,
+    /** 撤销 of the just-deleted row (see [onDelete]). */
+    onUndoDelete: () -> Unit,
     onClear: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -88,10 +97,7 @@ fun HistorySheet(
                             ListRow(
                                 title = entry.text.lineSequence().first { it.isNotBlank() }.trim(),
                                 subtitle = "${wordCount(entry.text)} 词 · ${formatStamp(entry.createdAt)}",
-                                onClick = {
-                                    onApply(text)
-                                    messages.show("已载入历史记录")
-                                },
+                                onClick = { onApply(text) },
                                 trailing = {
                                     IconButton(
                                         onClick = { onToggleFavorite(entry.id) },
@@ -106,7 +112,7 @@ fun HistorySheet(
                                     IconButton(
                                         onClick = {
                                             onDelete(entry.id)
-                                            messages.show("已删除")
+                                            messages.show("已删除该记录", "撤销", onUndoDelete)
                                         },
                                     ) {
                                         Icon(
@@ -130,6 +136,10 @@ fun HistorySheet(
  * 收藏 bottom sheet: favorited library lists and history rows (library content
  * resolved from assets on demand). Tap to load into the Home draft; the star
  * removes the favorite.
+ *
+ * Like [HistorySheet], applying a row dismisses the sheet through [onApply]'s
+ * callback and the 已载入收藏 confirmation is then raised by the Home host —
+ * this sheet reports nothing from inside itself.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -140,9 +150,11 @@ fun FavoritesSheet(
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        // Same window-routing reason as [HistorySheet]: the sheet hosts its own messages.
+        // The scope stays even though this sheet raises no message today: a
+        // sheet is its own window, so any future row that reports something
+        // must be hosted here — behind its own scrim — not by the Home host
+        // it covers. Same invariant as the 更多 sheet.
         MessageHostScope {
-            val messages = LocalMessages.current
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
                     "收藏（${items.size}）",
@@ -157,10 +169,7 @@ fun FavoritesSheet(
                             ListRow(
                                 title = item.title,
                                 subtitle = item.subtitle,
-                                onClick = {
-                                    onApply(item.linesText)
-                                    messages.show("已载入收藏")
-                                },
+                                onClick = { onApply(item.linesText) },
                                 trailing = {
                                     IconButton(onClick = { onToggleFavorite(item.id) }) {
                                         Icon(
@@ -192,6 +201,8 @@ fun WrongWordsSheet(
     groups: List<WrongWordGroup>,
     onDictate: () -> Unit,
     onDelete: (String) -> Unit,
+    /** 撤销 of the just-removed mark (see [onDelete]). */
+    onUndoDelete: () -> Unit,
     onClear: () -> Unit,
     onJumpToSource: (category: String, label: String) -> Unit,
     onDismiss: () -> Unit,
@@ -271,7 +282,7 @@ fun WrongWordsSheet(
                                         IconButton(
                                             onClick = {
                                                 onDelete(mark.word)
-                                                messages.show("已移除")
+                                                messages.show("已移除 ${mark.word}", "撤销", onUndoDelete)
                                             },
                                             modifier = Modifier.size(48.dp),
                                         ) {

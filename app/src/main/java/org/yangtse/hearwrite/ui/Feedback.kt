@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
@@ -51,6 +52,26 @@ class MessageController internal constructor(
                 withDismissAction = false,
                 duration = SnackbarDuration.Short,
             )
+        }
+    }
+
+    /**
+     * A confirmation carrying one 撤销 action (a single-row delete: the rows
+     * are removed on one tap with no confirm dialog, so the way back must live
+     * in the message). The action form holds [SnackbarDuration.Long] so there
+     * is time to take it back, and [onAction] runs only if it is pressed —
+     * letting the message time out leaves the deletion standing.
+     */
+    fun show(text: String, actionLabel: String, onAction: () -> Unit) {
+        scope.launch {
+            state.currentSnackbarData?.dismiss()
+            val result = state.showSnackbar(
+                message = text,
+                actionLabel = actionLabel,
+                withDismissAction = false,
+                duration = SnackbarDuration.Long,
+            )
+            if (result == SnackbarResult.ActionPerformed) onAction()
         }
     }
 }

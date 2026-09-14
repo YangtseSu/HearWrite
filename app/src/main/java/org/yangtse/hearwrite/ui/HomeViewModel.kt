@@ -41,6 +41,16 @@ import org.yangtse.hearwrite.domain.parseWordEntries
 import org.yangtse.hearwrite.domain.parseWords
 import org.yangtse.hearwrite.domain.prepareStartLines
 
+/**
+ * A removed history row kept for its 撤销: the exact stored row plus whether
+ * its star was set, so [HomeViewModel.restoreHistory] can put both back and a
+ * 错词本 source pointing at the id resolves again.
+ */
+data class HistoryUndo(
+    val entry: HistoryEntry,
+    val wasFavorited: Boolean,
+)
+
 /** Debounce for draft persistence; the flush on dispose covers the tail. */
 private const val DRAFT_DEBOUNCE_MS = 500L
 
@@ -372,13 +382,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearDraft() = onDraftChange("")
 
-    fun adjustStartIndex(delta: Int) {
-        val count = wordCount.value
-        if (count == 0) return
-        _startIndex.value = (_startIndex.value + delta).coerceIn(0, count - 1)
-    }
-
-    /** Display-list row tap: the tapped row becomes the 起始词. */
+    /**
+     * The 起始词, clamped to the current list: a display-list row tap selects
+     * that row, and the playback panel's reset returns the count-in to word 1
+     * ([setStartIndex] with 0). Ignored over an empty list.
+     */
     fun setStartIndex(index: Int) {
         val count = wordCount.value
         if (count == 0) return
@@ -466,12 +474,46 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     // ------------------------------------------------- 历史 / 收藏 actions
 
+    /**
+     * The row most recently removed by [deleteHistory], kept only so the
+     * confirmation's 撤销 can put it back: the sheet drops a row on one tap (a
+     * confirm per row would be noise) and the message is the only way back. It
+     * holds the newest deletion only — 撤销 is offered once, and a second
+     * remove replaces it.
+     */
+    private var lastDeletedHistory: HistoryUndo? = null
+
+    /**
+     * 删除 one history row; the caller raises the confirmation **with 撤销**,
+     * wired to [undoDeleteHistory].
+     */
     fun deleteHistory(id: String) {
+        // Snapshot before the delete: after it the row is gone from `_history`.
+        lastDeletedHistory = _history.value.firstOrNull { it.id == id }?.let { entry ->
+            HistoryUndo(entry, wasFavorited = id in _favorites.value)
+        }
         viewModelScope.launch {
             try {
                 historyRepository.delete(id)
             } catch (e: Exception) {
                 // DB failures must not crash the screen; next launch re-reads.
+            }
+        }
+    }
+
+    /**
+     * 撤销 a [deleteHistory]: re-insert the exact row (id, text, enrichment,
+     * timestamp) and its star, so a 错词本 source or favorite pointing at it
+     * resolves again. No-op when nothing was deleted (or 撤销 already ran).
+     */
+    fun undoDeleteHistory() {
+        val undo = lastDeletedHistory ?: return
+        lastDeletedHistory = null
+        viewModelScope.launch {
+            try {
+                historyRepository.restore(undo.entry, undo.wasFavorited)
+            } catch (e: Exception) {
+                // Best effort; the row stays deleted if Room refuses.
             }
         }
     }
@@ -486,13 +528,42 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Remove one wrong word (错词本 drawer row 移除). */
+    /**
+     * The mark most recently removed by [removeWrongWord] — same contract as
+     * [lastDeletedHistory]: 撤销 is offered once by the message, and a second
+     * removal replaces it.
+     */
+    private var lastRemovedWrong: WrongWordMark? = null
+
+    /**
+     * 移除 one wrong word (错词本 drawer row); the caller raises the
+     * confirmation **with 撤销**, wired to [undoRemoveWrongWord].
+     */
     fun removeWrongWord(word: String) {
+        // Snapshot before the delete: after it the row is gone from `_wrongWords`.
+        lastRemovedWrong = _wrongWords.value.firstOrNull { it.word == word }
         viewModelScope.launch {
             try {
                 wrongWordsRepository.remove(word)
             } catch (e: Exception) {
                 // Best effort.
+            }
+        }
+    }
+
+    /**
+     * 撤销 a [removeWrongWord]: re-insert the mark exactly as it was (count,
+     * times, source) — routing it back through `add` would count as a fresh
+     * wrong run and corrupt the book's counts. No-op when nothing was removed.
+     */
+    fun undoRemoveWrongWord() {
+        val mark = lastRemovedWrong ?: return
+        lastRemovedWrong = null
+        viewModelScope.launch {
+            try {
+                wrongWordsRepository.restore(mark)
+            } catch (e: Exception) {
+                // Best effort; the row stays removed if Room refuses.
             }
         }
     }

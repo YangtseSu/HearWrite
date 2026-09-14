@@ -23,11 +23,11 @@ class LabelOrderCoverageTest {
         val assets = File("src/main/assets")
         assertTrue("assets dir missing: ${assets.absolutePath}", assets.isDirectory)
 
-        // Category dirs are library names too; dict/compounds/audio are their
-        // own asset kinds, not categories (docs/WORDLIST.md §2).
+        // Category dirs are library names too; dict/compounds/audio/licenses
+        // are their own asset kinds, not categories (docs/WORDLIST.md §2).
         val names = buildList {
             for (dir in assets.listFiles().orEmpty().filter { it.isDirectory }) {
-                if (dir.name in setOf("dict", "compounds", "audio")) continue
+                if (dir.name in setOf("dict", "compounds", "audio", "licenses")) continue
                 add(dir.name)
                 dir.listFiles().orEmpty()
                     .filter { it.isFile && it.extension == "txt" }

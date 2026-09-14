@@ -64,7 +64,7 @@ ASSETS_DIR = REPO_ROOT / "app" / "src" / "main" / "assets"
 OUTPUT_FILE = ASSETS_DIR / "dict" / "hanzi-meta.json"
 
 # Asset dirs that are not word-list categories (AGENTS.md "Built-in library").
-NON_LIBRARY_DIRS = {"dict", "compounds", "audio"}
+NON_LIBRARY_DIRS = {"dict", "compounds", "audio", "licenses"}
 
 CJK_RE = re.compile(r"^[\u4e00-\u9fff]+$")
 CJK2_RE = re.compile(r"^[\u4e00-\u9fff]{2}$")

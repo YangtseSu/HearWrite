@@ -298,7 +298,7 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 | 系统音色为空 | `SettingsProviderPages.kt:705-706` | `if (!loading && zhVoices.isNullOrEmpty() && enEmpty && previewState == Idle) return` → 什么都不渲染，连 `英文使用默认音色` 开关一起消失 |
 | 抽词池读表失败 | `LibraryDrawViewModel.kt:83-88, 98-103` | 单表失败被吞成"该表从池里消失"，只有 logcat 知道 |
 
-### C1b · 首页（Home）补充
+### C1b · 首页（Home）补充 —— ✅ 已完成（见 §5 阶段 C）
 
 | 项 | 位置 | 说明 |
 |---|---|---|
@@ -311,7 +311,7 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 | 进入编辑态不聚焦 | `HomeWordSection.kt:88-92` | 自动聚焦只在草稿为**空**时触发；已有词表时点 `编辑` 得到的是一张没有光标、不弹键盘的文本域，还要再点一次 |
 | `更多` sheet 四行无间距 | `HomeScreen.kt:344-372` | 行容器色 `surfaceContainerLow` 与 sheet 容器同色（`Color.kt` 里这就是 bottom sheet 默认色），四行读成一整块；`MenuRow` 也无分隔 |
 
-### C1c · 其余 P3（速查，按界面分组）
+### C1c · 其余 P3（速查，按界面分组）—— ✅ 已完成（见 §5 阶段 C）
 
 - **首页**：列表滚动到底多留 72dp 无解释空白（`HomeWordSection.kt:269`）；起始词 `共 N 词` 三处重复（头部徽章 / footer / 按钮徽章）；`清空` 在 0 词时仍可点；`HearWriteWordmark` 无 `maxLines`（`Wordmark.kt:55`）；`Icons.Outlined.Cancel` 一图标两义（错词本 vs 删除行）。
 - **听写页**：成绩卡 `再听一遍` / `复习错词` 两个等重实心按钮、无副文案说明范围差异；`拍照批改` 不做预检（未配置 OCR 要等拍完一圈才报）；`重新拍照` 在同屏出现两次且启用条件不同（`DictationGradePane.kt:125-127` vs `:277-279`）；批改行 `itemsIndexed` 无稳定 key；EXTRA 的非交互图标挂了整句 `contentDescription`；transport 行只有播放器有文字标签，`结束` 与前后跳同权重。
@@ -490,6 +490,62 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 | 抽词池失败 | 具名列出未能读取的词表 | ✅ 源码（无现成的失败注入点） |
 
 **门禁**：`testDebugUnitTest` **330/330** 绿（基线 327，新增 3 条引擎用例）；`lintDebug` 无告警。
+
+#### C1b（首页补充，8 项）+ C1c（其余 P3）—— ✅ 已完成
+
+范围：`C1b` 全表 8 项，加上 `C1c` 六组速查里**每一条可落地项**（导航/死代码组 6 项、听写页 6 项、词库 6 项、首页 5 项、设置 9 项、统计 5 项）。
+
+**C1b**
+
+| 项 | 做法 |
+|---|---|
+| OCR 进度药丸被挤到不可读 | 上一提交（C1）已解决：头部行不再放药丸，改为头部下方全宽 `OcrProgressStrip`；本阶段仅复核（`HomeScreen.kt` 头部注释即改动说明） |
+| 清空草稿一键抹掉持久数据 | `HomeWordSection` 新增两个确认对话框：`清空草稿？`（`当前草稿将被清空，内容无法恢复。`）与 `覆盖当前草稿？`（点名用哪个示例替换）；草稿为空时示例直接填充不打扰，`清空` 在 0 词时禁用 |
+| 展示态行点击二义 | 行点击只改 `起始词`（`selectable` + `Role.RadioButton`）；释义展开拆成独立尾部按钮，仅当 `glossNeedsExpansion` 时出现，`展开释义`/`收起释义` |
+| `开始听写` 的可用性语义 | 0 词时按钮文案改 `请先输入词表`（仍可按，按了给 `请先输入单词列表`）；OCR 进行中由 `识别中…` 忙碌态禁用（原已具备） |
+| 载入历史/收藏后抽屉不关 | `onApply` 改为：载入 → 关抽屉 → 由**屏幕级** message host 提示（Sheet 是自己的窗口，消息留在里面会被自己的遮罩挡住） |
+| 首页无法重置起始词 | 面板在 `startIndex > 0` 时显示 48dp `重置为从第 1 词开始`（槽位常驻，`从第 N 词开始` 不横移）；同时删除死代码 `HomeViewModel.adjustStartIndex` |
+| 进入编辑态不聚焦 | 焦点请求改按"模式翻进编辑态"触发（`wasEditing` 记录上一帧模式），已有词表点 `编辑` 也直接给到光标；进入时已是编辑态不误触发 |
+| `更多` sheet 四行无间距 | 四行按 8dp 间距分隔（实测行距 168px），不再读成一整块 |
+
+**C1c**
+
+| 组 | 做法 |
+|---|---|
+| 首页 | 列表底部 72dp 空白 → 8dp（`HomeScreen` 已按面板高度让位）；编辑区 footer 的 `共 N 词` 删除（头部徽章已表达）；`HearWriteWordmark` 加 `maxLines = 1`；`错词本` 图标由 `Outlined.Cancel` 换成 `Outlined.Spellcheck`，与行删除 `Filled.Cancel` 区分 |
+| 听写页 | 成绩卡 `再听一遍` 保留实心主按钮、`复习错词` 改 `FilledTonalButton` 并加一行范围说明（各含词数）；`拍照批改` 预检 OCR 配置（未配置则不开批改页，只提示）；`重新拍照` 两处启用条件统一为 `!busy && !pickerBusy`；批改行 `items(... key = { it.index })` 稳定 key；EXTRA 行非交互图标 `contentDescription = null`；transport 四个控件各带文字标签（标签即 `contentDescription`） |
+| 词库 | 统一叫法 `多选词表`；chip 门控 `size >= 10 / >= 20`；`已自动合并 N 个跨表重复词`；分类卡去掉 `minLines = 2`；`ListRow` 新增 `titleMaxLines`（默认 1，词库行传 2）；`已选 N 个词表`语义说明（词数合计仍在抽词页，见下） |
+| 设置 | `清除配置` 用 `error` 前景表达破坏性；展开区 `animateContentSize`；三个 provider 字段加 `imeAction = Next`；无缓存时 `清空发音缓存` 行不可点；清除生效中的 TTS 预设时对话框补一句"发音来源将退回有道词典"；hub 滚动位置由 `SettingsScreen` 持有（子页往返不归零）；provider 对话框状态改 `rememberSaveable`；**新增应用内开源许可页**（`assets/licenses/GPL-3.0.txt` + `SettingsSubPage.LICENSES`）；`values-night` 覆盖 logo 磁贴底色 |
+| 统计 | `连续 N 天` 带单位 + `今日已打卡`；日期格式与记录行统一（`Format.kt`：`9月14日` / `9月14日 20:10`，非当年补年份）；高频错词达上限时提示"完整错词本见首页 更多 → 错词本"；`StatFigure` 三相 `weight(1f)` + `maxLines` + `tnum` 等宽数字；图表加最大值刻度与**点按查值**（点柱显示 `9月13日 · 1 场 · 4 词`） |
+| 导航/代码 | `STATS`/`SETTINGS`/`LIBRARY`/`DICTATION` 补齐 `launchSingleTop`；删除 `HearWriteApp.startDictation`、`HomeViewModel.adjustStartIndex` 两处死代码；`openUrl` 失败改为中文提示；**单行删除加 `撤销`**：历史记录行 / 错词本行删除后由 Snackbar 提供一次性撤销，撤销按原行（含 `errorCount`/时间戳/来源/收藏星）恢复，避免"删掉即永久丢失" |
+
+**两处刻意的行为变更**：`错词本` 行删除的消息由 `已移除` 变为 `已移除 <词>`（点名删了什么，也让撤销有对象）；`清空发音缓存` 在无缓存时从"可点但空操作"变为"不可点"。
+
+**验收证据（2026-09-15，模拟器 `pixel_9a_api37`，`uiautomator dump` 属性/坐标断言）**：
+
+| 项 | 断言 | 结果 |
+|---|---|---|
+| 起始词 + 重置 | 点第 2 行 → `从第 2 词开始` 且第 2 行 `checkable=true checked=true`；`重置为从第 1 词开始` 出现；点它 → `从第 1 词开始`、重置按钮消失 | ✅ 设备 |
+| 清空草稿确认 | 点 `清空` → `清空草稿？` + `当前草稿将被清空，内容无法恢复。` + `清空/取消` | ✅ 设备 |
+| 0 词语义 | 清空后：`开始听写` → `请先输入词表`；`清空` 父节点 `enabled=false` | ✅ 设备 |
+| 载入历史关抽屉 | 点历史行 → 抽屉关闭、`已载入历史记录` 落在屏幕 host | ✅ 设备 |
+| 更多 sheet 间距 | 四行行距 168px（原贴合成一块） | ✅ 设备 |
+| 菜单图标区分 | `错词本` 用 `Outlined.Spellcheck` | ✅ 源码 |
+| 统一日期 | 图表轴 `9月2日`…`9月15日`；记录行 `9月13日 02:34 · 正式听写` | ✅ 设备 |
+| 连续天数 + 打卡 | `0 天` 带单位；本机无今日记录故无 `今日已打卡`（有记录时显示） | ✅ 设备 |
+| 图表刻度 + 点按 | 左上 `4 词` 刻度；点第 13 根柱 → `9月13日 · 1 场 · 4 词` | ✅ 设备 |
+| transport 标签 | `结束`/`上一个`/`暂停`/`下一个` 四个文字标签均在场，且与 `content-desc` 逐字一致 | ✅ 设备 |
+| 成绩卡权重 + 范围 | `再听一遍` 实心、`复习错词` tonal + 范围说明行 | ✅ 源码 |
+| 批改预检 | 配置存在 → 打开批改页（本机已配置）；未配置分支为代码路径（提示后留在成绩卡） | ✅ 设备 + 源码 |
+| 应用内许可 | 关于 → `开源许可 GPL-3.0-or-later · 应用内全文` → 页内可滚动渲染 GPL 全文（首行 `GNU GENERAL PUBLIC LICENSE Version 3`） | ✅ 设备 |
+| 撤销删除 | 历史行点删除 → `已删除该记录` + `撤销`；点 `撤销`（logcat 探针确认 `ActionPerformed` → `restored ok`）→ 列表恢复该行（`历史记录（1）`、`5 词 · 9月15日 00:25`）。探针已移除 | ✅ 设备 |
+| 抽词池 / 词库边界 | chip `>=10`/`>=20` 门控、`已自动合并` 措辞、分类卡高度 | ✅ 源码（改动为常量级） |
+
+**未能闭环项（如实记录）**：
+- **`清空发音缓存` 无缓存态与 `系统音色空态` 的深色 logo 磁贴**只有源码确认：本机缓存恒非空（1.5 MB），且 AVD 为浅色主题，无法采样"无缓存时按钮 `enabled=false`"与 `values-night` 取色的设备证据。
+- **`SettingsSubPage.LICENSES` 的失败降级**（资源读取失败）无注入点，只有代码路径。
+
+**门禁**：`testDebugUnitTest` **334/334** 绿（基线 330，新增 4 条：错词本 `restore` 两条 + 历史 `restore` 两条）；`lintDebug` 无告警；`python3 scripts/check-assets.py` 0 error（新增 `licenses/` 已加入各扫描器的保留目录，见 `docs/WORDLIST.md`）。
 
 `C2`（听写页：词语展开、表盘圆裁切、暂停文案、满分成绩、错词不可撤销、错词本 chip 惰性化）→ `C3`（统计页：柱子下限、列表惰性/上限、错误态、图表可读）→ `C4`（抽词行 `FlowRow`、摘要固定、OCR 语言持久化、覆盖草稿前确认、错误卡加 `去设置`、裁剪把手与缩放）→ `C6`（`WindowSizeClass`、表盘随约束、旋转不丢状态）。
 

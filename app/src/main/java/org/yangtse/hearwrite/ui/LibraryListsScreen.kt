@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -39,7 +38,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 
 /** One category: its lists in the upstream label order; a tap opens the
  *  preview, the star toggles the list's favorite state (收藏 drawer on Home).
- *  While 多选词库 is on (Roadmap #9) rows tick instead — the selection spans
+ *  While 多选词表 is on (Roadmap #9) rows tick instead — the selection spans
  *  categories, so the bar and the state are shared with the browse screen. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -128,6 +127,9 @@ fun LibraryListsScreen(
                     val ticked = list.id in selectedIds
                     ListRow(
                         title = list.label,
+                        // List labels run to 11–12 CJK characters, so a
+                        // single line ellipsises them away.
+                        titleMaxLines = 2,
                         // The count arrives per list, asynchronously: the
                         // placeholder keeps the row height from popping in
                         // (same treatment as the preview's —— meta line).

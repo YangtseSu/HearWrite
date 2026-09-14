@@ -18,6 +18,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -66,8 +67,8 @@ fun VoiceSourceSettingsPage(
     val systemVoiceZh by viewModel.systemVoiceZh.collectAsStateWithLifecycle()
     val systemVoiceEn by viewModel.systemVoiceEn.collectAsStateWithLifecycle()
     val saveMessage by viewModel.ttsSaveMessage.collectAsStateWithLifecycle()
-    var showTtsKey by remember { mutableStateOf(false) }
-    var showClearTtsConfirm by remember { mutableStateOf(false) }
+    var showTtsKey by rememberSaveable { mutableStateOf(false) }
+    var showClearTtsConfirm by rememberSaveable { mutableStateOf(false) }
     // A seeded-but-untouched key counts as present (the secret stays stored);
     // only a dirty empty field blocks 测试并试听/保存并启用.
     val ttsKeyPresent = ttsForm.apiKey.trim().isNotBlank() ||
@@ -318,6 +319,14 @@ fun VoiceSourceSettingsPage(
                 showClearTtsConfirm = false
                 viewModel.clearTtsConfig()
             },
+            // Clearing the preset that is 正在使用 also flips 发音来源 back to
+            // 有道词典 (SettingsViewModel.clearTtsConfig); the generic body
+            // says nothing about that, so name it here.
+            text = if (ttsActivePresetId == ttsPresetId) {
+                DEFAULT_CLEAR_BODY + "当前正在使用该配置，清除后发音来源将退回「有道词典」。"
+            } else {
+                DEFAULT_CLEAR_BODY
+            },
         )
     }
 }
@@ -339,8 +348,8 @@ fun OcrProviderSettingsPage(
     val ocrActivePresetId by viewModel.ocrActivePresetId.collectAsStateWithLifecycle()
     val ocrTestState by viewModel.ocrTestState.collectAsStateWithLifecycle()
     val saveMessage by viewModel.ocrSaveMessage.collectAsStateWithLifecycle()
-    var showApiKey by remember { mutableStateOf(false) }
-    var showClearOcrConfirm by remember { mutableStateOf(false) }
+    var showApiKey by rememberSaveable { mutableStateOf(false) }
+    var showClearOcrConfirm by rememberSaveable { mutableStateOf(false) }
     // A seeded-but-untouched key counts as present (the secret stays stored);
     // only a dirty empty field blocks 测试连接/保存并启用.
     val ocrKeyPresent = ocrForm.apiKey.trim().isNotBlank() ||

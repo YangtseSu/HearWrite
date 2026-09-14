@@ -41,22 +41,45 @@ class HistoryRepositoryTest {
             rows.value = rows.value.filterNot { it.id == id }
         }
 
+        override suspend fun insertExact(entry: HistoryEntity) {
+            rows.value = rows.value.filterNot { it.id == entry.id } + entry
+        }
+
         override suspend fun clear() {
             rows.value = emptyList()
         }
     }
 
-    private class FakeFavoritesDao : FavoritesDao {
-        override fun observeIds(): Flow<List<String>> = MutableStateFlow(emptyList())
-        override suspend fun exists(id: String): Boolean = false
-        override suspend fun insert(favorite: FavoriteEntity) {}
-        override suspend fun delete(id: String) {}
-        override suspend fun pruneHistoryOrphans() {}
+    /**
+     * Faithful mirror of [FavoritesDao] over the same in-memory rows the fake
+     * history DAO holds: `insert` REPLACEs by id (a repeated favorite is one
+     * row) and [pruneHistoryOrphans] drops non-`default_*` ids whose history
+     * row is gone — the delete-then-撤销 path depends on both.
+     */
+    private class FakeFavoritesDao(private val history: FakeHistoryDao) : FavoritesDao {
+        val ids = MutableStateFlow<List<String>>(emptyList())
+        override fun observeIds(): Flow<List<String>> = ids
+
+        override suspend fun exists(id: String): Boolean = id in ids.value
+
+        override suspend fun insert(favorite: FavoriteEntity) {
+            ids.value = ids.value.filterNot { it == favorite.id } + favorite.id
+        }
+
+        override suspend fun delete(id: String) {
+            ids.value = ids.value - id
+        }
+
+        override suspend fun pruneHistoryOrphans() {
+            val live = history.all().mapTo(mutableSetOf()) { it.id }
+            ids.value = ids.value.filter { it.startsWith("default_") || it in live }
+        }
     }
 
-    private fun repo(): Pair<HistoryRepository, FakeHistoryDao> {
+    private fun repo(): Triple<HistoryRepository, FakeHistoryDao, FakeFavoritesDao> {
         val dao = FakeHistoryDao()
-        return HistoryRepository(dao, FakeFavoritesDao()) to dao
+        val favorites = FakeFavoritesDao(dao)
+        return Triple(HistoryRepository(dao, favorites), dao, favorites)
     }
 
     private val plain = "apple\npear\nplum"
@@ -64,7 +87,7 @@ class HistoryRepositoryTest {
 
     @Test
     fun `re-dictating a stored enriched row bumps instead of duplicating`() = runTest {
-        val (r, dao) = repo()
+        val (r, dao, _) = repo()
         dao.seed(plain, enriched, 1L, "r0")
         // The library preview / history rows hand the enriched text to the
         // draft, so the submission IS the enriched text and effective == null.
@@ -75,7 +98,7 @@ class HistoryRepositoryTest {
 
     @Test
     fun `re-dictating the plain text of an enriched row bumps instead of duplicating`() = runTest {
-        val (r, dao) = repo()
+        val (r, dao, _) = repo()
         dao.seed(plain, enriched, 1L, "r0")
         r.add(plain, enriched) // effective == enrichedText of the stored row
         assertEquals(1, dao.all().size)
@@ -83,7 +106,7 @@ class HistoryRepositoryTest {
 
     @Test
     fun `distinct content inserts a new row`() = runTest {
-        val (r, dao) = repo()
+        val (r, dao, _) = repo()
         dao.seed(plain, enriched, 1L, "r0")
         val id = r.add("kiwi\nmango", null)
         assertEquals(2, dao.all().size)
@@ -92,9 +115,39 @@ class HistoryRepositoryTest {
 
     @Test
     fun `blank input returns null and records nothing`() = runTest {
-        val (r, dao) = repo()
+        val (r, dao, _) = repo()
         val id = r.add("   ", null)
         assertNull(id)
         assertEquals(0, dao.all().size)
+    }
+
+    @Test
+    fun `restore re-inserts the same row and its favorite star`() = runTest {
+        val (r, dao, favorites) = repo()
+        dao.seed(plain, enriched, 1L, "r0")
+        favorites.insert(FavoriteEntity("r0"))
+        val entry = r.all().single()
+
+        r.delete("r0")
+        assertEquals(0, dao.all().size)
+
+        r.restore(entry, wasFavorited = true)
+
+        // Same row id, so a 错词本 source / favorite pointing at it resolves again.
+        assertEquals(listOf("r0"), dao.all().map { it.id })
+        assertEquals(listOf("r0"), favorites.ids.value)
+    }
+
+    @Test
+    fun `restore without a favorite leaves the star off`() = runTest {
+        val (r, dao, favorites) = repo()
+        dao.seed(plain, enriched, 1L, "r0")
+        val entry = r.all().single()
+        r.delete("r0")
+
+        r.restore(entry, wasFavorited = false)
+
+        assertEquals(listOf("r0"), dao.all().map { it.id })
+        assertEquals(emptyList<String>(), favorites.ids.value)
     }
 }

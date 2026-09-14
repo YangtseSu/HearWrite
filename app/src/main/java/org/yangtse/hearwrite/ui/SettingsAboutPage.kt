@@ -6,21 +6,28 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,14 +36,25 @@ import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.yangtse.hearwrite.R
+
+/** Shipped copy of the repository's `LICENSE` (GPL-3.0), rendered in-app. */
+private const val LICENSE_ASSET = "licenses/GPL-3.0.txt"
 
 /**
  * 设置 → 关于: app identity, feature blurb, data/asset provenance and the
- * 项目主页 / 开源许可 actions (opened in the system browser).
+ * 项目主页 / 开源许可 actions. 开源许可 opens [LicensesSettingsPage], which
+ * renders the bundled GPL-3.0 text inside the app instead of handing the user
+ * off to a browser; 项目主页 stays the external GitHub link.
  */
 @Composable
-fun AboutSettingsPage(onBack: () -> Unit) {
+fun AboutSettingsPage(
+    onBack: () -> Unit,
+    onOpenLicenses: () -> Unit,
+) {
     val context = LocalContext.current
     val versionName = remember {
         runCatching {
@@ -46,13 +64,20 @@ fun AboutSettingsPage(onBack: () -> Unit) {
         }.getOrNull().orEmpty()
     }
 
-    fun openUrl(url: String) {
-        runCatching {
-            context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
-        }
-    }
-
     SettingsSubPage(title = "关于", onBack = onBack) {
+        // The sub-page shell installs this window's message channel, so the
+        // 项目主页 failure below can report itself here.
+        val messages = LocalMessages.current
+
+        // A device with no browser (or none registered for https) resolves
+        // nothing at all: swallowing that left the tap looking dead.
+        fun openUrl(url: String) {
+            val opened = runCatching {
+                context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
+            }.isSuccess
+            if (!opened) messages.show("无法打开链接，请检查是否已安装浏览器")
+        }
+
         // App identity header.
         Column(
             modifier = Modifier
@@ -60,7 +85,8 @@ fun AboutSettingsPage(onBack: () -> Unit) {
                 .padding(top = 24.dp, bottom = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // The launcher icon as the app logo (light tile color is part of the mark).
+            // The launcher icon as the app logo (the tile colour is part of the
+            // mark; values-night overrides it for 深色 mode).
             Box(
                 modifier = Modifier
                     .size(84.dp)
@@ -128,7 +154,7 @@ fun AboutSettingsPage(onBack: () -> Unit) {
             )
             SettingsRow(
                 title = "开源许可",
-                supporting = "GPL-3.0-or-later",
+                supporting = "GPL-3.0-or-later · 应用内全文",
                 leading = {
                     Icon(
                         Icons.Outlined.Description,
@@ -137,10 +163,69 @@ fun AboutSettingsPage(onBack: () -> Unit) {
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 },
+                trailing = { SettingsChevronTrailing() },
                 divider = false,
-                onClick = { openUrl("https://github.com/YangtseSu/HearWrite/blob/main/LICENSE") },
+                onClick = onOpenLicenses,
             )
         }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+/**
+ * 设置 → 关于 → 开源许可: the bundled GPL-3.0 text, read from the shipped
+ * `assets/licenses/GPL-3.0.txt` off the main thread and rendered in the page's
+ * own scroll container. A missing or unreadable asset degrades to a Chinese
+ * message rather than an empty page or a crash.
+ */
+@Composable
+fun LicensesSettingsPage(onBack: () -> Unit) {
+    val context = LocalContext.current
+    var licenseText by remember { mutableStateOf<String?>(null) }
+    var failed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        try {
+            licenseText = withContext(Dispatchers.IO) {
+                context.assets.open(LICENSE_ASSET).bufferedReader(Charsets.UTF_8)
+                    .use { it.readText() }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Defensive asset boundary: a missing/unreadable license must
+            // degrade to a Chinese message, never crash the page.
+            failed = true
+        }
+    }
+
+    SettingsSubPage(title = "开源许可", onBack = onBack) {
+        val text = licenseText
+        when {
+            failed -> Text(
+                "无法读取许可证文本，请到项目主页查看 LICENSE 文件。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+            )
+            text == null -> Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "正在加载许可证…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            else -> Text(
+                text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
     }
 }

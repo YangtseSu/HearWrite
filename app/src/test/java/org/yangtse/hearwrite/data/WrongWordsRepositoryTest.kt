@@ -2,6 +2,7 @@ package org.yangtse.hearwrite.data
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -53,6 +54,10 @@ class WrongWordsRepositoryTest {
 
         override suspend fun delete(word: String) {
             rows.value = rows.value.filterNot { it.word == word }
+        }
+
+        override suspend fun insertExact(row: WrongWordEntity) {
+            rows.value = rows.value.filterNot { it.word == row.word } + row
         }
 
         override suspend fun clear() {
@@ -125,6 +130,30 @@ class WrongWordsRepositoryTest {
         r.remove("apple")
         assertEquals(listOf("pear"), dao.all().map { it.word })
         r.clear()
+        assertEquals(0, dao.all().size)
+    }
+
+    @Test
+    fun `restore puts the exact mark back without counting a new run`() = runTest {
+        val (r, dao) = repo()
+        r.add("apple", "default_中考1600_中考词汇")
+        r.add("apple", null) // two runs → count 2
+        val before = dao.all().single()
+        val mark = r.observeMarks().first().single()
+        r.remove("apple")
+        assertEquals(0, dao.all().size)
+
+        r.restore(mark)
+
+        val after = dao.all().single()
+        // The exact row returns: 撤销 must not look like a third wrong run.
+        assertEquals(before, after)
+    }
+
+    @Test
+    fun `restore ignores an empty headword`() = runTest {
+        val (r, dao) = repo()
+        r.restore(WrongWordMark("", errorCount = 1, lastWrongAt = 0L, sourceLabel = null))
         assertEquals(0, dao.all().size)
     }
 }

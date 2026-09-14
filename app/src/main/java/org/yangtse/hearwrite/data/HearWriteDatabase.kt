@@ -108,6 +108,14 @@ interface WrongWordsDao {
 
     @Query("DELETE FROM wrong_words")
     suspend fun clear()
+
+    /**
+     * Put one row back exactly as it was — the 撤销 of a single-row 移除. Unlike
+     * [recordMark] this does not touch counts: the restored row is the same
+     * mark, not a new one.
+     */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertExact(row: WrongWordEntity)
 }
 
 @Dao
@@ -146,6 +154,14 @@ abstract class HistoryDao {
 
     @Query("DELETE FROM history WHERE id = :id")
     abstract suspend fun delete(id: String)
+
+    /**
+     * Put one deleted row back exactly as it was (撤销 of a single-row 删除):
+     * REPLACE on the primary key id keeps it the same row, so a favorite that
+     * pointed at it still resolves.
+     */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun insertExact(entry: HistoryEntity)
 
     /** 清空历史: keep favorited rows (a favorited user list outliving its
      *  history row is a documented Roadmap #2 behavior — a user's explicit

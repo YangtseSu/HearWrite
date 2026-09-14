@@ -29,10 +29,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -45,7 +43,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 
 /**
- * 抽词听写 (Roadmap #9): the 多选词库 pool → a random X-word dictation. Shows
+ * 抽词听写 (Roadmap #9): the 多选词表 pool → a random X-word dictation. Shows
  * the ticked lists and the merged 词数, takes X (default = the whole pool, so
  * starting straight away is a full random run), and hands the drawn lines to
  * the standard session staging — the playback engine is untouched.
@@ -118,13 +116,15 @@ fun LibraryDrawScreen(
                             },
                             modifier = Modifier.width(140.dp),
                         )
-                        if (size > 10) {
+                        // A pool of exactly 10/20 still offers that round
+                        // number; chips larger than the pool stay hidden.
+                        if (size >= 10) {
                             SuggestionChip(
                                 onClick = { setCount(10) },
                                 label = { Text("10") },
                             )
                         }
-                        if (size > 20) {
+                        if (size >= 20) {
                             SuggestionChip(
                                 onClick = { setCount(20) },
                                 label = { Text("20") },
@@ -202,7 +202,7 @@ fun LibraryDrawScreen(
                         )
                         if (pool.mergedCount > 0) {
                             Text(
-                                "已合并 ${pool.mergedCount} 个跨表重复词",
+                                "已自动合并 ${pool.mergedCount} 个跨表重复词",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(top = 2.dp),
@@ -222,6 +222,8 @@ fun LibraryDrawScreen(
                     ListRow(
                         title = list.label,
                         subtitle = "${list.category} · ${list.wordCount} 词",
+                        // Same list labels as the 词库 rows.
+                        titleMaxLines = 2,
                     )
                     HorizontalDivider()
                 }
