@@ -84,6 +84,15 @@ class DictationEngine(
     /** True when the end of the list was reached (as opposed to a stop). */
     val finished: StateFlow<Boolean> = _finished.asStateFlow()
 
+    private val _speechFailures = MutableStateFlow(0)
+    /**
+     * Failed speak passes of the run in progress — a failed pass never retries
+     * by design (speak2 is the natural second attempt), so without a count a
+     * run that is entirely mute looks exactly like a normal one to the student
+     * (and to whoever they ask for help). Reset by [start].
+     */
+    val speechFailures: StateFlow<Int> = _speechFailures.asStateFlow()
+
     /** Lines of the active session (raw list lines, parsed per word). */
     private var words: List<String> = emptyList()
 
@@ -124,6 +133,7 @@ class DictationEngine(
         words = lines
         _finished.value = false
         _index.value = 0
+        _speechFailures.value = 0
         clearCountdown()
         if (lines.isEmpty()) {
             _state.value = PlayState.IDLE
@@ -317,6 +327,7 @@ class DictationEngine(
                     _index.value = i
                     if (first) clearCountdown()
                     val ok = speaker.speak(speakTextFromEntry(line), wordLang(line))
+                    if (!ok) _speechFailures.value += 1
                     if (!currentRun(myGen)) return
                     if (first) {
                         // speak1 failure: no retry, skip the gap, advance —
@@ -339,7 +350,7 @@ class DictationEngine(
                 WordPhase.MEANING -> {
                     val meaning = meaningPass(line)
                     if (meaning != null) {
-                        meaning.second.speak(meaning.first, LANG_ZH)
+                        if (!meaning.second.speak(meaning.first, LANG_ZH)) _speechFailures.value += 1
                         if (!currentRun(myGen)) return
                     }
                     delay(REPEAT_GAP_MS)

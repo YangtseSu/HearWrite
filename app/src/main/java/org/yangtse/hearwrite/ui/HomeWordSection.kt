@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -73,6 +74,8 @@ fun WordListSection(
     displayMode: Boolean,
     wordCount: Int,
     startIndex: Int,
+    /** True until the persisted draft has been read (see HomeViewModel). */
+    loading: Boolean,
     onDraftChange: (String) -> Unit,
     onToggleDisplayMode: () -> Unit,
     onStartIndexChange: (Int) -> Unit,
@@ -117,7 +120,7 @@ fun WordListSection(
                 Spacer(Modifier.width(4.dp))
                 Text("拍照识词")
             }
-            TextButton(onClick = onToggleDisplayMode) {
+            TextButton(onClick = onToggleDisplayMode, enabled = !loading) {
                 Icon(
                     if (displayMode) Icons.Filled.Edit else Icons.Filled.Check,
                     contentDescription = null,
@@ -126,6 +129,30 @@ fun WordListSection(
                 Spacer(Modifier.width(4.dp))
                 Text(if (displayMode) "编辑" else "完成")
             }
+        }
+        if (loading) {
+            // The persisted draft is a DataStore round trip; until it lands the
+            // section must not claim "共 0 词" over an empty editor (and 开始听写
+            // in that window answered 请先输入单词列表 for a list about to
+            // appear). One card-shaped placeholder keeps the section's geometry
+            // so the real content does not jump in.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Text(
+                        "正在读取草稿…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+            return@Column
         }
         if (displayMode && wordCount > 0) {
             WordDisplayList(

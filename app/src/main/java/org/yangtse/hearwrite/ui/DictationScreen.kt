@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -183,7 +184,21 @@ fun DictationScreen(
                 !ui.ready -> Box(
                     modifier = Modifier.fillMaxSize().padding(innerPadding),
                     contentAlignment = Alignment.Center,
-                ) { CircularProgressIndicator() }
+                ) {
+                    // Same register as Home's busy start button: the session
+                    // reads settings, the 组词 tables and the 错词本 before it
+                    // can speak, and a bare spinner gave no reason for the
+                    // wait.
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Text(
+                            "准备听写…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                    }
+                }
 
                 ui.total == 0 -> Box(
                     modifier = Modifier.fillMaxSize().padding(innerPadding),
@@ -318,6 +333,38 @@ private fun DictationContent(
             }
         }
 
+        // ---- audio failure banner -----------------------------------------
+        // A failed pass never retries (by design), so a run whose audio never
+        // came through used to look exactly like a normal one. The banner
+        // appears the moment the first pass fails and clears never — the
+        // student must know the silence is the app, not the phone's volume.
+        if (ui.speechFailures > 0 && !ui.finished) {
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Filled.VolumeOff,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        "本场有 ${ui.speechFailures} 次发音失败，请检查音量与发音来源设置",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+            }
+        }
+
         // ---- stage -------------------------------------------------------
         Box(
             modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -339,6 +386,7 @@ private fun DictationContent(
                         onToggle = viewModel::toggleGradeSelected,
                         onConfirm = viewModel::confirmGrade,
                         onBack = viewModel::closeGradePane,
+                        onCancel = viewModel::cancelGrade,
                     )
                     // 选定识别区域 step: the same crop overlay as 拍照识词.
                     if (cropBitmap != null || cropLoading) {
@@ -474,6 +522,17 @@ private fun FinishCard(
                 "正确 $correct 词 · 错词 ${ui.runWrongCount}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        // A run whose audio failed must say so on the card too: a silent run
+        // produces no marks, and the parent reading 正确 N 词 would otherwise
+        // take the score at face value.
+        if (ui.speechFailures > 0) {
+            Text(
+                "本场有 ${ui.speechFailures} 次发音失败，成绩可能不准",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 2.dp),
             )
         }
 

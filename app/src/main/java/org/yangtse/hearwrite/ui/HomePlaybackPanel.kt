@@ -36,9 +36,10 @@ import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
  * Home bottom playback panel (alice's PlaybackControls): the 间隔 slider,
  * 自动播放 / 随机顺序 switches and the primary 开始听写 button. 间隔 and
  * 自动播放 persist to the DataStore keys shared with 设置 and the dictation
- * session; 随机顺序 is session-local. The button stays enabled at 0 words so
- * the screen can report why nothing starts (a Snackbar on the screen's message
- * channel), and shows the enrich/record spinner while [starting].
+ * session; 随机顺序 is session-local. The button stays enabled at 0 words (for
+ * a settled list) so the screen can report why nothing starts (a Snackbar on
+ * the screen's message channel); when the list is not settled yet it is held
+ * busy with [startBusyLabel] instead.
  */
 @Composable
 fun HomePlaybackPanel(
@@ -47,7 +48,15 @@ fun HomePlaybackPanel(
     shuffle: Boolean,
     wordCount: Int,
     startIndex: Int,
-    starting: Boolean,
+    /**
+     * Non-null while the start button is held busy — the spinner plus this
+     * label replace the normal caption and the button is disabled. The screen
+     * owns the wording (整理词表… while enriching/recording, 读取草稿… until
+     * the persisted draft lands, 识别中… while OCR is writing a new one), so
+     * the button never shows an enabled 0-word state whose tap answers
+     * 请先输入单词列表 for a list that is about to appear.
+     */
+    startBusyLabel: String?,
     onIntervalChange: (Double) -> Unit,
     onAutoNextChange: (Boolean) -> Unit,
     onShuffleChange: (Boolean) -> Unit,
@@ -173,19 +182,19 @@ fun HomePlaybackPanel(
 
             Button(
                 onClick = onStart,
-                enabled = !starting,
+                enabled = startBusyLabel == null,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp)
                     .height(52.dp),
             ) {
-                if (starting) {
+                if (startBusyLabel != null) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(20.dp),
                         strokeWidth = 2.dp,
                     )
                     Spacer(Modifier.width(10.dp))
-                    Text("整理词表…")
+                    Text(startBusyLabel)
                 } else {
                     Icon(Icons.Filled.PlayArrow, contentDescription = null)
                     Spacer(Modifier.width(8.dp))

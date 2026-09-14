@@ -22,7 +22,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -67,6 +66,8 @@ fun DictationGradePane(
     onToggle: (Int) -> Unit,
     onConfirm: () -> Unit,
     onBack: () -> Unit,
+    /** 取消 on the in-flight progress row (abandons the recognition). */
+    onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -88,18 +89,11 @@ fun DictationGradePane(
         }
 
         if (busy) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                Text(
-                    phase.ifEmpty { "识别中…" },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
+            OcrProgressStrip(
+                phase = phase,
+                onCancel = onCancel,
+                modifier = Modifier.padding(top = 12.dp),
+            )
         }
 
         error?.let { message ->

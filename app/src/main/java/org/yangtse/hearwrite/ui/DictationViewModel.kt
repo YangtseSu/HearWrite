@@ -64,6 +64,8 @@ data class DictationUiState(
     val markedFlash: Boolean,
     val ready: Boolean,
     val elapsedSec: Long?,
+    /** Failed speak passes of the run so far (0 = audio came through). */
+    val speechFailures: Int,
 ) {
     val isActive: Boolean get() = state == PlayState.PLAYING || state == PlayState.PAUSED
 }
@@ -216,14 +218,15 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         ) { tempo, rest, count ->
             SessionStateView(tempo.first, tempo.second, rest.first, count, rest.second, rest.third)
         },
-        _total,
-        _elapsedSec,
-    ) { engineView, sessionView, totalCount, elapsed ->
+        combine(_total, _elapsedSec, engine.speechFailures) { total, elapsed, failures ->
+            Triple(total, elapsed, failures)
+        },
+    ) { engineView, sessionView, runView ->
         DictationUiState(
             state = engineView.state,
             finished = engineView.finished,
             index = engineView.index,
-            total = totalCount,
+            total = runView.first,
             remainingMs = engineView.remainingMs,
             intervalSec = sessionView.intervalSec,
             autoNext = sessionView.autoNext,
@@ -231,7 +234,8 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
             runWrongCount = sessionView.runWrongCount,
             markedFlash = sessionView.markedFlash,
             ready = sessionView.ready,
-            elapsedSec = elapsed,
+            elapsedSec = runView.second,
+            speechFailures = runView.third,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), snapshot())
 
@@ -539,6 +543,15 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
 
     private var gradeCropJob: Job? = null
 
+    /**
+     * The in-flight answer-sheet recognition ([cancelGrade] abandons it). The
+     * pane's progress row offers 取消 because a vision call is a 30 s round
+     * trip and a mis-cropped sheet otherwise has to be waited out — and
+     * closing the pane cancels it too, so the result can never land under a
+     * later score card.
+     */
+    private var gradeJob: Job? = null
+
     /** Crop session id: bumped on start/close so a stale decode dies. */
     private var gradeCropSession = 0
 
@@ -608,6 +621,20 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         _gradeRetryable.value = false
         lastGradeRun = null
         cancelCrop()
+        cancelGrade()
+    }
+
+    /**
+     * Abandon the in-flight answer-sheet recognition (the pane's progress row
+     * 取消). Cancelling the job cancels the OkHttp call through the service's
+     * cancellation hook; the body's `finally` clears the busy state and
+     * releases the gate. The picture stays the 重试 target, so a cancel after
+     * a bad crop can still be retried from the same photo.
+     */
+    fun cancelGrade() {
+        val job = gradeJob ?: return
+        if (!job.isActive) return
+        job.cancel()
     }
 
     /** Drop the crop overlay without touching the reading behind it. */
@@ -657,7 +684,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     fun confirmCrop(rect: NormalizedRect) {
         val source = _cropBitmap.value ?: return
         _cropBitmap.value = null
-        viewModelScope.launch {
+        gradeJob = viewModelScope.launch {
             if (!gradeGate.tryLock()) {
                 source.recycle()
                 return@launch
@@ -708,7 +735,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     /** Re-run the last recognition against the same picture (after an error). */
     fun retryGrade() {
         val last = lastGradeRun ?: return
-        viewModelScope.launch {
+        gradeJob = viewModelScope.launch {
             if (!gradeGate.tryLock()) return@launch
             try {
                 _gradeBusy.value = true
@@ -835,10 +862,12 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         markedFlash = false,
         ready = false,
         elapsedSec = null,
+        speechFailures = 0,
     )
 
     override fun onCleared() {
         cancelCrop() // reclaim the answer-sheet decode, if any
+        cancelGrade() // abandon a recognition still in flight
         engine.dispose() // leaving the screen stops playback
     }
 

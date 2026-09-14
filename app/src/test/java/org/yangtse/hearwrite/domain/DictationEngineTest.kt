@@ -251,6 +251,39 @@ class DictationEngineTest {
         assertTrue(engine.finished.value)
     }
 
+    @Test
+    fun `speech failures are counted across passes and cleared by the next start`() = runTest {
+        val speaker = FakeSpeaker(
+            clock = { testScheduler.currentTime },
+            failWhen = { it == "苹果" || it == "b" },
+        )
+        val engine = engine(speaker, readTranslation = true)
+
+        assertEquals(0, engine.speechFailures.value)
+        engine.start(listOf(EN_WORD, "b"))
+        advanceTimeBy(100_000)
+        // 苹果 fails once (the meaning pass); "b" fails twice (both word passes).
+        assertEquals(3, engine.speechFailures.value)
+
+        // A new run reports only its own failures — the mute-run signal must
+        // not leak across sessions (a fresh 再听一遍 elsewhere re-arms it).
+        engine.start(listOf("apple | n. | 苹果"))
+        advanceTimeBy(100_000)
+        // 苹果's gloss still fails; this run's two word passes speak.
+        assertEquals(1, engine.speechFailures.value)
+    }
+
+    @Test
+    fun `speech failure count stays zero when every pass speaks`() = runTest {
+        val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
+        val engine = engine(speaker, readTranslation = true)
+
+        engine.start(listOf(EN_WORD, BARE_EN))
+        advanceTimeBy(100_000)
+        assertTrue(engine.finished.value)
+        assertEquals(0, engine.speechFailures.value)
+    }
+
     // ------------------------------------------------- cancellation / races
 
     @Test

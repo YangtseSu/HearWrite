@@ -32,7 +32,6 @@ import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,7 +57,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.yangtse.hearwrite.data.OcrLang
@@ -98,6 +96,7 @@ fun HomeScreen(
     val messages = rememberMessageController()
     val colors = MaterialTheme.colorScheme
     val draft by viewModel.draft.collectAsStateWithLifecycle()
+    val draftLoaded by viewModel.draftLoaded.collectAsStateWithLifecycle()
     val wordCount by viewModel.wordCount.collectAsStateWithLifecycle()
     val startIndex by viewModel.startIndex.collectAsStateWithLifecycle()
     val displayMode by viewModel.displayMode.collectAsStateWithLifecycle()
@@ -233,7 +232,12 @@ fun HomeScreen(
                     // bar twice and float the editor above the panel.
                     .padding(bottom = contentPad),
             ) {
-                // ---- Header: brand · OCR progress pill · library/settings shortcuts ----
+                // ---- Header: brand · library/settings shortcuts ----
+                // The OCR progress pill used to live in a weighted Box here,
+                // between the wordmark (≈190dp) and three 48dp icons: on a
+                // 360dp screen that left it ≈0dp wide, so the app's only
+                // recognition feedback was truncated to a few glyphs. It is a
+                // full-width strip under the header now ([OcrProgressStrip]).
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -241,54 +245,38 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     HearWriteWordmark()
-                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    if (ocrBusy) {
-                        Surface(
-                            shape = CircleShape,
-                            color = colors.primaryContainer,
-                            contentColor = colors.onPrimaryContainer,
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    strokeWidth = 2.dp,
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = if (ocrPhase.isEmpty()) "识别中…" else ocrPhase,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
+                    Spacer(Modifier.weight(1f))
+                    IconButton(onClick = onOpenLibrary) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.MenuBook,
+                            contentDescription = "词库",
+                            tint = colors.onBackground,
+                        )
+                    }
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            Icons.Outlined.Settings,
+                            contentDescription = "设置",
+                            tint = colors.onBackground,
+                        )
+                    }
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(
+                            Icons.Filled.Menu,
+                            contentDescription = "菜单",
+                            tint = colors.onBackground,
+                        )
                     }
                 }
-                IconButton(onClick = onOpenLibrary) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.MenuBook,
-                        contentDescription = "词库",
-                        tint = colors.onBackground,
+
+                // ---- 拍照识词 progress: full width, with its way out ------
+                if (ocrBusy) {
+                    OcrProgressStrip(
+                        phase = ocrPhase,
+                        onCancel = viewModel::cancelOcr,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
                     )
                 }
-                IconButton(onClick = onOpenSettings) {
-                    Icon(
-                        Icons.Outlined.Settings,
-                        contentDescription = "设置",
-                        tint = colors.onBackground,
-                    )
-                }
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(
-                        Icons.Filled.Menu,
-                        contentDescription = "菜单",
-                        tint = colors.onBackground,
-                    )
-                }
-            }
 
                 // ---- Main: OCR error card + word-list section ---------
                 Box(
@@ -311,6 +299,7 @@ fun HomeScreen(
                             displayMode = displayMode,
                             wordCount = wordCount,
                             startIndex = startIndex,
+                            loading = !draftLoaded,
                             onDraftChange = viewModel::onDraftChange,
                             onToggleDisplayMode = { viewModel.setDisplayMode(!displayMode) },
                             onStartIndexChange = viewModel::setStartIndex,
@@ -335,7 +324,12 @@ fun HomeScreen(
                 shuffle = shuffle,
                 wordCount = wordCount,
                 startIndex = startIndex,
-                starting = starting,
+                startBusyLabel = when {
+                    starting -> "整理词表…"
+                    !draftLoaded -> "读取草稿…"
+                    ocrBusy -> "识别中…"
+                    else -> null
+                },
                 onIntervalChange = viewModel::onIntervalChange,
                 onAutoNextChange = viewModel::onAutoNextChange,
                 onShuffleChange = viewModel::onShuffleChange,
@@ -421,6 +415,9 @@ fun HomeScreen(
                 configured = ocrConfigured,
                 modelName = ocrModel,
                 busy = ocrBusy || ocrPicker.busy,
+                recognizing = ocrBusy,
+                phase = ocrPhase,
+                onCancel = viewModel::cancelOcr,
                 onCamera = {
                     showOcrSheet = false
                     ocrPicker.launchCamera()

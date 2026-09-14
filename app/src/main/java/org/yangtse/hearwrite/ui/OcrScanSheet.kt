@@ -38,9 +38,14 @@ fun OcrScanSheet(
     configured: Boolean,
     modelName: String,
     busy: Boolean,
+    /** True while a recognition is in flight — shows the progress row. */
+    recognizing: Boolean,
+    /** In-flight progress copy for the sheet's own progress row. */
+    phase: String,
     onCamera: () -> Unit,
     onGallery: () -> Unit,
     onOpenSettings: () -> Unit,
+    onCancel: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -50,6 +55,17 @@ fun OcrScanSheet(
                 .padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
         ) {
             Text("拍照识词", style = MaterialTheme.typography.titleLarge)
+
+            // Reopening the sheet while a recognition is in flight used to
+            // show two disabled buttons and nothing else — no reason, no way
+            // out. The same progress row as 首页 explains it and cancels it.
+            if (recognizing) {
+                OcrProgressStrip(
+                    phase = phase,
+                    onCancel = onCancel,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            }
 
             // ---- 识别语言 (picks the vision prompt) -------------------------
             Text(

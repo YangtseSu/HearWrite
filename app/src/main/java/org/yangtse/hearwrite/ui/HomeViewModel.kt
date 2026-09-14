@@ -116,6 +116,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _draft = MutableStateFlow("")
     val draft: StateFlow<String> = _draft.asStateFlow()
 
+    /**
+     * False until the persisted draft has been read. The seed is a DataStore
+     * round trip, so without this gate every Home entry showed a frame of
+     * "共 0 词" / an empty editor — and 开始听写 pressed in that window
+     * answered 请先输入单词列表 for a list that was about to appear. The
+     * screen shows a loading placeholder until it flips true (a failed read
+     * still flips it, degrading to the empty draft).
+     */
+    private val _draftLoaded = MutableStateFlow(false)
+    val draftLoaded: StateFlow<Boolean> = _draftLoaded.asStateFlow()
+
     private val _startIndex = MutableStateFlow(0)
     /** Index into the parsed word list where dictation starts (0-based). */
     val startIndex: StateFlow<Int> = _startIndex.asStateFlow()
@@ -211,6 +222,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     /** dataUrl + lang of the last compressed image — the 重试 target. */
     private var lastOcrRun: Pair<String, OcrLang>? = null
 
+    /** The in-flight recognition (cancelled by [cancelOcr]); null when idle. */
+    private var ocrJob: Job? = null
+
     // ---- 选定识别区域 (crop step) ------------------------------------------
 
     /** Reclaim the decode bitmap whenever the ViewModel goes away. */
@@ -245,6 +259,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 Log.w(TAG, "draft seed failed", e)
                 ""
             }
+            _draftLoaded.value = true
         }
         // Seed the playback settings for the bottom panel (设置页 writes the
         // same keys; the dictation session reads them at start).
@@ -654,7 +669,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun confirmOcrCrop(rect: NormalizedRect, lang: OcrLang) {
         val source = _cropBitmap.value ?: return
         _cropBitmap.value = null
-        viewModelScope.launch {
+        ocrJob = viewModelScope.launch {
             if (!ocrGate.tryLock()) {
                 source.recycle()
                 return@launch
@@ -713,6 +728,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         launchOcrRun(last.second) { last.first }
     }
 
+    /**
+     * Abandon the in-flight recognition (the progress strip's 取消). The
+     * vision call is a 30 s round trip, so a wrong crop or a slow provider
+     * must not have to be waited out; cancelling the job cancels the OkHttp
+     * call through the service's cancellation hook, and the body's own
+     * `finally` releases the gate and clears the busy state. The last image
+     * stays the 重试 target.
+     */
+    fun cancelOcr() {
+        val job = ocrJob ?: return
+        if (!job.isActive) return
+        job.cancel()
+        _ocrOutcome.value = "已取消识别"
+    }
+
     fun clearOcrError() {
         _ocrError.value = null
     }
@@ -722,7 +752,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun launchOcrRun(lang: OcrLang, acquireDataUrl: suspend () -> String?) {
-        viewModelScope.launch {
+        ocrJob = viewModelScope.launch {
             // Re-entry guard: the gate is claimed synchronously BEFORE any
             // suspension (AGENTS.md) — a fast double-tap can only lose here.
             if (!ocrGate.tryLock()) return@launch

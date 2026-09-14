@@ -176,7 +176,13 @@ fun LibraryDrawScreen(
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                EmptyHint("未选择词表")
+                // Every tick failed to load: 未选择词表 would be a lie — name
+                // the lists that could not be read instead.
+                if (pool.failedLabels.isEmpty()) {
+                    EmptyHint("未选择词表")
+                } else {
+                    EmptyHint("选中的词表无法读取：${pool.failedLabels.joinToString("、")}")
+                }
             }
             else -> LazyColumn(
                 modifier = Modifier
@@ -199,6 +205,14 @@ fun LibraryDrawScreen(
                                 "已合并 ${pool.mergedCount} 个跨表重复词",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
+                        if (pool.failedLabels.isNotEmpty()) {
+                            Text(
+                                "以下词表未能读取，已排除：${pool.failedLabels.joinToString("、")}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.padding(top = 2.dp),
                             )
                         }

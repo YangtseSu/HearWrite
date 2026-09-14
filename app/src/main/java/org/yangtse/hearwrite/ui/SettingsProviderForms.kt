@@ -630,7 +630,19 @@ fun SystemVoiceSection(
     previewState: TtsTestState,
 ) {
     val enEmpty = enVoices.isNullOrEmpty()
-    if (!loading && zhVoices.isNullOrEmpty() && enEmpty && previewState == TtsTestState.Idle) return
+    // Nothing to pick and nothing to say: the section used to render nothing
+    // at all, which also took the 英文使用默认音色 switch with it — the user
+    // saw 系统语音 expand into blank space and could not tell "no voices" from
+    // "still loading" from "broken". It now explains the engine's state.
+    if (!loading && zhVoices.isNullOrEmpty() && enEmpty && previewState == TtsTestState.Idle) {
+        Text(
+            "当前系统语音引擎未提供可选音色，将使用系统默认发音。可在系统设置中安装或更新语音数据后重试。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+        return
+    }
 
     Column {
         if (loading) {

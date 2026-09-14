@@ -464,7 +464,34 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 **门禁**：`testDebugUnitTest` 327/327 绿；`lintDebug` 无新增告警（参见 `ERRATA.md` §3）。
 
 ### 阶段 C — 状态覆盖与内容层
-`C1`（缺失状态：首页草稿加载态、听写准备态、语音失败提示、OCR 可取消、空态补齐）→ `C2`（听写页：词语展开、表盘圆裁切、暂停文案、满分成绩、错词不可撤销、错词本 chip 惰性化）→ `C3`（统计页：柱子下限、列表惰性/上限、错误态、图表可读）→ `C4`（抽词行 `FlowRow`、摘要固定、OCR 语言持久化、覆盖草稿前确认、错误卡加 `去设置`、裁剪把手与缩放）→ `C6`（`WindowSizeClass`、表盘随约束、旋转不丢状态）。
+
+#### C1（缺失状态）—— ✅ 已完成
+
+范围：`C1` 的六行状态（首页草稿加载态、听写准备态、语音失败提示、OCR 可取消、系统音色空态、抽词池读表失败），不含 `C1b`（首页补充清单）与 `C1c`（P3 速查）。
+
+| 状态 | 位置 | 做法 |
+|---|---|---|
+| 首页草稿播种 | `HomeViewModel.kt` `draftLoaded` → `HomeWordSection.kt` `loading` | 草稿读取完成前，列表体渲染 `正在读取草稿…` + 转圈，`编辑` 禁用；`开始听写` 同一窗口内显示忙碌态 |
+| 听写准备中 | `DictationScreen.kt` `!ui.ready` 分支 | 裸转圈改为转圈 + `准备听写…` |
+| 语音失败 | `DictationEngine.speechFailures` → `DictationUiState.speechFailures` | 计数每次失败的朗读通过（speak1/speak2/释义/组词），`start` 归零；听写中与成绩卡各出一条中文提示 |
+| OCR 进行中 | 新增 `ui/OcrProgress.kt` `OcrProgressStrip` | 全宽进度条 + `取消`，首页 / 批改页 / 扫描 sheet 三处共用；首页原头部药丸删除（360dp 上宽度 ≈0dp） |
+| 系统音色为空 | `SettingsProviderForms.kt` `SystemVoiceSection` | 由"什么都不渲染"改为一行说明（原实现连 `英文使用默认音色` 开关一起消失） |
+| 抽词池读表失败 | `LibraryDrawViewModel.kt` `DrawPoolState.failedLabels` → `LibraryDrawScreen.kt` | 失败的词表被具名列出（摘要行 / 空态），不再只落 logcat |
+
+**验收证据（2026-09-14，模拟器 `HearWrite37`，`uiautomator dump` 属性断言）**：
+
+| 项 | 断言 | 结果 |
+|---|---|---|
+| 草稿加载态 | 列表体 `正在读取草稿…`、`开始听写` 显示 `读取草稿…` 且 `enabled=false` | ✅ 设备（读取窗口短于 dump 延迟，用一次性 3 s 探针把窗口拉长后采样，探针已移除） |
+| 听写准备态 | `!ui.ready` 期间显示 `准备听写…` | ✅ 源码（该窗口同样短于 dump 延迟） |
+| 语音失败 | 禁用系统 TTS 引擎后跑一场：盘上方 `本场有 N 次发音失败…`（N 随进度增长），成绩卡 `本场有 10 次发音失败，成绩可能不准` | ✅ 设备 |
+| OCR 进度 + 取消 | 首页：`识别中…` 全宽 + `取消`；点取消后进度条消失、`开始听写` 恢复 `enabled=true`。批改页：`处理图片中…` + `取消`，同样可取消 | ✅ 设备（`adb reverse` 到一个永不响应的 stub 端点制造长窗口） |
+| 系统音色空态 | 禁用 TTS 引擎后进入 发音来源 → 系统语音：显示 `当前系统语音引擎未提供可选音色…` | ✅ 设备 |
+| 抽词池失败 | 具名列出未能读取的词表 | ✅ 源码（无现成的失败注入点） |
+
+**门禁**：`testDebugUnitTest` **330/330** 绿（基线 327，新增 3 条引擎用例）；`lintDebug` 无告警。
+
+`C2`（听写页：词语展开、表盘圆裁切、暂停文案、满分成绩、错词不可撤销、错词本 chip 惰性化）→ `C3`（统计页：柱子下限、列表惰性/上限、错误态、图表可读）→ `C4`（抽词行 `FlowRow`、摘要固定、OCR 语言持久化、覆盖草稿前确认、错误卡加 `去设置`、裁剪把手与缩放）→ `C6`（`WindowSizeClass`、表盘随约束、旋转不丢状态）。
 
 ### 阶段 D — 打磨（按喜好）
 动效（§4）、导航 `launchSingleTop`、结束页 → 本次统计入口、术语统一（C7）、死代码清理、系统栏图标随自选主题、动态取色（Material You）。

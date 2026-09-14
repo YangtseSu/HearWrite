@@ -28,6 +28,13 @@ data class DrawPoolState(
     /** Candidate count X is drawn from (cross-list duplicates merged). */
     val poolSize: Int = 0,
     val mergedCount: Int = 0,
+    /**
+     * Tick labels that could not be loaded (asset read failure) or contributed
+     * no words. They used to be dropped silently — only logcat knew — leaving
+     * the pool smaller than the tick set with no explanation; the screen now
+     * names them so the count 合计 N 词 is accounted for.
+     */
+    val failedLabels: List<String> = emptyList(),
 )
 
 /** A startable draw: the sampled lines plus the run's provenance label. */
@@ -68,6 +75,7 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
             val ids = selection.selectedIds.value.toList()
             var merged = 0
             val lists = ArrayList<DrawListInfo>(ids.size)
+            val failed = ArrayList<String>(0)
             val raw = ArrayList<String>()
             ids.forEach { id ->
                 val parts = parseBuiltinListId(id)
@@ -75,18 +83,24 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
                     // A selection id always comes from a library list row; a
                     // malformed one is dropped rather than failing the pool.
                     Log.w("LibraryDrawViewModel", "unusable selection id: $id")
+                    failed += id
                     return@forEach
                 }
                 val (category, label) = parts
                 // A list that fails to load (asset read error) degrades by
-                // being left out; the rest of the pool still dictates.
+                // being left out; the rest of the pool still dictates — but
+                // the drop is reported, not swallowed.
                 val lines = try {
                     repository.entries(LibraryList(category, label)).map(::entryToLine)
                 } catch (e: Exception) {
                     Log.w("LibraryDrawViewModel", "list load failed for $id", e)
-                    emptyList()
+                    failed += "$category / $label"
+                    return@forEach
                 }
-                if (lines.isEmpty()) return@forEach
+                if (lines.isEmpty()) {
+                    failed += "$category / $label"
+                    return@forEach
+                }
                 lists += DrawListInfo(id, category, label, lines.size)
                 raw += lines
             }
@@ -108,6 +122,7 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
                 lists = lists,
                 poolSize = enriched.size,
                 mergedCount = merged,
+                failedLabels = failed,
             )
         }
     }
