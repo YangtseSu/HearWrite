@@ -119,6 +119,20 @@ private val HANZI = mapOf(
 
 private fun hanziKey(c: Char): Pair<String, Int>? = HANZI[c]
 
+/**
+ * CJK chars in [names] that [HANZI] does not cover. A char missing from the
+ * table has no (pinyin, stroke) key and silently compares by code point instead
+ * (docs/WORDLIST.md §5 step 3) — `4012f66` shipped 60 such chars while every
+ * test stayed green, because the golden fixture is regenerated with this very
+ * comparator and degrades in lockstep. JVM test seam: the table itself is
+ * private and only ever read through [compareLabels].
+ */
+internal fun hanziTableGaps(names: Iterable<String>): List<Char> = names
+    .flatMap { it.toList() }
+    .filter { it in '\u4e00'..'\u9fff' && it !in HANZI }
+    .distinct()
+    .sorted()
+
 /** Case/accent-folding Latin collation — mirrors `sensitivity: "base"` for ASCII runs. */
 private val latinCollator: Collator =
     Collator.getInstance(Locale.ENGLISH).apply { strength = Collator.PRIMARY }

@@ -62,7 +62,8 @@ python3 scripts/check-assets.py --strict   # warning 也当失败
 1. 新建 `app/src/main/assets/<分类>/<词表名>.txt`，按第 3 节写行。
 2. `python3 scripts/check-assets.py` — 0 errors。
 3. 若分类名或词表名引入了新的汉字，把该字补进 `domain/LabelOrder.kt` 的 `HANZI` 表（拼音 + 笔画数），并同步 `app/src/test/resources/library-label-order.json`；否则该字会掉进拉丁比较分支、排序错乱。
-   新字要**算差集**，不要凭印象列举：`{分类名与全部词表名里的汉字} − {HANZI 的键}`（`grep -c "'X' to (" domain/LabelOrder.kt` 可逐个确认）。漏一个不会报错，只会静默错序。
+   新字要**算差集**，不要凭印象列举：`{分类名与全部词表名里的汉字} − {HANZI 的键}`（`grep -c "'X' to (" domain/LabelOrder.kt` 可逐个确认）。
+   `LabelOrderCoverageTest` 会遍历 `app/src/main/assets/` 的真实目录名与文件名，把缺字一次性报出来——`LabelOrderTest` **看不见**这类漏字（它的 golden fixture 是用同一个比较器重新生成的，缺字时两侧一起退化、照常全绿，`4012f66` 就这么漏了 60 个字）。
 4. `./gradlew :app:testDebugUnitTest` — `LabelOrderTest` 会用手写顺序与比较器输出对拍，顺序写错就红。
 5. 跑一次 `./gradlew :app:assembleDebug` 确认打包无误；真机上从「更多 → 词库」进新分类走查（列表能打开、能预览、能起听写）。
 
