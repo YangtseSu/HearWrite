@@ -1,0 +1,48 @@
+library | n. | 图书馆
+building | n. | 建筑物；楼房
+floor | n. | 楼层；地板
+five | num. | 五
+playground | n. | 操场
+next | adj. | 紧接着的；下一个的；接下来的；adv. 紧接着；随后
+next to | prep. | 紧邻, 在……近旁；紧接
+garden | n. | 花园
+flower | n. | 花, 花朵；花卉
+tidy | adj. | 整洁的；v. 使整洁
+club | n. | 俱乐部；社团
+open | v. | 开门, 开业；打开；开；张开；adj. 开放的；张开的；展开的
+p.m. | abbr. | 下午, 午后
+Tuesday | n. | 星期二
+hall | n. | 礼堂, 大厅；走廊；门厅
+song | n. | 歌曲
+put | v. | 放；安置
+Friday | n. | 星期五
+water | n. | 水；v. 浇水
+game | n. | 游戏；运动项目；比赛
+fun | adj. | 有趣的；n. 乐趣
+Monday | n. | 星期一
+raise | v. | 提升, 举起；增加；筹募；抚养
+national | adj. | 国家的；民族的；全国的
+flag | n. | 旗；旗帜
+start | v. | 开始；n. 开头
+first | det. & num. | 第一；首要的；adv. 首先；第一次
+a.m. | abbr. | 上午, 午前
+make | v. | 使成为；出产；写；做；使变得；使得
+hand | n. | 手；帮助
+answer | v. | 答复；回答；n. 答复, 回答；答案
+question | n. | 问题
+box | n. | 盒, 箱；方框
+knife | n. | 刀
+glass | n. | 玻璃杯；眼镜；玻璃
+dish | n. | 菜肴；餐具
+tomato | n. | 番茄
+country | n. | 国家
+American | adj. | 美国的；n. 美国人
+during | prep. | 在……期间
+classroom | n. | 教室；课堂
+part | n. | 参与；部分
+bottle | n. | 瓶子
+any | det. | 任何的, 任一
+juice | n. | 果汁；菜汁
+blackboard | n. | 黑板
+desk | n. | 书桌
+chair | n. | 椅子

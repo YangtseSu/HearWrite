@@ -1,0 +1,8 @@
+world | n. | 世界
+healthy | adj. | 健康的
+fire | n. | 火；火灾
+noodle | n. | 面条
+dumpling | n. | 饺子
+river | n. | 河；江
+vegetable | n. | 蔬菜
+rice | n. | 大米

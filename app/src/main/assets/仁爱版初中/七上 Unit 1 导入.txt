@@ -1,0 +1,55 @@
+let | v. | 让；允许
+be | v. | 成为；是；在；等于
+friend | n. | 朋友
+hello | int. | 你好，喂
+nice | adj. | 令人愉快的；友好的
+to | prep. | (表示想做的事)；表示目的或意图；表示结果或原因；向；到
+meet | v. | 结识；遇见
+you | pron. | 你；你们
+too | adv. | 也；太；非常
+good | adj. | 令人愉快的；好的；擅长的；对……有好处；完全的
+morning | n. | 上午
+I | pron. | 我
+fine | adj. | 身体好的，健康的；很好；v. 对……处以罚款；n. 罚款
+how | adv. | 怎样；多少，多么
+do | aux. | (用于实义动词前构成否定句和疑问句)；v. 做；从事(职业)；进行(活动)
+like | v. | 喜欢；想要；prep. 像；……怎么样；像……一样
+science | n. | 科学
+my | det. | 我的
+name | n. | 名字；v. 给……取名
+read | v. | 阅读；朗读；读到
+love | v. | 喜爱；爱
+hike | v. | 远足；徒步旅行
+enjoy | v. | 享受……的乐趣；喜爱；欣赏
+play | v. | 参加比赛；玩耍；演奏；n. 戏剧
+football | n. | 足球运动；足球
+sing | v. | 唱(歌)
+Miss | n. | 小姐；女士
+what | pron. & det. | 什么；无论什么；多么
+your | det. | 你的；你们的
+please | int. | 请；太好了
+dance | v. | 跳舞
+eleven | num. | 十一
+twelve | num. | 十二
+thirteen | num. | 十三
+fourteen | num. | 十四
+fifteen | num. | 十五
+sixteen | num. | 十六
+seventeen | num. | 十七
+eighteen | num. | 十八
+nineteen | num. | 十九
+twenty | num. | 二十
+hi | int. | 你好, 嗨
+this | pron. & det. | 这, 这个
+where | adv. | 在哪里
+from | prep. | 来自；离；始于；从
+and | conj. | 和；然后
+in | prep. | 在……中；用；穿着
+class | n. | 班级；课；阶层
+grade | n. | 年级；成绩等级
+which | pron. & det. | 哪一个, 哪一些
+we | pron. | 我们；人们
+classmate | n. | 同班同学
+old | adj. | 年纪；结识久的；老的
+year | n. | 年龄；年；一年时间
+see | v. | 看见；理解；看
