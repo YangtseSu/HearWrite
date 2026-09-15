@@ -8,14 +8,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -83,7 +81,7 @@ import org.yangtse.hearwrite.HearWriteApplication
  * behind the sheet's scrim; the screen-level host also carries the OCR,
  * 清空错词本 / 清空历史记录 confirmations.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onStartDictation: (lines: List<String>, sourceLabel: String?) -> Unit,
@@ -201,12 +199,21 @@ fun HomeScreen(
     // to the editor ("fill the screen then pop back"): the editor bottom
     // glides from the keyboard top to the panel top and the panel itself,
     // drawn as an overlay, simply emerges from behind the keyboard.
+    //
+    // "Is the keyboard up" is decided by the IME's own inset being non-zero,
+    // never by `WindowInsets.isImeVisible`: that flag reports the insets
+    // *source* as visible, which stays true with a zero-height frame whenever
+    // the IME is requested but not laid out (hardware keyboard attached, soft
+    // keyboard disabled, or the IME window not yet drawn). Padding by that
+    // zero swallowed the panel's reservation — the editor stretched under the
+    // panel and the 示例/清空 footer slid below 开始听写. A positive inset is
+    // exactly the space the keyboard occupies.
     var panelHeightPx by remember { mutableIntStateOf(0) }
-    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+    val imeBottomPx = WindowInsets.ime.getBottom(LocalDensity.current)
     val contentPad by animateDpAsState(
         targetValue = with(LocalDensity.current) {
-            if (WindowInsets.isImeVisible) {
-                imeBottom.toDp()
+            if (imeBottomPx > 0) {
+                imeBottomPx.toDp()
             } else {
                 panelHeightPx.toDp()
             }
