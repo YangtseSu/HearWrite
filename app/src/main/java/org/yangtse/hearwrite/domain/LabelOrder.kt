@@ -65,6 +65,11 @@ private val HANZI = mapOf(
     '义' to ("yi" to 3), '务' to ("wu" to 5), '育' to ("yu" to 8), '课' to ("ke" to 10),
     '程' to ("cheng" to 12), '标' to ("biao" to 9), '准' to ("zhun" to 10),
     '基' to ("ji" to 11), '本' to ("ben" to 5), '用' to ("yong" to 5),
+    // 仁爱版初中 unit sections (Preparing/Exploring/Developing/Wrapping Up):
+    // 导入 dǎo < 探究 tàn < 拓展 tuò < 小结 xiǎo — the textbook order falls out
+    // of pinyin, so the labels keep the section sequence for free.
+    '导' to ("dao" to 6), '探' to ("tan" to 11), '究' to ("jiu" to 7),
+    '拓' to ("tuo" to 8), '结' to ("jie" to 9), '展' to ("zhan" to 10),
     // 人教版初中语文 读读写写 lesson titles (七上/七下). Kept alphabetical here;
     // map order is irrelevant, the comparator sorts on the values.
     '阿' to ("a" to 7), '白' to ("bai" to 5), '百' to ("bai" to 6), '不' to ("bu" to 4),

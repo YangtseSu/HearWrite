@@ -1,0 +1,7 @@
+date | n. | 日期
+square | n. | 广场；正方形；adj. 正方形的
+street | n. | 街道
+prepare | v. | 使做好准备；做(饭)
+guess | v. | 猜测；猜到；以为
+riddle | n. | 谜；谜语
+lastly | adv. | 最后一点；最后

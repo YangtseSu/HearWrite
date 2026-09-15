@@ -1,0 +1,6 @@
+rule | n. | 规则；规章；条例
+traffic | n. | 交通
+respect | v. & n. | 尊敬；尊重
+forget | v. | 忘记做；忘记
+board | n. | 板；木板
+polite | adj. | 有礼貌的

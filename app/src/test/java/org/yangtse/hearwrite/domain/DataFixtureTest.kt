@@ -86,6 +86,58 @@ class DataFixtureTest {
         }
     }
 
+    @Test
+    fun `renai textbook rows carry pos and a speakable gloss`() {
+        val files = File("src/main/assets/仁爱版初中").listFiles().orEmpty()
+            .filter { it.isFile && it.name.startsWith("七上 Unit 1") }
+            .sortedBy { it.name }
+        assertEquals(4, files.size)
+
+        val entries = files.flatMap { parseWordEntries(it.readText()) }
+        assertEquals(WordEntry("let", "v.", "让；允许"), entries.first())
+        // A multi-POS textbook row keeps the dominant POS in column 2 and marks
+        // the other senses inline — the convention the ECDICT-derived lists use.
+        val fine = entries.single { it.word == "fine" }
+        assertEquals("adj.", fine.pos)
+        assertEquals("身体好的，健康的；很好；v. 对……处以罚款；n. 罚款", fine.meaning)
+        assertEquals("身体好的，健康的", speakableMeaning(fine.meaning))
+
+        for (entry in entries) {
+            assertTrue("${entry.word} has no pos", entry.pos != null)
+            assertTrue("${entry.word} has no gloss", !entry.meaning.isNullOrBlank())
+            val speakable = speakableMeaning(entry.meaning)
+            assertNull("${entry.word}: ${entry.meaning}", POS_PREFIX_RE.matchAt(speakable, 0))
+        }
+
+        // The OCR source carried IPA transcriptions and page references; neither
+        // may reach a gloss, and a spoken gloss must never open with a POS token
+        // (TTS spells `n.` out). An empty speakable gloss is legal — the
+        // textbook's `the`/`yes` rows carry usage notes only, and 朗读释义 then
+        // says nothing rather than reading the note aloud.
+        val all = File("src/main/assets/仁爱版初中").listFiles().orEmpty()
+            .filter { it.isFile && it.extension == "txt" }
+        assertEquals(78, all.size)
+        for (file in all) {
+            for (entry in parseWordEntries(file.readText())) {
+                val where = "${file.name}: ${entry.word}"
+                val meaning = entry.meaning.orEmpty()
+                assertTrue("$where has no gloss", meaning.isNotEmpty())
+                assertTrue("$where leaks IPA: $meaning", IPA_RE.find(meaning) == null)
+                assertTrue("$where leaks a page ref: $meaning", PAGE_REF_RE.find(meaning) == null)
+                val speakable = speakableMeaning(meaning)
+                assertNull("$where: $meaning", POS_PREFIX_RE.matchAt(speakable, 0))
+            }
+        }
+    }
+
+    private companion object {
+        /** An `/…/` transcription — the OCR pages carry two per headword. */
+        val IPA_RE = Regex("""/(?![^/]*[\u4e00-\u9fff])[^/]{1,60}?/""")
+
+        /** The textbook's page reference, `(1)` … `(107)` / `（26）`. */
+        val PAGE_REF_RE = Regex("""[（(]\s*\d{1,3}\s*[)）]""")
+    }
+
     // --- 义务教育语文课程标准 字表: a single Chinese char per line ---
 
     private fun zibiao(label: String): List<String> =

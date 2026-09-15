@@ -1,0 +1,12 @@
+housing | n. | (统称) 住房, 住宅
+transportation | n. | 公共交通运输系统
+nearby | adv. | 在附近；adj. 附近的
+public | adj. | 公众的, 大众的；公共的, 公立的；n. 民众；百姓
+space | n. | 大片空地；太空；空隙；空间
+item | n. | 项目；物件
+farmer | n. | 农场主；农人
+farm | n. | 农场；v. 务农, 饲养
+drive | v. | 驾车送(人)；驾驶, 开车
+goods | n. | 商品, 货品；运载的货物
+business | n. | 商业；生意
+early | adv. | 在早期；提前；adj. 早期的；早到的

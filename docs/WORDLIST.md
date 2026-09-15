@@ -35,7 +35,7 @@ you're = you are           ← 展开式：只朗读等号左侧
 ```
 
 - 列数为 **1、2 或 3**（全角 `｜`、半角 `|` 均可）。末列没有内容就**省略**，不要留空列（`apple | n. | ` 与 `月 | yuè | ` 都是坏行）。
-- 词性列不校验词表：ECDICT 的 `n.`、课本里的 `n. & v.`、`v.aux.`、`pl, n` 都合法，朗读不会读它。
+- 词性列不校验词表：ECDICT 的 `n.`、课本里的 `n. & v.`、`v.aux.`、`pl, n` 都合法，朗读不会读它。多词性的英文行沿用派生词表的写法：**主导词性进第 2 列，其余义项在第 3 列内联标注**（`fine | adj. | 身体好的，健康的；很好；v. 对……处以罚款；n. 罚款`）——`speakableMeaning` 只朗读首个义项，后续义项的 `v.`/`n.` 前缀永远不会被读出。词性拼写统一到大全口径：`excl./exclam./ext./interj. → int.`、`modal v. → v.aux.`、`ordinal num. → num.`。
 - **英文行**：词性+释义可留空，应用会用内置 ECDICT 离线补齐（`dict/ecdict-meta.json`）。ECDICT 查不到的是**词组**（`be good at`、`a bottle of`），补不出来，建议直接写全三列。
 - **生字行**：拼音必须是**带声调**的拼音字母（`lǚ`，ü 写作 `ü`），不是数字调（`lv3`）——多音字筛选靠它（见 AGENTS.md 组词朗读）。组词必须含本字，否则该行朗读时会被丢弃。
 - **两种拼音写法不要混用**：词表行用带声调符号（`yuè`，ü 写作 `ü`），而 `compounds/compounds.json` 与 `scripts/data/xiandaihanyuchangyongcibiao.txt` 用数字调（`yue4`，ü 写作 `v`）。跨源比较（例如核对某字的组词候选是否匹配本行读音）**必须先转写成同一种写法再比**，否则一条也匹配不上，看起来像"该字没有任何候选"。
@@ -67,8 +67,14 @@ python3 scripts/check-assets.py --strict   # warning 也当失败
 4. `./gradlew :app:testDebugUnitTest` — `LabelOrderTest` 会用手写顺序与比较器输出对拍，顺序写错就红。
 5. 跑一次 `./gradlew :app:assembleDebug` 确认打包无误；真机上从「更多 → 词库」进新分类走查（列表能打开、能预览、能起听写）。
 
-### 词表是生成资产的输入（语文识字表/写字表尤其注意）
+### 一个单元拆成几份词表：标签要能排回教材顺序
 
+教材的单元词表常按小节分段（仁爱版：Preparing / Exploring / Developing / Wrapping Up the Topic），照抄小节名当词表名会出现两个问题：名字太长，且**排序靠 `compareLabels`**——`Preparing` 与 `Exploring` 都属拉丁串，按字母排成 Exploring < Preparing，与教材顺序相反。
+
+- 因此小节名用**拼音顺序即教材顺序**的中文短标签，`仁爱版初中` 采用 `导入 / 探究 / 拓展 / 小结`（dǎo < tàn < tuò < xiǎo），整册自然排成 `七上 Unit 1 导入 → 探究 → 拓展 → 小结 → Unit 2…`。沿用这套标签时不必再改比较器，只要保证新增的汉字已在 `HANZI` 表里（第 3 步）。
+- 单元号照抄教材印刷的编号：仁爱新版七年级两册连续编号（七上 Unit 1–6、七下 Unit 7–12），八上又从 Unit 1 起排——别自行改成每册 1–6。
+
+### 词表是生成资产的输入（语文识字表/写字表尤其注意）
 两个生成器都读词表，但**范围不同**：`scripts/build-hanzi-meta.py` 扫**全部**词表分类的 `字 | 拼音 | 组词` 行（`ASSETS_DIR.rglob("*.txt")`，跳过 `dict`/`compounds`/`audio`/`licenses`），把其中的**课本读音**当作 `dict/hanzi-meta.json` 的高优先级来源（仅次于人工 override）；`scripts/generate-compounds.py` 只读 `人教版小学语文/*.txt`，把其中的组词收进 `compounds/compounds.json` 的 `learned` 池。
 
 因此给语文词表加第三列**不是"顺手补全"**，而是改写两份全体分类共享的派生资产：一个多音字行的读音会翻转该字的全局默认（如 `行 | háng` → `xíng`），一批组词会重写 `learned` 池——而新写的组词又只能从这些池里取，构成循环。行动前先决定这两件事：
