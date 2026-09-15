@@ -30,6 +30,7 @@ import org.yangtse.hearwrite.data.OCR_PROGRESS_COMPRESSING
 import org.yangtse.hearwrite.data.OCR_PROGRESS_RECOGNIZING
 import org.yangtse.hearwrite.data.OcrLang
 import org.yangtse.hearwrite.data.OcrOutcome
+import org.yangtse.hearwrite.data.WrongWordMark
 import org.yangtse.hearwrite.domain.CompoundTables
 import org.yangtse.hearwrite.domain.DictationEngine
 import org.yangtse.hearwrite.domain.GradeResult
@@ -59,8 +60,11 @@ data class DictationUiState(
     val intervalSec: Double,
     val autoNext: Boolean,
     val wrongWords: List<String>,
-    /** Words marked wrong during the current run (the score uses this, not the book). */
-    val runWrongCount: Int,
+    /**
+     * Words marked wrong during this run — the score's 错词 count is the size
+     * of this set, and 取消标记 can drop one from it again.
+     */
+    val runMarks: Set<String>,
     val markedFlash: Boolean,
     val ready: Boolean,
     val elapsedSec: Long?,
@@ -68,6 +72,9 @@ data class DictationUiState(
     val speechFailures: Int,
 ) {
     val isActive: Boolean get() = state == PlayState.PLAYING || state == PlayState.PAUSED
+
+    /** Marks of the run in progress (the score reads this, not the book). */
+    val runWrongCount: Int get() = runMarks.size
 }
 
 /**
@@ -150,11 +157,53 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     private val _wrongWords = MutableStateFlow<List<String>>(emptyList())
     val wrongWords: StateFlow<List<String>> = _wrongWords.asStateFlow()
 
-    /** Heads marked during the current run (repeat offenders included). */
-    private val runWrongWords = mutableSetOf<String>()
+    /**
+     * Heads marked during the current run (repeat offenders included) — the
+     * score's 错词 count is this set's size. A set rather than a counter so
+     * 取消标记 can take one back (AUDIT C2: the run had no way to un-mark).
+     */
+    private val _runMarks = MutableStateFlow<Set<String>>(emptySet())
+    val runMarks: StateFlow<Set<String>> = _runMarks.asStateFlow()
 
-    private val _runWrongCount = MutableStateFlow(0)
-    val runWrongCount: StateFlow<Int> = _runWrongCount.asStateFlow()
+    /**
+     * The 错词本 bookkeeping of one run. Held per run rather than in plain
+     * fields because the queue outlives a run: 再听一遍 can start the next run
+     * while the previous run's writes are still draining, and a stale write must
+     * not land in the new run's undo state (it would then roll back the wrong
+     * row, or double-delete a word the new run legitimately marked).
+     */
+    private class BookWriteState {
+        /** Heads this run appended to the visible book list (undo takes them back). */
+        val added = mutableSetOf<String>()
+
+        /** Heads this run wrote a book row for — the writes 取消标记 has to roll back. */
+        val written = mutableSetOf<String>()
+
+        /**
+         * Book row of each head as it was **before** this run marked it (a null
+         * value = the run created the row). Captured inside the write queue right
+         * before `add`, so 取消标记 can put the row back exactly — deleting it
+         * outright would drop a word the student had already missed in earlier
+         * runs.
+         */
+        val undo = mutableMapOf<String, WrongWordMark?>()
+
+        /**
+         * Heads whose book write **failed**, so no row changed. Rolling one of
+         * those back would delete a row this run never touched — the opposite of
+         * the intent — and 取消标记 skips the database step for them.
+         */
+        val unwritten = mutableSetOf<String>()
+    }
+
+    private var bookState = BookWriteState()
+
+    /**
+     * Serializes this run's 错词本 writes. Each write joins the previous one so
+     * a 取消标记 pressed while its own 标记 write is still in flight undoes the
+     * right row instead of racing it (the snapshot must exist by then).
+     */
+    private var bookWriteJob: Job? = null
 
     private val _markedFlash = MutableStateFlow(false)
     val markedFlash: StateFlow<Boolean> = _markedFlash.asStateFlow()
@@ -202,7 +251,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         val intervalSec: Double,
         val autoNext: Boolean,
         val wrongWords: List<String>,
-        val runWrongCount: Int,
+        val runMarks: Set<String>,
         val markedFlash: Boolean,
         val ready: Boolean,
     )
@@ -214,9 +263,9 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         combine(
             combine(_intervalSec, _autoNext) { i, a -> i to a },
             combine(_wrongWords, _markedFlash, _ready) { w, f, r -> Triple(w, f, r) },
-            _runWrongCount,
-        ) { tempo, rest, count ->
-            SessionStateView(tempo.first, tempo.second, rest.first, count, rest.second, rest.third)
+            _runMarks,
+        ) { tempo, rest, marks ->
+            SessionStateView(tempo.first, tempo.second, rest.first, marks, rest.second, rest.third)
         },
         combine(_total, _elapsedSec, engine.speechFailures) { total, elapsed, failures ->
             Triple(total, elapsed, failures)
@@ -231,7 +280,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
             intervalSec = sessionView.intervalSec,
             autoNext = sessionView.autoNext,
             wrongWords = sessionView.wrongWords,
-            runWrongCount = sessionView.runWrongCount,
+            runMarks = sessionView.runMarks,
             markedFlash = sessionView.markedFlash,
             ready = sessionView.ready,
             elapsedSec = runView.second,
@@ -310,7 +359,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
                             startedAt = runStartedAtMs,
                             sourceLabel = runSourceLabel,
                             totalWords = _total.value,
-                            wrongCount = _runWrongCount.value,
+                            wrongCount = _runMarks.value.size,
                             durationSec = elapsed,
                             kind = runKind,
                         )
@@ -412,8 +461,8 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         runStartedAtMs = System.currentTimeMillis()
         runKind = kind
         _elapsedSec.value = null
-        runWrongWords.clear()
-        _runWrongCount.value = 0
+        _runMarks.value = emptySet()
+        bookState = BookWriteState()
         _total.value = runLines.size
         _activeLines.value = runLines
         runSourceLabel = sourceLabel
@@ -451,45 +500,118 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
 
     /**
      * 标记错词 for the current word (speakable headword, deduped book). The
-     * press always counts as a miss of the current run — a headword already
-     * sitting in the book (marked in an earlier session) still shows up in
-     * the score — but is added to the book once only.
+     * press counts as a miss of the current run — a headword already sitting in
+     * the book (marked in an earlier session) still shows up in the score — but
+     * is added to the book once only.
      */
-    fun markCurrentWrong() {
+    private fun markCurrentWrong() {
         val ui = uiState.value
         if (!ui.isActive || ui.index >= ui.total) return
         val head = speakTextFromEntry(_activeLines.value.getOrNull(ui.index) ?: return)
-        if (head.isEmpty()) return
-        val firstMarkThisRun = runWrongWords.add(head)
-        if (firstMarkThisRun) {
-            _runWrongCount.value = _runWrongCount.value + 1
-            // The book row is written once per run even when the headword is
-            // already booked — that write is what bumps its error count across
-            // runs (a booked word must not short-circuit it). A 复习错词 round
-            // is a re-check of words the book already holds, not a fresh run:
-            // counting its presses would inflate every count on each pass, so
-            // it writes nothing (its words are in the book by construction).
-            if (runKind == SessionKind.DICTATION) {
-                viewModelScope.launch {
-                    try {
-                        // The run's provenance feeds the book row's source.
-                        wrongWordsRepository.add(head, runSourceLabel)
-                    } catch (e: Exception) {
-                        // Persistence must never break dictation; the session
-                        // list still carries the mark for the finish/review
-                        // flow.
-                    }
+        if (head.isEmpty() || head in _runMarks.value) return
+        _runMarks.value = _runMarks.value + head
+        // The book row is written once per run even when the headword is
+        // already booked — that write is what bumps its error count across
+        // runs (a booked word must not short-circuit it). A 复习错词 round
+        // is a re-check of words the book already holds, not a fresh run:
+        // counting its presses would inflate every count on each pass, so
+        // it writes nothing (its words are in the book by construction).
+        val book = bookState
+        if (runKind == SessionKind.DICTATION) {
+            book.written.add(head)
+            val label = runSourceLabel
+            enqueueBookWrite {
+                // Snapshot inside the queue: by the time this runs, every
+                // earlier write of this run has landed, so the row read here
+                // is the one 取消标记 must put back.
+                val snapshot = wrongWordsRepository.find(head)
+                book.undo[head] = snapshot
+                try {
+                    wrongWordsRepository.add(head, label)
+                } catch (e: Exception) {
+                    book.unwritten.add(head)
+                    throw e
                 }
             }
         }
         if (head !in _wrongWords.value) {
+            book.added.add(head)
             _wrongWords.value = _wrongWords.value + head
         }
+        flashMarked()
+    }
+
+    /**
+     * Take back the current word's mark — the same button, so a mis-tap mid-run
+     * no longer costs the score (AUDIT C2). The book row is rolled back to its
+     * pre-run state: a row this run created is deleted, one that already
+     * existed is restored with its original count and timestamp instead of
+     * being deleted (the student had missed that word before this run, and
+     * deleting it would silently drop that history). A 复习错词 round wrote
+     * nothing, so it has nothing to roll back.
+     */
+    private fun unmarkCurrentWrong() {
+        val ui = uiState.value
+        if (!ui.isActive || ui.index >= ui.total) return
+        val head = speakTextFromEntry(_activeLines.value.getOrNull(ui.index) ?: return)
+        if (head.isEmpty() || head !in _runMarks.value) return
+        _runMarks.value = _runMarks.value - head
+        val book = bookState
+        if (book.written.remove(head)) {
+            enqueueBookWrite {
+                val previous = book.undo.remove(head)
+                when {
+                    // Nothing was written, so there is nothing to take back.
+                    book.unwritten.remove(head) -> Unit
+                    previous == null -> wrongWordsRepository.remove(head)
+                    else -> wrongWordsRepository.restore(previous)
+                }
+            }
+        }
+        // Only a head this run appended comes back out of the visible list: a
+        // word that was already in the book from earlier sessions stays there
+        // once the mark is taken back, it was not added by this run.
+        if (book.added.remove(head)) {
+            _wrongWords.value = _wrongWords.value - head
+        }
+        flashMarked()
+    }
+
+    /** The 标记错词 button's action: mark the current word, or take the mark back. */
+    fun toggleCurrentWrong() {
+        val ui = uiState.value
+        if (!ui.isActive || ui.index >= ui.total) return
+        val head = speakTextFromEntry(_activeLines.value.getOrNull(ui.index) ?: return)
+        if (head.isEmpty()) return
+        if (head in _runMarks.value) unmarkCurrentWrong() else markCurrentWrong()
+    }
+
+    private fun flashMarked() {
         _markedFlash.value = true
         Haptics.notifyWarning(getApplication()) // alice notifyWarning parity
         viewModelScope.launch {
             delay(MARKED_FLASH_MS)
             _markedFlash.value = false
+        }
+    }
+
+    /**
+     * Queue a 错词本 write behind this run's previous one. The marks of a run
+     * are written in the order they were pressed, so a 取消标记 that follows its
+     * own 标记 undoes the right row — without the queue the two coroutines race
+     * and the undo can read the book before its mark landed.
+     */
+    private fun enqueueBookWrite(block: suspend () -> Unit) {
+        val previous = bookWriteJob
+        bookWriteJob = viewModelScope.launch {
+            previous?.join()
+            try {
+                block()
+            } catch (e: Exception) {
+                // Persistence must never break dictation; the session list
+                // still carries the mark for the finish/review flow.
+                Log.w(TAG, "错词本 write failed", e)
+            }
         }
     }
 
@@ -835,17 +957,27 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
             _gradeNotice.value = "没有勾选任何错词"
             return
         }
-        val fresh = words.filter { it !in runWrongWords }
-        runWrongWords.addAll(words)
-        if (fresh.isNotEmpty()) {
-            _runWrongCount.value = _runWrongCount.value + fresh.size
-            _wrongWords.value = _wrongWords.value + fresh.filter { it !in _wrongWords.value }
-            if (runKind == SessionKind.DICTATION) {
-                viewModelScope.launch {
+        val fresh = words.filter { it !in _runMarks.value }
+        _runMarks.value = _runMarks.value + words
+        val book = bookState
+        val added = fresh.filter { it !in _wrongWords.value }
+        if (added.isNotEmpty()) {
+            book.added.addAll(added)
+            _wrongWords.value = _wrongWords.value + added
+        }
+        if (runKind == SessionKind.DICTATION) {
+            book.written.addAll(fresh)
+            // Same queue as the manual marks: whatever was still in flight is
+            // written first, so the counts land in the order they were made.
+            val label = runSourceLabel
+            enqueueBookWrite {
+                fresh.forEach { word ->
+                    book.undo[word] = wrongWordsRepository.find(word)
                     try {
-                        fresh.forEach { wrongWordsRepository.add(it, runSourceLabel) }
+                        wrongWordsRepository.add(word, label)
                     } catch (e: Exception) {
-                        // Persistence must never break the finish card.
+                        book.unwritten.add(word)
+                        throw e
                     }
                 }
             }
@@ -895,7 +1027,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         intervalSec = MIN_INTERVAL_SEC,
         autoNext = true,
         wrongWords = emptyList(),
-        runWrongCount = 0,
+        runMarks = emptySet(),
         markedFlash = false,
         ready = false,
         elapsedSec = null,

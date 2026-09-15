@@ -71,6 +71,20 @@ class WrongWordsRepository(private val dao: WrongWordsDao) {
     suspend fun remove(word: String) = dao.delete(word)
 
     /**
+     * The stored row of [word], or null when the book does not hold it — the
+     * snapshot 取消标记 restores (a mark the run created is deleted instead).
+     */
+    suspend fun find(word: String): WrongWordMark? = dao.find(word)?.let {
+        WrongWordMark(
+            word = it.word,
+            errorCount = it.errorCount,
+            lastWrongAt = it.lastWrongAt,
+            sourceLabel = it.sourceLabel,
+            addedAt = it.addedAt,
+        )
+    }
+
+    /**
      * Undo a [remove]: put [mark] back with its exact count, times and source.
      * A row deleted moments ago is restored as the same mark — re-inserting it
      * through [add] would count as a fresh run and leave the book wrong.

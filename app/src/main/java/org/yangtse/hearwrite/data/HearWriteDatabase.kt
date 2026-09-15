@@ -106,6 +106,9 @@ interface WrongWordsDao {
     @Query("DELETE FROM wrong_words WHERE word = :word")
     suspend fun delete(word: String)
 
+    @Query("SELECT * FROM wrong_words WHERE word = :word")
+    suspend fun find(word: String): WrongWordEntity?
+
     @Query("DELETE FROM wrong_words")
     suspend fun clear()
 

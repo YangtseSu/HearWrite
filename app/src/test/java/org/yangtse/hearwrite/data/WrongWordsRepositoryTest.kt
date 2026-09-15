@@ -56,6 +56,9 @@ class WrongWordsRepositoryTest {
             rows.value = rows.value.filterNot { it.word == word }
         }
 
+        override suspend fun find(word: String): WrongWordEntity? =
+            rows.value.firstOrNull { it.word == word }
+
         override suspend fun insertExact(row: WrongWordEntity) {
             rows.value = rows.value.filterNot { it.word == row.word } + row
         }

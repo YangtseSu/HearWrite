@@ -13,8 +13,9 @@ private const val SPEAK_MEANING_MAX_WIDTH = 12
  * True when a gloss visibly truncates under the shared 2-line list-row clamp
  * (Home 展示态 rows and the library preview rows): long text or multi-sense
  * (`；;`-split) glosses offer tap-to-expand. Mirrors the display rules in the
- * alice fork; the dictation dial uses its own tighter threshold because the
- * circular area is small and has an explicit 展开全部 button.
+ * alice fork. The dictation dial does **not** use this gate — its content box is
+ * a fraction of a disc, so its clamp is solved geometrically in
+ * [org.yangtse.hearwrite.domain.dialFit].
  */
 fun glossNeedsExpansion(meaning: String?): Boolean =
     (meaning?.length ?: 0) > 24 ||
@@ -58,12 +59,21 @@ fun isCjkEntry(entry: String): Boolean =
 fun findLineByHeadword(lines: List<String>, word: String): String? =
     lines.firstOrNull { speakTextFromEntry(it) == word }
 
-/** Fullwidth chars count 1, halfwidth 0.5 — same measure as the gloss display. */
-private fun meaningWidth(text: String): Double {
+/**
+ * Visual width of [text] in display units: a fullwidth char (汉字, CJK
+ * punctuation, fullwidth forms) counts 1, anything else 0.5 — so a 12-char
+ * Chinese gloss and a 24-char Latin one measure the same. The single measure
+ * behind the spoken gloss cap, the 释义 display and the dial's clamp gates
+ * (a character count gets CJK wrong by a factor of two).
+ */
+fun displayWidth(text: String?): Double {
     var width = 0.0
-    for (ch in text) width += if (ch.code > 0x2e7f) 1.0 else 0.5
+    for (ch in text.orEmpty()) width += if (ch.code > 0x2e7f) 1.0 else 0.5
     return width
 }
+
+/** Internal alias kept so the speech rules read in gloss terms. */
+private fun meaningWidth(text: String): Double = displayWidth(text)
 
 /**
  * 朗读用的中文释义。与释义展示不同，TTS 只需要最核心的一个意思:

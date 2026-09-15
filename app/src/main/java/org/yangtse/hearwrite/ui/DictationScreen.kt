@@ -69,6 +69,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import org.yangtse.hearwrite.ui.theme.hearWriteSemantics
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -79,15 +80,57 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import org.yangtse.hearwrite.domain.DialMetrics
 import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.PlayState
 import org.yangtse.hearwrite.domain.WordEntry
+import org.yangtse.hearwrite.domain.dialBoxWidthDp
+import org.yangtse.hearwrite.domain.dialFit
 import org.yangtse.hearwrite.domain.isCjkEntry
 import org.yangtse.hearwrite.domain.parseWordLine
+import org.yangtse.hearwrite.domain.speakTextFromEntry
 import kotlin.math.ceil
+
+/**
+ * Dial geometry. [DIAL_RING_SIZE] is the countdown ring; the word sits on
+ * [DIAL_INNER_SIZE]'s disc, which clips every child to its circle — the reason
+ * the contents are sized by [dialFit] instead of a hand-picked stack
+ * (AUDIT C2: the 展开全部 button used to fall outside the disc and vanish).
+ */
+private val DIAL_RING_SIZE = 248.dp
+private val DIAL_INNER_SIZE = 204.dp
+
+/**
+ * What the dial's content is measured against — disc diameter, font sizes and
+ * line boxes of the styles it renders. Kept next to the composables that use
+ * them so the two cannot drift, and read as data by the fit solver in
+ * `domain/DialFit.kt`.
+ */
+private val DIAL_METRICS = DialMetrics(
+    diameterDp = DIAL_INNER_SIZE.value.toDouble(),
+    wordMaxSp = 40.0, // displayMedium
+    wordMinSp = 22.0,
+    wordLineRatio = 52.0 / 40.0, // displayMedium's leading ÷ its size
+    hintFontSizeSp = 15.0, // bodyMedium
+    hintLineHeightSp = 24.0,
+    wordPosGapDp = 6.0,
+    glossMaxLines = 2,
+    glossGapDp = 2.0,
+)
+
+/** Height of the 展开全部 row under the dial — a Material text button. */
+private val DIAL_DETAIL_ROW_HEIGHT = 40.dp
+
+/** Chips the finish card composes before offering 查看全部. */
+private const val WRONG_CHIP_CAP = 24
+
+/** Width the countdown slot reserves: the widest readout it ever shows. */
+private val COUNTDOWN_SLOT_TEXT = "${MAX_INTERVAL_SEC.toInt()} 秒"
+
 
 
 /**
@@ -107,7 +150,6 @@ fun DictationScreen(
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val runLines by viewModel.activeLines.collectAsStateWithLifecycle()
     var showWord by remember { mutableStateOf(false) }
-    var metaExpanded by remember { mutableStateOf(false) }
     var exitDialogVisible by remember { mutableStateOf(false) }
 
     // A dictation session runs for minutes with nothing to touch — keep the
@@ -122,13 +164,11 @@ fun DictationScreen(
     // The word re-hides on every word change (reveal must not leak across words).
     LaunchedEffect(ui.index) {
         showWord = false
-        metaExpanded = false
     }
     // … and when a new run starts (复习错词 round) even if the index is unchanged.
     LaunchedEffect(ui.finished) {
         if (!ui.finished) {
             showWord = false
-            metaExpanded = false
         }
     }
 
@@ -216,8 +256,6 @@ fun DictationScreen(
                     viewModel = viewModel,
                     showWord = showWord,
                     onToggleWord = { showWord = !showWord },
-                    metaExpanded = metaExpanded,
-                    onToggleMeta = { metaExpanded = !metaExpanded },
                     onRequestStop = { requestStop() },
                     onClose = onClose,
                     modifier = Modifier.fillMaxSize().padding(innerPadding),
@@ -256,8 +294,6 @@ private fun DictationContent(
     viewModel: DictationViewModel,
     showWord: Boolean,
     onToggleWord: () -> Unit,
-    metaExpanded: Boolean,
-    onToggleMeta: () -> Unit,
     onRequestStop: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
@@ -320,11 +356,16 @@ private fun DictationContent(
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (ui.wrongWords.isNotEmpty()) {
+            if (ui.runWrongCount > 0) {
                 Spacer(Modifier.width(12.dp))
+                // This run's marks, not the book's length: the pill sits next
+                // to the progress counter, and the score card's 错词 number
+                // must be the same number the student watched grow. The
+                // global book already has its own place (成绩卡 错词本（N）
+                // + chips, AUDIT C2 "同屏两义").
                 Surface(color = MaterialTheme.colorScheme.errorContainer, shape = CircleShape) {
                     Text(
-                        "错词本 ${ui.wrongWords.size} 词",
+                        "本场错词 ${ui.runWrongCount} 词",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
@@ -409,14 +450,15 @@ private fun DictationContent(
                     )
                 }
             } else {
+                val headword = remember(runLines, ui.index) {
+                    runLines.getOrNull(ui.index)?.let(::speakTextFromEntry).orEmpty()
+                }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     WatchDial(
                         ui = ui,
                         line = runLines.getOrNull(ui.index),
                         showWord = showWord,
-                        metaExpanded = metaExpanded,
                         onToggleWord = onToggleWord,
-                        onToggleMeta = onToggleMeta,
                     )
                     Row(
                         modifier = Modifier
@@ -427,7 +469,10 @@ private fun DictationContent(
                         OutlinedButton(
                             onClick = onToggleWord,
                             enabled = ui.isActive,
-                            modifier = Modifier.weight(1f).height(52.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(52.dp)
+                                .padding(horizontal = 4.dp),
                         ) {
                             Icon(
                                 if (showWord) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
@@ -437,16 +482,33 @@ private fun DictationContent(
                             Spacer(Modifier.width(8.dp))
                             Text(if (showWord) "隐藏词语" else "显示词语")
                         }
-                        FilledTonalButton(
-                            onClick = viewModel::markCurrentWrong,
+                        // Marking the current word is a toggle: the same button
+                        // takes the mark back, so a mis-tap mid-run no longer
+                        // costs the score (AUDIT C2). The label says which way
+                        // it will go, and 取消标记 — an undo of a mark *this* run
+                        // made — is tonally quiet, not the error container the
+                        // destructive 标记 keeps.
+                        val marked = headword in ui.runMarks
+                        Button(
+                            onClick = viewModel::toggleCurrentWrong,
                             enabled = ui.isActive,
-                            modifier = Modifier.weight(1f).height(52.dp),
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer,
-                                contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(52.dp)
+                                .padding(horizontal = 4.dp),
+                            colors = if (marked) {
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
+                            } else {
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                            },
                         ) {
-                            Text("标记错词")
+                            Text(if (marked) "取消标记" else "标记错词")
                         }
                     }
                 }
@@ -493,6 +555,7 @@ private fun FinishCard(
     val messages = LocalMessages.current
     val wrong = ui.wrongWords
     var clearWrongConfirm by remember { mutableStateOf(false) }
+    var showAllWrong by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -520,14 +583,20 @@ private fun FinishCard(
         )
         // Score = this run's marks (repeat offenders included), not the size
         // of the persisted book, which may hold words from earlier sessions.
-        if (ui.runWrongCount > 0) {
-            val correct = (ui.total - ui.runWrongCount).coerceAtLeast(0)
-            Text(
-                "正确 $correct 词 · 错词 ${ui.runWrongCount}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        // Rendered even at zero: the card used to drop the line on a perfect
+        // run, which read exactly like a card that had failed to compute it —
+        // 满分 and "no score shown" were the same picture (AUDIT C2).
+        val correct = (ui.total - ui.runWrongCount).coerceAtLeast(0)
+        Text(
+            if (ui.runWrongCount == 0) {
+                "正确 $correct 词 · 错词 0 · 满分"
+            } else {
+                "正确 $correct 词 · 错词 ${ui.runWrongCount}（本场）"
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
         // A run whose audio failed must say so on the card too: a silent run
         // produces no marks, and the parent reading 正确 N 词 would otherwise
         // take the score at face value.
@@ -608,12 +677,19 @@ private fun FinishCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 16.dp),
             )
+            // The book is persisted and unbounded, so the card composes the
+            // worst few and offers the rest: a FlowRow inside a verticalScroll
+            // has no lazy behavior of its own, and a 500-word book would
+            // compose — and measure — every chip on the finish card
+            // (AUDIT C2). The list is already most-wrong-first, so the cap keeps
+            // the words worth acting on.
+            val shown = if (showAllWrong) wrong else wrong.take(WRONG_CHIP_CAP)
             FlowRow(
                 modifier = Modifier.padding(top = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                wrong.forEach { word ->
+                shown.forEach { word ->
                     AssistChip(
                         onClick = {
                             onRemoveWrong(word)
@@ -626,6 +702,17 @@ private fun FinishCard(
                                 contentDescription = "移除 $word",
                                 modifier = Modifier.size(16.dp),
                             )
+                        },
+                    )
+                }
+            }
+            if (wrong.size > WRONG_CHIP_CAP) {
+                TextButton(onClick = { showAllWrong = !showAllWrong }) {
+                    Text(
+                        if (showAllWrong) {
+                            "收起"
+                        } else {
+                            "查看全部 ${wrong.size} 个错词"
                         },
                     )
                 }
@@ -663,18 +750,22 @@ private fun FinishCard(
  * The ring + reveal zone. Word hidden by default: a hearing icon and a hint;
  * the 显示词语 button below the dial reveals word, pinyin/POS and meaning.
  * The border flashes red while a wrong-word mark is in flight.
+ *
+ * Every child is laid out inside a box solved by [dialFit] for the stack's own
+ * height, so the disc's clip can never reach it; a stack that outgrows the disc
+ * says so with an 展开全部 button under the dial — outside the clip, where no
+ * geometry can swallow it — rather than being silently cut in half (AUDIT C2).
  */
 @Composable
 private fun WatchDial(
     ui: DictationUiState,
     line: String?,
     showWord: Boolean,
-    metaExpanded: Boolean,
     onToggleWord: () -> Unit,
-    onToggleMeta: () -> Unit,
 ) {
     val entry = remember(line) { line?.let(::parseWordLine) }
     val isCjk = remember(line) { line?.let(::isCjkEntry) ?: false }
+    var detailOpen by remember(entry?.word) { mutableStateOf(false) }
 
     val fraction = ui.remainingMs?.let {
         val totalMs = (ui.intervalSec * 1000).coerceAtLeast(1.0)
@@ -690,7 +781,7 @@ private fun WatchDial(
         CountdownRing(
             progressFraction = fraction,
             modifier = Modifier
-                .size(248.dp)
+                .size(DIAL_RING_SIZE)
                 // Tap-to-reveal (AGENTS.md:94 "tap to reveal, the core
                 // interaction"): the whole dial is the target, so a student
                 // glancing up from paper hits it anywhere — the 显示词语
@@ -711,9 +802,30 @@ private fun WatchDial(
                 isCjk = isCjk,
                 markedFlash = ui.markedFlash,
                 showWord = showWord,
-                metaExpanded = metaExpanded,
-                onToggleMeta = onToggleMeta,
+                playing = ui.state == PlayState.PLAYING,
             )
+        }
+
+        // The 展开全部 entry lives under the dial, not inside it: the disc's
+        // clip is the reason the old one was invisible (AUDIT C2). The row is
+        // always laid out, whether or not this word needs it — same reasoning
+        // as the countdown slot below: revealing a word must not shift the dial
+        // and the seconds readout the student is watching, and a long word only
+        // changes what the row contains.
+        Box(
+            modifier = Modifier.height(DIAL_DETAIL_ROW_HEIGHT),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (showWord && entry != null) {
+                val metrics = DIAL_METRICS.copy(
+                    fontScale = LocalDensity.current.fontScale.toDouble(),
+                )
+                if (dialFit(entry.word, entry.meaning, entry.pos != null, metrics).needsDetail) {
+                    TextButton(onClick = { detailOpen = true }) {
+                        Text("展开全部")
+                    }
+                }
+            }
         }
 
         // Seconds readout; clearAndSetSemantics re-announces on each whole
@@ -725,11 +837,14 @@ private fun WatchDial(
         // clipping (a min-height cannot cover every scale; a fixed height
         // clips the text once the scale outgrows it). The sizer is cleared
         // from semantics — alpha(0f) hides it visually but not from TalkBack.
+        // It reserves the widest readout ("10 秒", [COUNTDOWN_SLOT_TEXT]), which
+        // is what makes the claim hold: an "8 秒" placeholder was a glyph
+        // narrower than the 10 s countdown it stood in for (AUDIT C2).
         Box(
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                "8 秒",
+                COUNTDOWN_SLOT_TEXT,
                 style = MaterialTheme.typography.displaySmall,
                 modifier = Modifier
                     .alpha(0f)
@@ -755,25 +870,36 @@ private fun WatchDial(
             }
         }
     }
+
+    if (detailOpen && entry != null) {
+        DialDetailDialog(
+            entry = entry,
+            isCjk = isCjk,
+            onDismiss = { detailOpen = false },
+        )
+    }
 }
 
-/** Inner display zone of the dial: word + hints (reveal state), or the hidden-state icon + flash border. */
+/**
+ * Inner display zone of the dial. Revealed: the word (font size solved by
+ * [dialFit] so it holds its lines inside the disc) over its POS/拼音 and
+ * meaning/组词 hints; hidden: the hearing icon and the state copy. Everything
+ * is laid out inside the box [dialFit] computed for this very stack, so the
+ * disc's clip cannot reach any child and there is nothing to scroll
+ * (AUDIT C2). The border flashes red while a wrong-word mark is in flight.
+ */
 @Composable
 private fun DialCenter(
     entry: WordEntry?,
     isCjk: Boolean,
     markedFlash: Boolean,
     showWord: Boolean,
-    metaExpanded: Boolean,
-    onToggleMeta: () -> Unit,
+    playing: Boolean,
 ) {
     val flashColor by animateColorAsState(
         targetValue = if (markedFlash) MaterialTheme.colorScheme.error else Color.Transparent,
         label = "markFlash",
     )
-    val borderColor = if (markedFlash) flashColor else MaterialTheme.colorScheme.outlineVariant
-    val meaning = entry?.meaning
-    val meaningLong = (meaning?.length ?: 0) > 26
     // The vermilion marks Chinese-script identity only (Color.kt): a Chinese
     // single char's `pos` line is its pinyin and its `meaning` line is the
     // 组词, so both carry the accent; an English entry's POS/释义 stay
@@ -783,78 +909,172 @@ private fun DialCenter(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
+    val metrics = DIAL_METRICS.copy(fontScale = LocalDensity.current.fontScale.toDouble())
+    val fit = dialFit(entry?.word, entry?.meaning, entry?.pos != null, metrics)
 
     Surface(
         modifier = Modifier
-            .size(204.dp)
+            .size(DIAL_INNER_SIZE)
             .border(
                 width = 2.dp,
-                color = if (markedFlash) borderColor else MaterialTheme.colorScheme.outlineVariant,
+                color = if (markedFlash) flashColor else MaterialTheme.colorScheme.outlineVariant,
                 shape = CircleShape,
             ),
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
         ) {
             if (showWord && entry != null) {
-                Text(
-                    entry.word,
-                    style = MaterialTheme.typography.displayMedium,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Column(
+                    modifier = Modifier.size(
+                        width = fit.contentWidthDp.dp,
+                        height = fit.contentHeightDp.dp,
+                    ),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    // The word is solved, not clamped: a long headword shrinks
+                    // until it holds its lines inside the box (the two-line
+                    // 40 sp stack overflowed the disc and lost its first line,
+                    // AUDIT C2). Line height comes from the fit so the box the
+                    // geometry assumed is the box the text occupies.
+                    Text(
+                        entry.word,
+                        style = MaterialTheme.typography.displayMedium.copy(
+                            fontSize = fit.wordFontSizeSp.sp,
+                            lineHeight = fit.wordLineHeightSp.sp,
+                        ),
+                        textAlign = TextAlign.Center,
+                        maxLines = fit.wordLines,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    entry.pos?.let { pos ->
+                        Text(
+                            pos,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = hintColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = DIAL_METRICS.wordPosGapDp.dp),
+                        )
+                    }
+                    if (!entry.meaning.isNullOrEmpty() && fit.glossLines > 0) {
+                        Text(
+                            entry.meaning,
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            maxLines = fit.glossLines,
+                            overflow = TextOverflow.Ellipsis,
+                            color = hintColor,
+                            modifier = Modifier.padding(top = DIAL_METRICS.glossGapDp.dp),
+                        )
+                    }
+                }
+            } else {
+                // The hidden stack (icon + state word + tap hint) is fixed
+                // length, so its box needs no solving: the natural height feeds
+                // dialBoxWidthDp, and the column is width-constrained only —
+                // its height IS that stack, so the width computed for it is
+                // inside the disc by construction.
+                val hiddenHeightDp = DIAL_ICON_SIZE_DP +
+                    DIAL_ICON_GAP_DP +
+                    DIAL_STATE_LINE_SP * metrics.fontScale +
+                    DIAL_STATE_GAP_DP +
+                    DIAL_HINT_LINE_SP * metrics.fontScale
+                val boxWidth = dialBoxWidthDp(hiddenHeightDp, metrics)
+                Column(
+                    modifier = Modifier.width(boxWidth.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.Hearing,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(40.dp),
+                    )
+                    Text(
+                        // The dial must not claim 听写中 while the pill says
+                        // 已暂停 (AUDIT C2): the state word follows playback.
+                        if (playing) "听写中" else "已暂停",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    Text(
+                        "点按显示词语",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** The hidden dial's stack: hearing icon size, and the gaps under it (dp). */
+private const val DIAL_ICON_SIZE_DP = 40.0
+private const val DIAL_ICON_GAP_DP = 8.0
+private const val DIAL_STATE_GAP_DP = 4.0
+/** `labelMedium`'s line height, for the 点按显示词语 hint. */
+private const val DIAL_HINT_LINE_SP = 19.0
+/** `titleMedium`'s line height, for the 听写中 state word. */
+private const val DIAL_STATE_LINE_SP = 24.0
+
+/**
+ * Full text of the current word — the dial's escape hatch for a headword or
+ * gloss the disc cannot hold (AUDIT C2). A dialog is the one container on this
+ * screen that is not the circle, so the text is readable at the style's own
+ * size instead of the fit's floor.
+ */
+@Composable
+private fun DialDetailDialog(
+    entry: WordEntry,
+    isCjk: Boolean,
+    onDismiss: () -> Unit,
+) {
+    val hintColor = if (isCjk) {
+        hearWriteSemantics.cjkAccent
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                entry.word,
+                style = MaterialTheme.typography.headlineSmall,
+            )
+        },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 entry.pos?.let { pos ->
                     Text(
                         pos,
                         style = MaterialTheme.typography.bodyMedium,
                         color = hintColor,
+                    )
+                }
+                if (!entry.meaning.isNullOrEmpty()) {
+                    Text(
+                        entry.meaning,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = hintColor,
                         modifier = Modifier.padding(top = 6.dp),
                     )
                 }
-                if (!meaning.isNullOrEmpty()) {
-                    Text(
-                        meaning,
-                        style = MaterialTheme.typography.bodyMedium,
-                        textAlign = TextAlign.Center,
-                        maxLines = if (metaExpanded) Int.MAX_VALUE else 2,
-                        overflow = TextOverflow.Ellipsis,
-                        color = hintColor,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                    if (meaningLong) {
-                        TextButton(onClick = onToggleMeta) {
-                            Text(if (metaExpanded) "收起" else "展开全部")
-                        }
-                    }
-                }
-            } else {
-                Icon(
-                    Icons.Filled.Hearing,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(40.dp),
-                )
-                Text(
-                    "听写中",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-                Text(
-                    "点按显示词语",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(top = 4.dp),
-                )
             }
-        }
-    }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
+        },
+    )
 }
 
 /**
@@ -886,6 +1106,11 @@ private fun PlaybackPanel(
             // Interval stepper — live: the engine restarts the countdown on
             // change, so the pace changes immediately (★ acceptance). A
             // stepper replaces the slider here to keep the panel one row tall.
+            // Both buttons carry the 48dp touch target rather than 40dp: a
+            // change mid-countdown restarts the wait (by design), so a stray
+            // tap next to the transport row costs the student up to a full
+            // interval — a smaller hit box is a cost with no upside
+            // (AUDIT C2).
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("间隔", style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.width(8.dp))
@@ -898,7 +1123,7 @@ private fun PlaybackPanel(
                         onIntervalChange(stepped.toFloat())
                     },
                     enabled = ui.intervalSec > MIN_INTERVAL_SEC,
-                    modifier = Modifier.size(40.dp),
+                    modifier = Modifier.size(48.dp),
                 ) {
                     Icon(Icons.Filled.Remove, contentDescription = "减少间隔")
                 }
@@ -916,7 +1141,7 @@ private fun PlaybackPanel(
                         onIntervalChange(stepped.toFloat())
                     },
                     enabled = ui.intervalSec < MAX_INTERVAL_SEC,
-                    modifier = Modifier.size(40.dp),
+                    modifier = Modifier.size(48.dp),
                 ) {
                     Icon(Icons.Filled.Add, contentDescription = "增加间隔")
                 }
