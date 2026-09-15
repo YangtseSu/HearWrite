@@ -1,0 +1,60 @@
+tall | adj. | 高的；身高
+friendly | adj. | 友好的；亲切的
+three | num. | 三
+seven | num. | 七
+kind | adj. | 友好的；n. 种类
+draw | v. | 画, 描绘
+short | adj. | 个子矮的；短暂的；短的
+strong | adj. | 强壮的
+thin | adj. | 瘦的；薄的
+run | v. | 跑步；跑
+cook | v. | 烹饪, 烹调；n. 厨师
+helpful | adj. | 愿意帮忙的；有帮助的
+quiet | adj. | 文静的；安静的
+all | det. & pron. | 所有, 全部
+need | v. | 需要；有必要；v.aux. & n. 需要
+can | v.aux. | 可以；能；会
+young | adj. | 年轻的；幼小的；青年的
+together | adv. | 在一起；共同
+help | v. & n. | 帮助
+each | pron. & det. | 各个, 每个
+other | pron. & adj. | 另外；另一个
+he | pron. | 他
+often | adv. | 时常；往往
+who | pron. | 谁
+best | adj. | 最好的；adv. 最；n. 最好的事物(或人)；最高标准
+she | pron. | 她
+six | num. | 六
+here | adv. | (给某人东西 或指出某物时说)；在这里
+cute | adj. | 可爱的；漂亮迷人的
+the | art. | (用以泛指)；(解说时用)
+guitar | n. | 吉他
+new | adj. | 初来乍到的；不熟悉的；新的；有别于从前的
+very | adv. | 很, 非常
+happy | adj. | 高兴的；幸福的；(表示祝愿)；乐意(做某事)
+at | prep. | 在(某处)；在(某时间)；在(表示学习或工作地点)；在……方面；向
+school | n. | 学校；上学；上课时间
+music | n. | 音乐；音乐创作
+have | v. | 有；吃；经历
+they | pron. | 他们；她们；它们
+it | pron. | 它
+a | art. | 一(人, 事, 物)；(表示为某一群体或职业中的一员)；任何一, 每一
+dog | n. | 狗
+two | num. | 二
+big | adj. | 大的；年纪较长的；大受欢迎的
+ear | n. | 耳；耳朵
+cat | n. | 猫
+little | adj. | 小的；年幼的；可怜的；det. & pron. 不多的；少量的
+black | adj. | 黑色的；n. 黑色
+one | num. & det. | 一；一个；pron. 其中的一个人(或事物)
+listen | v. | 听
+lovely | adj. | 美丽的；迷人的
+brother | n. | 哥哥；弟弟
+yes | int. | (答话时表示正确或真实)；(表示同意所说的话)；(接受提议或邀请)
+that | det. & pron. | 那, 那个
+boy | n. | 男孩
+our | det. | 我们的
+no | int. | 不；没有；不是；det. 没有；不准
+not | adv. | 不, 没有
+yourself | pron. | 你自己
+age | n. | 年龄；时代

@@ -1,0 +1,61 @@
+type | n. | 类型，种类；典型；字体；v. 打字
+musical | adj. | 音乐的
+instrument | n. | 乐器；仪器；工具
+string | n. | 弦
+beat | n. | 一击，击打；节拍；v. 击打；打败
+keyboard | n. | 琴键；键盘
+violin | n. | 小提琴
+belong | v. | 应在(某处)；适应
+drum | n. | 鼓
+trumpet | n. | 小号；喇叭
+language | n. | 语言
+allow | v. | 允许；使可能
+communicate | v. | 交流；沟通
+feeling | n. | 感觉，感触；情感；想法
+relax | v. | (使) 放松；放松精神 (或思想)
+afraid | adj. | 害怕；担心
+medium | n. | (传播信息等的) 媒介，手段，方法
+eye | n. | 眼睛
+pigeon | n. | 鸽子
+opera | n. | 歌剧
+strict | adj. | 要求严格的；严厉的；严谨的
+perfect | adj. | 完美的；极好的
+painter | n. | 画家；油漆匠
+popular | adj. | 大众喜爱的；广受欢迎的；大众(化)的
+sentence | n. | 句子；判决，宣判
+huge | adj. | 巨大的；极多的
+gate | n. | 大门；栅栏门
+tower | n. | 塔；塔楼
+value | v. | 重视；珍视；n. 价值
+northern | adj. | 北方的；北部的
+dynasty | n. | 王朝；朝代
+amazing | adj. | 令人大为惊奇的；（尤指）令人惊喜的
+centimetre | n. | 厘米
+pull | v. | 拉；拖；拽
+shout | v. | 大声说；叫
+riverside | n. | 河畔；河岸
+riverbank | n. | 河堤；河岸
+mark | v. | 标示；标明方位；做记号；n. 符号；记号
+businessman | n. | 商界人员；企业家
+explore | v. | 探索；考察；勘探
+crowd | n. | 人群；一伙人；v. 挤满
+besides | prep. | 除……之外（还）；adv. 而且；再说
+nothing | pron. | 没有什么；几乎什么也没有
+anybody | pron. | 任何人
+nobody | pron. | 没有人；没有任何人
+anything | pron. | 任何东西，任何事物
+harm | v. & n. | 损害；伤害
+somewhere | adv. | 在某处；到某处
+someone | pron. | 某人
+anywhere | adv. & pron. | 任何地方
+create | v. | 创造
+magical | adj. | 有魔力的；奇妙的
+real | adj. | 实际存在的；真实的
+unknown | adj. | 未知的；无名的
+anytime | adv. | 在任何时候；随便什么时候
+magic | adj. | 有魔力的；神奇的；n. 魔法；法术
+impossible | adj. | 不可能的
+concert | n. | 音乐会
+sweet | adj. | 悦耳的；含糖的，甜的
+fat | adj. | 肥的；肥胖的；n. 脂肪
+awful | adj. | 很坏的；极讨厌的

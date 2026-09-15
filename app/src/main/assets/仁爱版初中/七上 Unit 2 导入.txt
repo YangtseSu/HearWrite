@@ -1,0 +1,46 @@
+family | n. | 家庭；亲属
+grandfather | n. | (外) 祖父
+grandmother | n. | (外) 祖母
+father | n. | 父亲；先驱
+mother | n. | 母亲；妈妈
+uncle | n. | 叔；伯；舅；姑父；姨父
+aunt | n. | 姑母；姨母；伯母；婶母；舅母
+sister | n. | 姐姐；妹妹
+cousin | n. | 同辈表亲(或堂亲)
+student | n. | 学生
+teacher | n. | 教师
+man | n. | 成年男子；人类
+always | adv. | 总是, 一直
+wear | v. | 穿；戴
+tie | n. | 领带；v. 系；捆绑；打结
+worker | n. | 工人；工作者
+doctor | n. | 医生
+nurse | n. | 护士
+white | adj. | 白色的；n. 白色
+shirt | n. | 衬衫
+bus | n. | 公共汽车
+driver | n. | 司机
+woman | n. | 妇女；女性
+blue | adj. | 蓝色的；n. 蓝色
+dress | n. | 连衣裙
+policewoman | n. | 女警察
+yellow | adj. | 黄色的；n. 黄色
+child | n. | 儿子, 女儿；儿童, 小孩
+pink | adj. | 粉红色的；n. 粉红色
+toy | n. | 玩具
+rabbit | n. | 兔
+factory | n. | 工厂
+hospital | n. | 医院
+restaurant | n. | 餐馆；餐厅
+work | v. | 从事……工作；运转；n. 工作；作品
+people | n. | 人；人们；国民
+there | adv. | (表示存在或发生)；在那里
+photo | n. | 照片
+of | prep. | 属于……的；关于(某人)
+PE | n. | 体育(课)
+teach | v. | 教授；教导；教
+us | pron. | 我们
+eight | num. | 八
+so | adv. | 如此, 极；那么；这样；conj. 所以
+pretty | adj. | 漂亮的；美观的；adv. 相当；非常
+only | adv. | 只有；仅；只不过；adj. 仅有的；最适当的
