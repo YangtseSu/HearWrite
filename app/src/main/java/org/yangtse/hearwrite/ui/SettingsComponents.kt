@@ -95,6 +95,10 @@ fun SettingsCard(
  * carries — the row then reports on/off and the trailing indicator is drawn
  * as its purely visual reflection (`onCheckedChange = null`). The divider is
  * inset to the text column when an icon is shown (Android settings convention).
+ *
+ * [onClickLabel] names the action for TalkBack when the row's own text does not
+ * say what tapping does (a row that opens another list reads as its data, not
+ * as its destination).
  */
 @Composable
 fun SettingsRow(
@@ -104,6 +108,7 @@ fun SettingsRow(
     trailing: (@Composable RowScope.() -> Unit)? = null,
     divider: Boolean = true,
     onClick: (() -> Unit)? = null,
+    onClickLabel: String? = null,
     toggle: RowToggle? = null,
 ) {
     Column {
@@ -118,7 +123,10 @@ fun SettingsRow(
                             role = toggle.role,
                             onValueChange = { toggle.onToggle() },
                         )
-                        onClick != null -> base.clickable(onClick = onClick)
+                        onClick != null -> base.clickable(
+                            onClickLabel = onClickLabel,
+                            onClick = onClick,
+                        )
                         else -> base
                     }
                 }

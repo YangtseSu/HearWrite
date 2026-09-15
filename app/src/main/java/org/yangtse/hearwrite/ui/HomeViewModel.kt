@@ -911,22 +911,15 @@ private fun groupResolvedWrong(resolved: List<ResolvedWrongMark>): List<WrongWor
     resolved.forEach { row -> bySource.getOrPut(row.mark.sourceLabel) { mutableListOf() }.add(row) }
     return bySource.map { (sourceLabel, rows) ->
         val first = rows.first()
-        var jumpCategory: String? = null
-        var jumpLabel: String? = null
-        if (sourceLabel != null && sourceLabel.startsWith("default_")) {
-            val parts = sourceLabel.removePrefix("default_").split("_", limit = 2)
-            if (parts.size == 2) {
-                jumpCategory = parts[0]
-                // The resolved title (label) is what the library browser shows.
-                jumpLabel = first.title
-            }
-        }
+        // The resolved title is what the library browser shows; the jump is
+        // offered only for a source that still resolves to a library list.
+        val jump = resolveSourceJump(sourceLabel, first.title)
         WrongWordGroup(
             sourceId = sourceLabel,
             sourceTitle = first.title,
             marks = rows.map { it.mark },
-            jumpCategory = jumpCategory,
-            jumpLabel = jumpLabel,
+            jumpCategory = jump?.category,
+            jumpLabel = jump?.label,
         )
     }
 }

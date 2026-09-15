@@ -79,7 +79,14 @@ fun HearWriteApp() {
             SettingsScreen(onClose = { navController.popBackStack() })
         }
         composable(Routes.STATS) {
-            StatsScreen(onBack = { navController.popBackStack() })
+            StatsScreen(
+                onBack = { navController.popBackStack() },
+                // The record rows jump back to the list a run came from, the
+                // same destination the 错词本 drawer's 查看词表 opens.
+                onOpenLibraryPreview = { category, label ->
+                    navController.navigate(Routes.libraryPreview(category, label))
+                },
+            )
         }
         composable(Routes.SETTINGS_OCR) {
             // The scan sheet's 修改/去设置 lands directly on the OCR provider

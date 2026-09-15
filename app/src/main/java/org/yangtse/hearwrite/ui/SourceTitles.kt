@@ -4,6 +4,7 @@ import org.yangtse.hearwrite.data.HistoryEntry
 import org.yangtse.hearwrite.domain.BUILTIN_LIST_ID_PREFIX
 import org.yangtse.hearwrite.domain.MULTI_SOURCE_PREFIX
 import org.yangtse.hearwrite.domain.multiSourceIds
+import org.yangtse.hearwrite.domain.parseBuiltinListId
 
 /**
  * Resolve a stored source id to a display title, shared by the 错词本 drawer
@@ -39,4 +40,25 @@ private fun multiSourceTitle(label: String, libraryTitles: Map<String, String>):
     if (ids.size == 1) return libraryTitles[ids[0]] ?: "多词表"
     val first = ids.firstNotNullOfOrNull { libraryTitles[it] }
     return if (first == null) "多词表（${ids.size} 个词表）" else "$first 等 ${ids.size} 个词表"
+}
+
+/**
+ * A built-in library list a stored source id resolves back to: the category to
+ * open and the label its preview is routed by.
+ */
+data class SourceJump(val category: String, val label: String)
+
+/**
+ * The library list a stored source id points back to, or null when there is
+ * nothing to jump to: a history row (whose text is not a list), a 抽词听写
+ * `multi:` pool (its members are named in the resolved title instead), a manual
+ * mark, and a built-in list that no longer resolves ([title] is the resolved
+ * label, so a renamed-away list yields null rather than a dead route).
+ *
+ * Shared by the 错词本 drawer's 查看词表 and the 听写统计 rows' jump so both
+ * offer it on exactly the same sources.
+ */
+fun resolveSourceJump(sourceLabel: String?, title: String?): SourceJump? {
+    val parts = parseBuiltinListId(sourceLabel ?: return null) ?: return null
+    return title?.let { SourceJump(parts.first, it) }
 }

@@ -4,12 +4,17 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.yangtse.hearwrite.HearWriteApplication
@@ -25,7 +30,12 @@ import org.yangtse.hearwrite.domain.summarize
 import java.time.LocalDate
 import java.time.ZoneId
 
-/** One recorded run as the 最近记录 list shows it (source title resolved). */
+/**
+ * One recorded run as the 最近记录 list shows it. [jump] carries the built-in
+ * list the run came from so the row offers the same 查看词表 jump the 错词本
+ * drawer does; null (a history row, a 抽词听写 pool, a list that is gone)
+ * leaves the row read-only.
+ */
 data class SessionRow(
     val id: Long,
     val startedAt: Long,
@@ -34,13 +44,34 @@ data class SessionRow(
     val wrongCount: Int,
     val durationSec: Long,
     val kind: SessionKind,
+    val jump: SourceJump?,
 ) {
     val correctCount: Int get() = (totalWords - wrongCount).coerceAtLeast(0)
 }
 
+/**
+ * One 高频错词 row as the page shows it: the mark plus its resolved source
+ * title (the drawer's own wording, via the shared resolver) and the built-in
+ * list it came from, when there is one to jump to.
+ */
+data class WrongWordRow(
+    val word: String,
+    val errorCount: Int,
+    val lastWrongAt: Long,
+    val sourceTitle: String?,
+    val jump: SourceJump?,
+)
+
 /** Everything 听写统计 renders. */
 data class StatsUiState(
     val loading: Boolean = true,
+    /**
+     * The record could not be read at all (Room threw). The page says so and
+     * offers 重试; it used to fall back to the empty state, which read as
+     * "you never dictated anything" and hid a real failure (AGENTS.md: an
+     * async failure must surface, not be dressed up as a state).
+     */
+    val loadFailed: Boolean = false,
     val summary: StatsSummary,
     val trend: List<DayStat>,
     /**
@@ -50,7 +81,7 @@ data class StatsUiState(
      * function of the same window the chart draws.
      */
     val todayStudied: Boolean,
-    val topWrong: List<WrongWordMark>,
+    val topWrong: List<WrongWordRow>,
     val recent: List<SessionRow>,
 )
 
@@ -83,7 +114,29 @@ class StatsViewModel(application: Application) : AndroidViewModel(application) {
     /** One-shot 清空记录 confirmation for the screen's toast. */
     val cleared: StateFlow<Boolean> = _cleared.asStateFlow()
 
-    val uiState: StateFlow<StatsUiState> = combine(
+    /**
+     * Bumped by 重试 to re-subscribe the record after a failed read. The Room
+     * flows are cold, so one more attempt is just a re-collection; the failed
+     * state stays on screen until that attempt reports.
+     */
+    private val retry = MutableStateFlow(0)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val uiState: StateFlow<StatsUiState> = retry
+        .flatMapLatest { attempt ->
+            flow {
+                // 重试 shows the spinner again instead of the stale failure.
+                if (attempt > 0) emit(emptyState(loading = true))
+                emitAll(recordFlow())
+            }
+        }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            emptyState(loading = true),
+        )
+
+    private fun recordFlow(): Flow<StatsUiState> = combine(
         sessionRepository.observe(),
         wrongWordsRepository.observeMarks(),
         historyRepository.observe(),
@@ -105,21 +158,26 @@ class StatsViewModel(application: Application) : AndroidViewModel(application) {
             // The window's last row is today by construction; a run there is
             // exactly 今日已打卡.
             todayStudied = (trend.lastOrNull()?.runs ?: 0) > 0,
-            topWrong = marks.take(TOP_WRONG_LIMIT),
+            // Both rows resolve their source exactly like the 错词本 drawer
+            // (same resolver, same wording) — the page used to print the run's
+            // source out of a separate path, and the wrong words with no
+            // source at all.
+            topWrong = marks.take(TOP_WRONG_LIMIT).map { it.toRow(history, titles) },
             recent = sessions.map { it.toRow(history, titles) },
         )
     }
-        // A Room failure must not leave the page spinning forever — fall back
-        // to the settled empty state (the page then shows 暂无听写记录).
+        // A Room failure must not leave the page spinning forever, and it must
+        // not be dressed up as 暂无听写记录 either: the record exists, reading
+        // it failed. The page then says so and offers 重试.
         .catch { e ->
-            Log.w(TAG, "stats flow failed; showing the empty record", e)
-            emit(emptyState(loading = false))
+            Log.w(TAG, "stats flow failed", e)
+            emit(failedState())
         }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.WhileSubscribed(5_000),
-            emptyState(loading = true),
-        )
+
+    /** Re-read the record after a failure (the error card's 重试). */
+    fun retryLoad() {
+        retry.value += 1
+    }
 
     init {
         // Built-in titles are decoration: a failed scan degrades built-in
@@ -159,15 +217,35 @@ class StatsViewModel(application: Application) : AndroidViewModel(application) {
     private fun DictationSession.toRow(
         history: List<HistoryEntry>,
         titles: Map<String, String>,
-    ) = SessionRow(
-        id = id,
-        startedAt = startedAt,
-        sourceTitle = resolveSourceTitle(sourceLabel, history, titles),
-        totalWords = totalWords,
-        wrongCount = wrongCount,
-        durationSec = durationSec,
-        kind = kind,
-    )
+    ): SessionRow {
+        val title = resolveSourceTitle(sourceLabel, history, titles)
+        val jump = resolveSourceJump(sourceLabel, title)
+        return SessionRow(
+            id = id,
+            startedAt = startedAt,
+            sourceTitle = title,
+            totalWords = totalWords,
+            wrongCount = wrongCount,
+            durationSec = durationSec,
+            kind = kind,
+            jump = jump,
+        )
+    }
+
+    private fun WrongWordMark.toRow(
+        history: List<HistoryEntry>,
+        titles: Map<String, String>,
+    ): WrongWordRow {
+        val title = resolveSourceTitle(sourceLabel, history, titles)
+        val jump = resolveSourceJump(sourceLabel, title)
+        return WrongWordRow(
+            word = word,
+            errorCount = errorCount,
+            lastWrongAt = lastWrongAt,
+            sourceTitle = title,
+            jump = jump,
+        )
+    }
 
     companion object {
         private const val TAG = "StatsViewModel"
@@ -181,5 +259,8 @@ class StatsViewModel(application: Application) : AndroidViewModel(application) {
             topWrong = emptyList(),
             recent = emptyList(),
         )
+
+        /** The read failed: same empty figures, but the page says why. */
+        private fun failedState() = emptyState(loading = false).copy(loadFailed = true)
     }
 }

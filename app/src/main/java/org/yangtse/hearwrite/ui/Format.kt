@@ -46,6 +46,26 @@ fun formatDuration(sec: Long): String = when {
 fun formatDay(date: LocalDate): String = DAY_LABEL.format(date)
 
 /**
+ * Trend-axis tick with its weekday (`9月2日 周三`). The 听写统计 window is two
+ * whole weeks, so without the weekday the axis carries no weekly rhythm at all
+ * — the reader can see that a gap exists but not that it was the weekend.
+ */
+private val DAY_WEEKDAY_LABEL =
+    DateTimeFormatter.ofPattern("M月d日 EEE", Locale.SIMPLIFIED_CHINESE)
+
+fun formatDayWithWeekday(date: LocalDate): String = DAY_WEEKDAY_LABEL.format(date)
+
+/** Index order of [formatWeekday]: `DayOfWeek.value` is 1 (Monday) … 7 (Sunday). */
+private val WEEKDAY_CHARS = listOf("一", "二", "三", "四", "五", "六", "日")
+
+/**
+ * One-character weekday (`一`…`日`) — the trend chart's per-bar axis label. A
+ * single character is what fits one of fourteen columns; the full date rides
+ * the bar's own description and the tap readout instead.
+ */
+fun formatWeekday(date: LocalDate): String = WEEKDAY_CHARS[date.dayOfWeek.value - 1]
+
+/**
  * Record-row timestamp (`错 2 次 · 最近 09-11 20:10`, `09-11 20:10 · 听写`).
  * 错词本 and 听写记录 are both unbounded, so the year is restored as soon as
  * the stamp is not from the current year — otherwise a two-year-old run is

@@ -44,4 +44,28 @@ class SourceTitlesTest {
         assertEquals("apple", resolveSourceTitle("h1", history, titles))
         assertNull(resolveSourceTitle(null, history, titles))
     }
+
+    /**
+     * The 查看词表 jump (错词本 drawer / 听写统计 rows) is offered on a built-in
+     * source that still resolves, and on nothing else: a history row has no
+     * list to open, a 抽词听写 pool names its members in the title instead, and
+     * a built-in id whose list is gone would route to a list that is not there.
+     */
+    @Test
+    fun `the source jump resolves only a built-in list that is still there`() {
+        assertEquals(
+            SourceJump("人教版小学语文", "二上 识字表"),
+            resolveSourceJump("default_人教版小学语文_识字表", "二上 识字表"),
+        )
+        // Resolved title null = the list no longer exists → no dead route.
+        assertNull(resolveSourceJump("default_人教版小学语文_改名了", null))
+        assertNull(resolveSourceJump("h1", "apple"))
+        assertNull(
+            resolveSourceJump(
+                multiSourceLabel(listOf("default_中考1600_核心词汇")),
+                "核心词汇",
+            ),
+        )
+        assertNull(resolveSourceJump(null, null))
+    }
 }

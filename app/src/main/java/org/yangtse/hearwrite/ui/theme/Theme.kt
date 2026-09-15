@@ -86,12 +86,21 @@ private val DarkColors = darkColorScheme(
     inversePrimary = InversePrimaryDark,
 )
 
+/**
+ * Corner radius of the group cards (`Shapes.large`). Exported because a card
+ * whose rows are rendered by a lazy list (听写统计's 最近记录, which has no upper
+ * bound) cannot be wrapped in one `Surface`/`Column` — each row draws its own
+ * section of the card instead, and the first/last of the group need this same
+ * radius so the group still reads as one card.
+ */
+val AppCardCorner = 20.dp
+
 /** Shape scale: 16dp cards, 28dp sheets, chips/buttons full-round at call sites. */
 private val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(6.dp),
     small = RoundedCornerShape(10.dp),
     medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(20.dp),
+    large = RoundedCornerShape(AppCardCorner),
     extraLarge = RoundedCornerShape(28.dp),
 )
 
