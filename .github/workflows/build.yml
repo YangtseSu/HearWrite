@@ -34,8 +34,17 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       # Accepts Android SDK licenses; AGP then auto-downloads platforms;android-37.
+      #
+      # `packages: platform-tools` is required, not cosmetic: the action's default
+      # is `tools platform-tools`, but Google retired the standalone `tools`
+      # package (it is folded into `cmdline-tools`), so `sdkmanager tools` now
+      # exits 1 with "Failed to find package 'tools'" and fails the job before a
+      # single line of repo code runs. platform-tools still needs installing, so
+      # the default is narrowed rather than emptied.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
 
       # The bundled word lists ship verbatim into the APK; a broken row would
       # reach every user at once. Depends on nothing but python3 — run it
