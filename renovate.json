@@ -1,7 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
-  "enabledManagers": ["gradle", "gradle-wrapper"],
+  "enabledManagers": ["gradle", "gradle-wrapper", "github-actions"],
   "dependencyDashboard": true,
   "schedule": ["before 9am"],
   "timezone": "Asia/Shanghai",
@@ -10,6 +10,10 @@
     {
       "matchManagers": ["gradle-wrapper"],
       "groupName": "Gradle wrapper"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "pinDigests": false
     },
     {
       "matchPackageNames": [

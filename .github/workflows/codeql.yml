@@ -25,7 +25,9 @@
 #     repo code ran, looking like a CodeQL problem (same fix as build.yml /
 #     release.yml).
 #   - `@v4` on the three codeql-action steps — v3 is deprecated in December
-#     2026. Renovate only manages Gradle here, so these pins are manual.
+#     2026. Renovate watches these pins too (github-actions manager, added to
+#     enabledManagers in renovate.json); digest pinning is deliberately off —
+#     the repo tracks latest stable, not immutable SHAs.
 # Tracked in: https://github.com/YangtseSu/HearWrite/issues/7
 #
 # Secret scanning + push protection are enabled repo-wide (independent of
