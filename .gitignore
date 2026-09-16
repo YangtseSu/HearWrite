@@ -30,3 +30,6 @@ keystore.properties
 
 # Python bytecode
 __pycache__/
+
+# Agent skills (personal tooling, not part of the project)
+.agents/
