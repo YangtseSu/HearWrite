@@ -2,7 +2,7 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
-    // Compose compiler plugin; its version ref pins Kotlin 2.4.10 (built-in Kotlin: no kotlin-android plugin).
+    // Compose compiler plugin; its version ref pins Kotlin 2.4.20 (built-in Kotlin: no kotlin-android plugin).
     alias(libs.plugins.kotlin.compose)
     // Room annotation processing (AGP 9 built-in Kotlin requires KSP >= 2.3.6).
     alias(libs.plugins.ksp)

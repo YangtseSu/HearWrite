@@ -4,7 +4,7 @@
 
 ## 1. 环境搭建（新机器）
 
-工具链相关的一切（Gradle 9.7.1 wrapper、AGP 9.3.2、Kotlin 2.4.10、Compose BOM 2026.08.00）都已锁定在仓库内；只有三样东西是机器本地的：**JDK 26**、**Android SDK** 和 GitHub 认证。
+工具链相关的一切（Gradle 9.7.1 wrapper、AGP 9.4.0、Kotlin 2.4.20、Compose BOM 2026.09.00）都已锁定在仓库内；只有三样东西是机器本地的：**JDK 26**、**Android SDK** 和 GitHub 认证。
 
 ### 1.1 克隆仓库
 
@@ -30,17 +30,24 @@ org.gradle.java.home=/usr/lib/jvm/java-26-openjdk
 
 ### 1.3 Android SDK
 
-安装到 `~/Android/Sdk`（约 2 GB）。请使用 **Google 官方 cmdline-tools**——发行版自带的 `sdkmanager` 二进制携带过期的软件包索引，找不到 API 37 平台：
+安装到 `~/Android/Sdk`（约 2 GB），使用最新版 cmdline-tools：
 
 ```bash
 curl -o /tmp/clt.zip https://dl.google.com/android/repository/commandlinetools-linux-16111833_latest.zip
 mkdir -p /tmp/clt ~/Android/Sdk/cmdline-tools && unzip -q /tmp/clt.zip -d /tmp/clt
 mv /tmp/clt/cmdline-tools ~/Android/Sdk/cmdline-tools/latest
+```
+
+已有旧版（如 20.0）时，直接替换 `cmdline-tools/latest/` 即完成升级——cmdline-tools 自包含，换目录无副作用：
+
+```bash
 yes | ~/Android/Sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root="$HOME/Android/Sdk" --licenses
 yes | ~/Android/Sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root="$HOME/Android/Sdk" \
-    "platforms;android-37" "platform-tools" "build-tools;36.0.0"
+    "platforms;android-37.2" "platform-tools" "build-tools;37.0.0"
 echo "sdk.dir=$HOME/Android/Sdk" > local.properties   # 已被 gitignore，机器本地文件
 ```
+
+- 本章安装 `platforms;android-37.2`（最新稳定平台，`app/build.gradle.kts` 的 `compileSdk` 块选中该次版本）；`build-tools;37.0.0` 为最新稳定版，可省略——不写时 AGP 用自带默认版本（当前 36.0.0）。
 
 ### 1.4 首次构建
 
@@ -142,7 +149,7 @@ keyPassword=…
 ### 4.4 验证与安装
 
 ```bash
-~/Android/Sdk/build-tools/36.0.0/apksigner verify --print-certs \
+~/Android/Sdk/build-tools/37.0.0/apksigner verify --print-certs \
     app/build/dist/HearWrite-0.3.0.apk    # 应显示 4.1 keytool 生成密钥时填写的 CN/O
 adb install -r app/build/dist/HearWrite-0.3.0.apk
 ```

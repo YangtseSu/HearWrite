@@ -4,7 +4,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/YangtseSu/HearWrite/build.yml?branch=main&label=CI)](https://github.com/YangtseSu/HearWrite/actions/workflows/build.yml)
 [![License](https://img.shields.io/github/license/YangtseSu/HearWrite)](LICENSE)
 [![Platform](https://img.shields.io/badge/Android-13%2B_(API_33%2B)-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.4.20-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 
 面向中国学生的 Android 听写训练应用：导入词表 → 应用逐词朗读并倒计时 → 学生在本子上默写 → 标记错词 → 之后复习错词。
 原生 Kotlin + Jetpack Compose 实现，无账号、无广告、无内购，所有数据只保存在本机。
@@ -40,7 +40,7 @@ git clone https://github.com/YangtseSu/HearWrite.git && cd HearWrite
 ./gradlew :app:testDebugUnitTest   # 单元测试（domain 逻辑门禁）
 ```
 
-前置条件：**JDK 21+** 与 **Android SDK**（含 `platforms;android-37`；环境搭建见 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §1）。签名材料不入库：无 `keystore.properties` 时 Debug 包用默认调试签名，Release 构建保持未签名（签名与发布流程见 DEVELOPMENT.md §4）。
+前置条件：**JDK 21+** 与 **Android SDK**（含 `platforms;android-37.2`；环境搭建见 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §1）。签名材料不入库：无 `keystore.properties` 时 Debug 包用默认调试签名，Release 构建保持未签名（签名与发布流程见 DEVELOPMENT.md §4）。
 
 ## 快速上手
 

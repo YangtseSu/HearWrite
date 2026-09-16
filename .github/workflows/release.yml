@@ -32,7 +32,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      # Accepts SDK licenses; AGP auto-downloads platforms;android-37 + build-tools.
+      # Accepts SDK licenses; AGP auto-downloads platforms;android-37.2 + build-tools.
       #
       # `packages: platform-tools` is required, not cosmetic: the action's
       # default is `tools platform-tools`, but Google retired the standalone

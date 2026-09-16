@@ -29,11 +29,11 @@ versions together (those are compatibility facts, not pins).
 | --- | --- | --- |
 | JDK | 26 | toolchain language level 21; daemon set to an installed JDK via user-level `~/.gradle/gradle.properties` (never committed) — daemon-instance stability, not a version policy |
 | Gradle | 9.7.1 (wrapper) | machine has Gradle 9.7.1 installed |
-| AGP | 9.3.2 | max API 37; needs Gradle ≥ 9.5.0 — check Gradle when bumping AGP |
-| Kotlin | 2.4.10 | Compose compiler via `org.jetbrains.kotlin.plugin.compose` (AGP 9 built-in Kotlin; kotlin-android is forbidden). **KSP tracks the Kotlin version** — bump together |
-| Compose BOM | 2026.08.00 | Material 3 |
+| AGP | 9.4.0 | max API 37; needs Gradle ≥ 9.5.0 — check Gradle when bumping AGP. Supports minor SDK levels: `compileSdk { version = release(37) { minorApiLevel = 2 } }` (the flat `compileSdkVersion` is deprecated, removed in AGP 10) |
+| Kotlin | 2.4.20 | Compose compiler via `org.jetbrains.kotlin.plugin.compose` (AGP 9 built-in Kotlin; kotlin-android is forbidden). **KSP tracks the Kotlin version** — bump together |
+| Compose BOM | 2026.09.00 | Material 3 |
 
-- Android SDK at `~/Android/Sdk` (write `local.properties` with `sdk.dir`); the build needs `platforms;android-37` (installed). Machine setup — official cmdline-tools only, the distro-packaged sdkmanager's index lacks android-37 — is covered in `docs/DEVELOPMENT.md`.
+- Android SDK at `~/Android/Sdk` (write `local.properties` with `sdk.dir`); the build needs `platforms;android-37.2` (installed) — API 37 platforms carry a **minor** version, so the package name is `android-37.0`/`37.1`/`37.2`. Machine setup and the cmdline-tools upgrade are covered in `docs/DEVELOPMENT.md`.
 - Keep all dependency versions in `gradle/libs.versions.toml` (version catalog). Boring choices: `androidx.core-ktx`, `activity-compose`, `lifecycle-viewmodel-compose`, `navigation-compose`, `datastore-preferences`, `room-runtime/ktx` + KSP, `kotlinx-serialization-json`, `okhttp`, `material3`, `material-icons-extended`.
 - **Version fallback**: if a latest-stable combination fails to resolve or compile (upstreams not yet mutually compatible), fall back to the newest working set — e.g. the current Android Studio **Empty Activity (Compose)** template `libs.versions.toml` — note the change in the commit message and tell the user; never fight incompatibilities to keep a version number.
 
@@ -162,7 +162,7 @@ The RN predecessor's `assets/silent.wav` (iOS background-audio keep-alive) is de
 ## Development Commands
 
 ```bash
-sdkmanager "platforms;android-37"        # once, before first build (accept licenses)
+sdkmanager "platforms;android-37.2"      # once, before first build (accept licenses)
 
 ./gradlew :app:assembleDebug             # build APK
 ./gradlew :app:testDebugUnitTest         # unit tests — domain logic gate
