@@ -16,10 +16,16 @@
 #
 # Honoring latest-stable Kotlin takes precedence over CodeQL coverage, so this
 # workflow stays off until a *stable* bundle carries #22404. Re-enable = restore
-# `on:` (push to main, pull_request, weekly schedule), delete the `if: false`
-# guard, and re-run; no other change is required — the Set up Android SDK step
-# was already narrowed to `packages: platform-tools` (the standalone `tools`
-# package no longer exists and would fail the job before any repo code ran).
+# `on:` (push to main, pull_request, weekly schedule) and delete the `if: false`
+# guard; the rest of this file is already the exact shape the re-enable needs,
+# and was rehearsed green on 2026-09-16 (real push trigger, no guard, @v4
+# actions, nightly bundle standing in for stable 2.27.1):
+#   - `packages: platform-tools` on the SDK step — the standalone `tools`
+#     package no longer exists and would otherwise fail the job before any
+#     repo code ran, looking like a CodeQL problem (same fix as build.yml /
+#     release.yml).
+#   - `@v4` on the three codeql-action steps — v3 is deprecated in December
+#     2026. Renovate only manages Gradle here, so these pins are manual.
 # Tracked in: https://github.com/YangtseSu/HearWrite/issues/7
 #
 # Secret scanning + push protection are enabled repo-wide (independent of
@@ -46,7 +52,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
       - name: Set up JDK 26
@@ -64,8 +70,8 @@ jobs:
         with:
           packages: platform-tools
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@v4
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{matrix.language}}"
