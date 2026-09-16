@@ -113,7 +113,12 @@ jobs:
       - name: Run instrumentation tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 37.0
+          # Quoted on purpose: YAML reads a bare 37.0 as the *number* 37.0, and
+          # the action stringifies it, which drops the trailing `.0` ("37") —
+          # the SDK install then asks for the non-existent `platforms;android-37`
+          # and the job dies before the emulator starts. The quotes keep the
+          # minor version. (37.1 happened to survive this: String(37.1) = "37.1".)
+          api-level: "37.0"
           arch: x86_64
           target: google_apis
           force-avd-creation: false
