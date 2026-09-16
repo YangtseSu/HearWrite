@@ -39,9 +39,13 @@ jobs:
       # `tools` package (it is folded into `cmdline-tools`), so `sdkmanager
       # tools` now exits 1 with "Failed to find package 'tools'" and fails the
       # job before any repo code runs. Same narrowing as build.yml.
+      #
+      # `cmdline-tools-version` overrides the action's default (20.0, build
+      # 14742923) with the current 23.0 — same pin as build.yml.
       - uses: android-actions/setup-android@v4
         with:
           packages: platform-tools
+          cmdline-tools-version: 16111833
 
       # Without this guard a missing secret silently yields an *unsigned* APK
       # (app/build.gradle.kts degrades by design) — here it must be a hard error.

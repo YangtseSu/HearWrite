@@ -41,10 +41,16 @@ jobs:
       # exits 1 with "Failed to find package 'tools'" and fails the job before a
       # single line of repo code runs. platform-tools still needs installing, so
       # the default is narrowed rather than emptied.
+      #
+      # `cmdline-tools-version` overrides the action's default (20.0, build
+      # 14742923) with the current 23.0. The build step itself needs nothing
+      # from it — AGP auto-downloads the platform — but the SDK on disk should
+      # match the machine setup documented in DEVELOPMENT.md §1.3.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
           packages: platform-tools
+          cmdline-tools-version: 16111833
 
       # The bundled word lists ship verbatim into the APK; a broken row would
       # reach every user at once. Depends on nothing but python3 — run it
@@ -60,12 +66,21 @@ jobs:
   # (app/src/androidTest) — they need a real Android runtime, so they run on
   # a GitHub-hosted emulator. Previously they only ever ran locally.
   #
-  # API 36, not 37: GitHub runner images ship android-37 as `android-37.0`
-  # and sdkmanager cannot fetch `platforms;android-37` (actions/runner-images
-  # #13859), which makes android-emulator-runner's SDK-install step fail.
-  # AGP resolves compileSdk 37.2 (auto-download) in the gradle step; the
-  # emulator itself only runs the app's instrumentation tests (minSdk 33),
-  # so API 36 exercises the same code path.
+  # API 37.1: the newest SDK line with a *stable* system image. In the 37
+  # line Google ships the platform as 37.0/37.1/37.2, and the app compiles
+  # against 37.2 — but a non-beta 37.2 emulator image exists only on the dev
+  # channel (the 37.2 entries on the stable channel are `-betaN` builds), so
+  # 37.1 is the newest runnable stable image. It ships as
+  # `google_apis_ps16k` — the 16 KB page-size variant, the only `google_apis`
+  # build for 37.1 — so `target` must name it exactly; plain `google_apis`
+  # has no 37.1 image.
+  #
+  # Verified on that image locally before wiring it in: 7/7 instrumentation
+  # tests pass with 16384-byte pages, because the app's bundled native libs
+  # (libdatastore_shared_counter.so, libandroidx.graphics.path.so) are
+  # already 16 KB-aligned, and `avdmanager create avd --package
+  # 'system-images;android-37.1;google_apis_ps16k;x86_64'` — the exact
+  # command this action runs — resolves and boots.
   #
   # No `strategy.matrix` here, deliberately: the branch protection rule
   # required-status context is "Instrumented tests (emulator)", and a matrix
@@ -99,9 +114,9 @@ jobs:
       - name: Run instrumentation tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 36
+          api-level: 37.1
           arch: x86_64
-          target: google_apis
+          target: google_apis_ps16k
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-audio -no-boot-anim
           disable-animations: true
