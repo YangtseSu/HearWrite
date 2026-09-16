@@ -66,21 +66,20 @@ jobs:
   # (app/src/androidTest) — they need a real Android runtime, so they run on
   # a GitHub-hosted emulator. Previously they only ever ran locally.
   #
-  # API 37.1: the newest SDK line with a *stable* system image. In the 37
-  # line Google ships the platform as 37.0/37.1/37.2, and the app compiles
-  # against 37.2 — but a non-beta 37.2 emulator image exists only on the dev
-  # channel (the 37.2 entries on the stable channel are `-betaN` builds), so
-  # 37.1 is the newest runnable stable image. It ships as
-  # `google_apis_ps16k` — the 16 KB page-size variant, the only `google_apis`
-  # build for 37.1 — so `target` must name it exactly; plain `google_apis`
-  # has no 37.1 image.
+  # API 37.0, not 37.1/37.2. API 37 ships three ways: 37.0 has a plain
+  # `google_apis` image, while 37.1 and 37.2 publish ONLY as
+  # `google_apis_ps16k` — the 16 KB page-size variant. A CI run on the 37.1
+  # ps16k image never came up: the emulator logged its userspace boot
+  # properties and then produced no further output until the action's 600 s
+  # boot timeout killed it, while the same image with the same emulator
+  # flags booted in ~33 s locally. Until that is re-tested, 37.0 is the
+  # newest API 37 line with a plain image — still newer than the 36 this job
+  # used before.
   #
-  # Verified on that image locally before wiring it in: 7/7 instrumentation
-  # tests pass with 16384-byte pages, because the app's bundled native libs
-  # (libdatastore_shared_counter.so, libandroidx.graphics.path.so) are
-  # already 16 KB-aligned, and `avdmanager create avd --package
-  # 'system-images;android-37.1;google_apis_ps16k;x86_64'` — the exact
-  # command this action runs — resolves and boots.
+  # 37.2 has no stable image at all (its stable-channel entries are `-betaN`
+  # builds; the plain 37.2 image is dev-channel). The app's own compileSdk
+  # 37.2 is unaffected either way — AGP auto-downloads that platform in the
+  # gradle step, independently of which image the emulator runs.
   #
   # No `strategy.matrix` here, deliberately: the branch protection rule
   # required-status context is "Instrumented tests (emulator)", and a matrix
@@ -114,9 +113,9 @@ jobs:
       - name: Run instrumentation tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 37.1
+          api-level: 37.0
           arch: x86_64
-          target: google_apis_ps16k
+          target: google_apis
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-audio -no-boot-anim
           disable-animations: true
