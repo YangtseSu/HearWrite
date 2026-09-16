@@ -14,7 +14,13 @@ lateinit var releaseVersionName: String
 
 android {
     namespace = "org.yangtse.hearwrite"
-    compileSdk = 37
+    // Latest stable platform: android-37.2 — the minor release is selected
+    // through the compileSdk block (AGP 9.4; `compileSdkVersion` is deprecated).
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 2
+        }
+    }
 
     // Release-certificate signing (gitignored keystore.properties at the repo
     // root). Applied to the release buildType and — when the file exists — to
