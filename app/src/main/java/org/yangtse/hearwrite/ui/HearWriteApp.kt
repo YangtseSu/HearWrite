@@ -40,9 +40,12 @@ fun HearWriteApp() {
         navController.navigate(Routes.DICTATION) { launchSingleTop = true }
     }
 
-    // Every top-level push is single-top: a double tap used to stack the screen
-    // twice, so one 返回 left the user on the same page. LIBRARY_DRAW already
-    // did this; STATS / SETTINGS / LIBRARY / DICTATION did not.
+    // Every push is single-top: a double tap used to stack the screen twice,
+    // so one 返回 left the user on the same page. LIBRARY_DRAW already did
+    // this; STATS / SETTINGS / LIBRARY / DICTATION did not — and neither did
+    // the parameterized destinations (library_list / library_preview), which
+    // are equally reachable by a fast double tap on a category card or a list
+    // row. One helper, so a new destination cannot forget it.
     val openTop: (String) -> Unit = { route ->
         navController.navigate(route) { launchSingleTop = true }
     }
@@ -54,7 +57,7 @@ fun HearWriteApp() {
                 onOpenLibrary = { openTop(Routes.LIBRARY) },
                 onOpenLibraryPreview = { category, label ->
                     // 错词本 source jump: lands on the list's preview directly.
-                    navController.navigate(Routes.libraryPreview(category, label))
+                    openTop(Routes.libraryPreview(category, label))
                 },
                 onOpenSettings = { openTop(Routes.SETTINGS) },
                 onOpenStats = { openTop(Routes.STATS) },
@@ -62,18 +65,28 @@ fun HearWriteApp() {
                 // provider form. Back first lands on the in-screen hub
                 // (goHub), then pops to Home — no second hub entry beneath,
                 // which would show two consecutive identical hubs.
-                onOpenOcrSettings = {
-                    navController.navigate(Routes.SETTINGS_OCR)
-                },
+                onOpenOcrSettings = { openTop(Routes.SETTINGS_OCR) },
             )
         }
         composable(Routes.DICTATION) {
             // Every exit funnels through onClose (finish card, stop dialog,
             // back confirmation) — always land Home, whatever page launched
             // the session; the pop clears any library stack left behind.
-            DictationScreen(onClose = {
-                navController.popBackStack(Routes.HOME, false)
-            })
+            DictationScreen(
+                onClose = { navController.popBackStack(Routes.HOME, false) },
+                // The finish card's 听写统计 follows the same landing rule: the
+                // dictation entry is spent (a stopped run records nothing and
+                // `DictationSessionStore.take()` is one-shot), so it is cleared
+                // with the library stack and 听写统计 opens above Home. One
+                // navigate with popUpTo, not pop-then-push: two calls are two
+                // stack mutations that can be observed in between.
+                onOpenStats = {
+                    navController.navigate(Routes.STATS) {
+                        popUpTo(Routes.HOME) { inclusive = false }
+                        launchSingleTop = true
+                    }
+                },
+            )
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(onClose = { navController.popBackStack() })
@@ -84,7 +97,7 @@ fun HearWriteApp() {
                 // The record rows jump back to the list a run came from, the
                 // same destination the 错词本 drawer's 查看词表 opens.
                 onOpenLibraryPreview = { category, label ->
-                    navController.navigate(Routes.libraryPreview(category, label))
+                    openTop(Routes.libraryPreview(category, label))
                 },
             )
         }
@@ -99,13 +112,11 @@ fun HearWriteApp() {
         }
         composable(Routes.LIBRARY) {
             LibraryScreen(
-                onOpenCategory = { category -> navController.navigate(Routes.libraryList(category)) },
+                onOpenCategory = { category -> openTop(Routes.libraryList(category)) },
                 onOpenList = { category, label ->
-                    navController.navigate(Routes.libraryPreview(category, label))
+                    openTop(Routes.libraryPreview(category, label))
                 },
-                onOpenDraw = {
-                    navController.navigate(Routes.LIBRARY_DRAW) { launchSingleTop = true }
-                },
+                onOpenDraw = { openTop(Routes.LIBRARY_DRAW) },
                 onBack = { navController.popBackStack() },
             )
         }
@@ -113,11 +124,9 @@ fun HearWriteApp() {
             val category = checkNotNull(entry.arguments?.getString("category"))
             LibraryListsScreen(
                 onOpenList = { label ->
-                    navController.navigate(Routes.libraryPreview(category, label))
+                    openTop(Routes.libraryPreview(category, label))
                 },
-                onOpenDraw = {
-                    navController.navigate(Routes.LIBRARY_DRAW) { launchSingleTop = true }
-                },
+                onOpenDraw = { openTop(Routes.LIBRARY_DRAW) },
                 onBack = { navController.popBackStack() },
             )
         }

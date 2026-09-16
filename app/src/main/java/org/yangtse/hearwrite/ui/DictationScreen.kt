@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -139,12 +140,14 @@ private val COUNTDOWN_SLOT_TEXT = "${MAX_INTERVAL_SEC.toInt()} 秒"
  * hints, 标记错词, prev/pause/next/stop, and the live interval stepper +
  * auto-next toggle. Leaving mid-session asks for confirmation; a finished
  * session shows the score card with the 错词本 (复习错词 / 导出错词 / 移除 /
- * 清空) and exits directly.
+ * 清空) plus 听写统计 — the page holding the row this run just wrote — and
+ * exits directly.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DictationScreen(
     onClose: () -> Unit,
+    onOpenStats: () -> Unit,
     viewModel: DictationViewModel = viewModel(),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
@@ -258,6 +261,7 @@ fun DictationScreen(
                     onToggleWord = { showWord = !showWord },
                     onRequestStop = { requestStop() },
                     onClose = onClose,
+                    onOpenStats = onOpenStats,
                     modifier = Modifier.fillMaxSize().padding(innerPadding),
                 )
             }
@@ -296,6 +300,7 @@ private fun DictationContent(
     onToggleWord: () -> Unit,
     onRequestStop: () -> Unit,
     onClose: () -> Unit,
+    onOpenStats: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val messages = LocalMessages.current
@@ -446,6 +451,7 @@ private fun DictationContent(
                         onClearWrong = viewModel::clearWrongWords,
                         onRemoveWrong = viewModel::removeWrongWord,
                         onGrade = viewModel::openGradePane,
+                        onOpenStats = onOpenStats,
                         onClose = onClose,
                     )
                 }
@@ -550,6 +556,7 @@ private fun FinishCard(
     onClearWrong: () -> Unit,
     onRemoveWrong: (String) -> Unit,
     onGrade: () -> Unit,
+    onOpenStats: () -> Unit,
     onClose: () -> Unit,
 ) {
     val messages = LocalMessages.current
@@ -739,6 +746,28 @@ private fun FinishCard(
                     },
                 )
             }
+        }
+
+        // The run just wrote its record (Roadmap #3), so the card that
+        // announces the score is also the natural way into the page that
+        // shows it: without this the only path was 首页 → 更多 → 听写统计,
+        // two taps deep and away from the moment the record was made
+        // (AUDIT C5). Home's header cannot grow a fourth icon — at 360dp the
+        // wordmark plus three 48dp icons already fill the row — so the depth
+        // is reduced where there is room instead. The label is the same string
+        // Home's menu uses (no second name for one destination) and claims
+        // nothing about the write: the row lands asynchronously and a failed
+        // write is tolerated by design.
+        TextButton(
+            onClick = onOpenStats,
+            modifier = Modifier.padding(top = 8.dp),
+        ) {
+            Icon(
+                Icons.Outlined.BarChart,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Text("听写统计", modifier = Modifier.padding(start = 8.dp))
         }
 
         Button(onClick = onClose, modifier = Modifier.padding(top = 12.dp)) { Text("返回") }

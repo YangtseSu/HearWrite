@@ -688,12 +688,39 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 
 **门禁**：`testDebugUnitTest` **369/369** 绿（基线 355，新增 14 条：`CropViewportTest` 8 + `CropRectTest` 5 + `OcrServiceTest.inferOcrLang` 1）；`lintDebug` 无新增告警；`python3 scripts/check-assets.py` 未触及数据层。
 
-`C5`（导航与信息架构：统计入口深度、结束页 → 本次统计入口、双击叠栈、死代码）与 `C6`（`WindowSizeClass`、表盘随约束、旋转不丢状态）待做。
+#### C5（导航与信息架构）—— ✅ 已完成
 
-> 说明：本节此前写作「`C4` → `C6`」，跳过了 `C5` —— 那是审计时按"阶段分组"随手排的顺序，不是"C5 无需修复"的结论。`C5` 的 3 行仍然全部成立，见下（2026-09-16 核对）。
+范围：`C5` 表全部 3 行。其中第 2、3 行在 **C1c 已随导航组一并落地**（`launchSingleTop` 补齐、两处死代码删除），本阶段先按 `4c40ab7` 基线逐条核对确认，只重做**未闭环部分**。
+
+| 项 | 做法 |
+|---|---|
+| 统计藏两层 | 首页顶栏**不放**第 4 个图标：360dp 宽下实测 wordmark 右缘 x=629、三个 48dp 图标占满至 1023/1080（余 11dp），再加一个必然挤压菜单图标——这正是 `C1b` 修掉的"OCR 药丸被挤没"的同一类宽度债。改为**减少动作深度**：结束页成绩卡新增 `听写统计` 入口（原本只能 首页 → 更多 → 听写统计，且离开刚写完记录的那一刻）。落地语义与既有退出规则一致——`popUpTo(HOME)` + `launchSingleTop` 一次导航压栈，**结束页的听写入口被清掉**（`DictationSessionStore.take()` 是一次性的，保留它会让"返回"落在已消费会话的死页面上），返回即首页 |
+| 双击可能叠栈 | C1c 已给四个顶层路由补齐；本阶段发现**同类缺陷仍在带参路由上**（`library_list/{category}`、`library_preview/{category}/{label}` 由分类卡/词表行双击可达，同样会压两层）。新增的结束页入口也不再自写 `navigate`，统一走单顶辅助函数 `openTop`，全文件 **13 处 push 全部经它**，"新增目的地忘记加"这个类别被消灭 |
+| 死代码 | C1c 已删 `HearWriteApp.startDictation` 与 `HomeViewModel.adjustStartIndex`。本阶段补上审计未列、但同类的**未用 import 7 处**（`HomeScreen.OcrLang`、`Haptics.Vibrator`、`OcrProviderConfig.jsonPrimitive`、`OcrService.buildJsonArray`、`TtsChainSpeaker.CoroutineScope`/`Job`、`TtsProviderConfig.contentOrNull`/`jsonPrimitive`、`LibraryViewModel.withLock`）——均以"符号在非 import 行零命中"逐一核实 |
+
+**实现上偏离审计建议的地方**：审计给"统计藏两层"的方向是"提一层"（一个到顶栏）。实测顶栏没有空间，硬塞会复现 `C1b` 的挤压缺陷，故改为在**有空间的地方**（成绩卡）降低深度；首页 `更多 → 听写统计` 保留，两条路径都能到，目的地同名同源。
+
+**验收证据（2026-09-16，模拟器 `HearWrite37` 1080×2424 @420dpi，`uiautomator dump` 属性/坐标断言）**：
+
+| 项 | 断言 | 结果 |
+|---|---|---|
+| 顶栏宽度账 | 360dp 等效密度（`wm density 480`）下 `HearWrite` 右缘 629、`听写` 至 629、三图标 665–1023，余量 11px ≈ 无 | ✅ 设备 |
+| 成绩卡入口在场 | 5 词跑完：`听写统计` 节点在场（`[501,1841][647,1894]`），与 `拍照批改` / `导出错词` / `清空错词本` 同列 | ✅ 设备 |
+| 入口落点 | 点 `听写统计` → 统计页（`共听写 6 场`），**最新一条正是本次**（`9月16日 13:37 · 正式听写 · 5 词 · 全对 · 26 秒`） | ✅ 设备 |
+| 返回不落死页面 | 统计页按返回 → **首页**（`单词列表` + `开始听写` 在场），不是已消费会话的听写页 | ✅ 设备 |
+| 带参路由单顶 | 同一坐标快速双击词表行 → 预览页；按一次返回即回到词表列表（未叠两层） | ✅ 设备 |
+| 门禁 | `testDebugUnitTest` **369/369** 绿；`lintDebug` `No issues found.` | ✅ |
+
+**未能闭环项（如实记录）**：
+- **"双击叠栈"的设备判据弱**：`adb shell input tap` 两次同坐标的间隔受 shell 往返限制（≈0.6 s），比真实连点慢，只采样到"双击后一次返回回到列表"这一条；`launchSingleTop` 本身由 `openTop` 单点强制，13 处 push 无一绕过（源码层可穷举）。
+- **`popUpTo(HOME)` 清栈**只在"结束页 → 统计 → 返回首页"这一条路径上采样到；"从词库预览起听写后走同一入口"未单独重放（同一 `composable(Routes.DICTATION)` 分支，无分叉）。
+
+
+
+> 说明：本节此前写作「`C4` → `C6`」，跳过了 `C5` —— 那是审计时按"阶段分组"随手排的顺序，不是"C5 无需修复"的结论。`C5` 已于 2026-09-16 完成（见上），`C6`（`WindowSizeClass`、表盘随约束、旋转不丢状态）仍待做。
 
 ### 阶段 D — 打磨（按喜好）
-动效（§4）、导航 `launchSingleTop`、结束页 → 本次统计入口、术语统一（C7）、死代码清理、系统栏图标随自选主题、动态取色（Material You）。
+动效（§4）、术语统一（C7）、系统栏图标随自选主题、动态取色（Material You）。（原列表中的 `launchSingleTop`、结束页 → 本次统计入口、死代码清理已随 `C1c` / `C5` 落地。）
 
 ### 依赖与顺序
 - `A2` 已按 §0.1 D-1 拍板为"恢复表盘点按"，**不再是待决项**；`AGENTS.md:94` 契约不需要改。

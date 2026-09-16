@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.data.LibraryCategory
 import org.yangtse.hearwrite.data.LibraryList
