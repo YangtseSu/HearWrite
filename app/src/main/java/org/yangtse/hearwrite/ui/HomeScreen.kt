@@ -136,7 +136,9 @@ fun HomeScreen(
     // Saved across configuration changes: the crop step must survive a
     // rotation mid-selection (the overlay comes back from the VM's bitmap).
     var showOcrCrop by rememberSaveable { mutableStateOf(false) }
-    var ocrLang by rememberSaveable { mutableStateOf(OcrLang.ENGLISH) }
+    val ocrLang by viewModel.ocrLang.collectAsStateWithLifecycle()
+    val ocrPending by viewModel.ocrPending.collectAsStateWithLifecycle()
+    val ocrNeedsSettings by viewModel.ocrNeedsSettings.collectAsStateWithLifecycle()
 
     // Camera/album launchers shared with 拍照批改; every pick goes through the
     // 选定识别区域 crop step first. The VM's Mutex backstops the network call
@@ -303,8 +305,10 @@ fun HomeScreen(
                             OcrErrorCard(
                                 message = message,
                                 retryable = ocrRetryable,
+                                needsSettings = ocrNeedsSettings,
                                 onClose = viewModel::clearOcrError,
                                 onRetry = viewModel::retryOcr,
+                                onOpenSettings = onOpenOcrSettings,
                                 modifier = Modifier.padding(bottom = 8.dp),
                             )
                         }
@@ -434,7 +438,7 @@ fun HomeScreen(
         if (showOcrSheet) {
             OcrScanSheet(
                 lang = ocrLang,
-                onLangChange = { ocrLang = it },
+                onLangChange = viewModel::setOcrLang,
                 configured = ocrConfigured,
                 modelName = ocrModel,
                 busy = ocrBusy || ocrPicker.busy,
@@ -466,6 +470,8 @@ fun HomeScreen(
                 bitmap = ocrCropBitmap,
                 onConfirm = { rect ->
                     showOcrCrop = false
+                    // The language the sheet was opened with — the run's own
+                    // recognition language, not a re-inferred one.
                     viewModel.confirmOcrCrop(rect, ocrLang)
                 },
                 onDismiss = {
@@ -536,6 +542,31 @@ fun HomeScreen(
             )
         }
 
+
+        // A recognition that landed over a non-blank draft: the old list is
+        // gone for good if it is replaced (only a run writes history), so the
+        // user picks 替换 / 追加 / 取消. An empty draft never asks.
+        ocrPending?.let { lines ->
+            AlertDialog(
+                onDismissRequest = { viewModel.discardOcrPending() },
+                title = { Text("识别到 ${lines.size} 个词") },
+                text = {
+                    Text(
+                        "当前草稿有 ${wordCount} 个词。识别结果可以替换或追加到草稿末尾；" +
+                            "未开始听写的草稿不会被记入历史，替换后无法找回。",
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.replaceDraftWithOcr() }) { Text("替换") }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = { viewModel.discardOcrPending() }) { Text("取消") }
+                        TextButton(onClick = { viewModel.appendOcrToDraft() }) { Text("追加") }
+                    }
+                },
+            )
+        }
 
         if (clearWrongConfirm) {
             AlertDialog(
@@ -625,8 +656,11 @@ private fun MenuRow(
 private fun OcrErrorCard(
     message: String,
     retryable: Boolean,
+    /** Missing/incomplete provider config: only 设置 can fix this run. */
+    needsSettings: Boolean,
     onClose: () -> Unit,
     onRetry: () -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -644,6 +678,13 @@ private fun OcrErrorCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
+                // A configuration failure is not retryable — the card used to
+                // answer "请先在设置中配置 OCR 服务" with a lone 关闭, naming a
+                // destination it gave no way to reach (the scan sheet has 去设置;
+                // the error card did not).
+                if (needsSettings) {
+                    TextButton(onClick = onOpenSettings) { Text("去设置") }
+                }
                 TextButton(onClick = onClose) { Text("关闭") }
                 if (retryable) {
                     TextButton(onClick = onRetry) { Text("重试") }

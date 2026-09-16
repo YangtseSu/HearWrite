@@ -118,6 +118,18 @@ class SettingsRepository(
         ThemeMode.fromStored(prefs[KEY_THEME])
     }
 
+    /**
+     * 识别语言 of 拍照识词 (the 词表类型 tab: 英文单词 vs 中文生字/词语), or null
+     * when the user has never picked one. Null is meaningful — the screen then
+     * infers the language from the current draft instead of forcing English on
+     * a 汉字 user who has never opened the sheet — so the accessor keeps ""
+     * (never stored) apart from a real choice.
+     */
+    val ocrLang: Flow<OcrLang?> = safePrefs.map { prefs ->
+        prefs[KEY_OCR_LANG]?.takeIf { it.isNotBlank() }
+            ?.let { stored -> OcrLang.entries.firstOrNull { it.name == stored } }
+    }
+
     // ---- Per-provider BYOK configs ----------------------------------------
     //
     // TTS and OCR provider configs are stored **per preset id** — each
@@ -252,6 +264,12 @@ class SettingsRepository(
         dataStore.edit { it[KEY_THEME] = mode.name.lowercase() }
     }
 
+    /** Persist the 识别语言 picked in the 拍照识词 sheet (C4: the one setting
+     *  of the OCR flow that used to reset to ENGLISH on every cold start). */
+    suspend fun setOcrLang(lang: OcrLang) {
+        dataStore.edit { it[KEY_OCR_LANG] = lang.name }
+    }
+
     suspend fun setTtsSource(source: TtsSource) {
         dataStore.edit { it[KEY_TTS_SOURCE] = source.name.lowercase() }
     }
@@ -357,6 +375,7 @@ class SettingsRepository(
         val KEY_SYSTEM_USE_DEFAULT_EN = booleanPreferencesKey("system_use_default_en")
         val KEY_SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         val KEY_THEME = stringPreferencesKey("theme")
+        val KEY_OCR_LANG = stringPreferencesKey("ocr_lang")
         val KEY_OCR_PROVIDER_CONFIG = stringPreferencesKey("ocr_provider_config")
         val KEY_TTS_PROVIDER_CONFIG = stringPreferencesKey("tts_provider_config")
         val KEY_OCR_PROVIDER_CONFIGS = stringPreferencesKey("ocr_provider_configs")

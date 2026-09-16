@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -52,6 +54,11 @@ fun OcrScanSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // At a large font scale the four explanation lines push the two
+                // action buttons past the sheet's height, where they cannot be
+                // reached (a sheet is not implicitly scrollable). Scrolling the
+                // whole body keeps every action reachable.
+                .verticalScroll(rememberScrollState())
                 .padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
         ) {
             Text("拍照识词", style = MaterialTheme.typography.titleLarge)
@@ -67,9 +74,13 @@ fun OcrScanSheet(
                 )
             }
 
-            // ---- 识别语言 (picks the vision prompt) -------------------------
+            // ---- 词表类型 (picks the vision prompt) --------------------------
+            // Named for what the tab chooses. 识别语言 read as "the language in
+            // the photo", which is exactly the ambiguity to avoid: a 生字表
+            // prints pinyin beside every 汉字, and the two prompts want opposite
+            // things from that page.
             Text(
-                "识别语言",
+                "词表类型",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 16.dp, bottom = 6.dp),

@@ -30,6 +30,7 @@ import org.yangtse.hearwrite.data.NormalizedRect
 import org.yangtse.hearwrite.data.OCR_PROGRESS_COMPRESSING
 import org.yangtse.hearwrite.data.OCR_PROGRESS_RECOGNIZING
 import org.yangtse.hearwrite.data.OcrLang
+import org.yangtse.hearwrite.data.inferOcrLang
 import org.yangtse.hearwrite.data.OcrOutcome
 import org.yangtse.hearwrite.data.WrongWordMark
 import org.yangtse.hearwrite.domain.CJK_RE
@@ -229,9 +230,38 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _ocrModel = MutableStateFlow("")
     val ocrModel: StateFlow<String> = _ocrModel.asStateFlow()
 
+    /**
+     * Stored 识别语言 (null = the user never picked one). Kept separate from
+     * [ocrLang] so "no choice yet" stays distinguishable — the sheet then opens
+     * on the language the current draft is written in instead of forcing
+     * ENGLISH on a 汉字 user, which used to make the first scan of a 生字表
+     * answer 未识别到英文单词.
+     */
+    private val _ocrLangStored = MutableStateFlow<OcrLang?>(null)
+
+    /** The sheet's selected 识别语言 (persisted on every change). */
+    private val _ocrLang = MutableStateFlow(OcrLang.ENGLISH)
+    val ocrLang: StateFlow<OcrLang> = _ocrLang.asStateFlow()
+
+    /**
+     * A recognition that succeeded over a non-blank draft: held until the user
+     * decides whether it replaces what is there or appends to it. The draft is
+     * persisted and not recoverable (only a run writes history), so a silent
+     * overwrite threw the old list away with no way back.
+     */
+    private val _ocrPending = MutableStateFlow<List<String>?>(null)
+    val ocrPending: StateFlow<List<String>?> = _ocrPending.asStateFlow()
+
+    /**
+     * The last OCR failure needs the 设置 page to be fixable (no provider
+     * configured / key missing): the error card then offers 去设置. The retry
+     * path cannot help — there is nothing installed to retry against.
+     */
+    private val _ocrNeedsSettings = MutableStateFlow(false)
+    val ocrNeedsSettings: StateFlow<Boolean> = _ocrNeedsSettings.asStateFlow()
+
     /** dataUrl + lang of the last compressed image — the 重试 target. */
     private var lastOcrRun: Pair<String, OcrLang>? = null
-
     /** The in-flight recognition (cancelled by [cancelOcr]); null when idle. */
     private var ocrJob: Job? = null
 
@@ -269,6 +299,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 Log.w(TAG, "draft seed failed", e)
                 ""
             }
+            // The seeded text is the sheet's first inference input: without
+            // this the coroutine races the ocrLang collector below and a 汉字
+            // draft can open the sheet on 英文.
+            syncInferredLang()
             _draftLoaded.value = true
         }
         // Seed the playback settings for the bottom panel (设置页 writes the
@@ -366,17 +400,53 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 _ocrModel.value = cfg?.model.orEmpty()
             }
         }
+        // 识别语言: restore the user's last choice; with none stored, infer it
+        // from the draft the user is looking at (a 汉字 list opens the sheet on
+        // 中文). The inference is re-run on every stored-flow emission, so it
+        // also covers "user pasted a 生字表 first, never opened the sheet".
+        viewModelScope.launch {
+            settings.ocrLang.collect { stored ->
+                _ocrLangStored.value = stored
+                _ocrLang.value = stored ?: inferOcrLang(parseWords(_draft.value))
+            }
+        }
     }
 
     // ------------------------------------------------------------- draft
 
     fun onDraftChange(value: String) {
         _draft.value = value
+        syncInferredLang()
+    }
+
+    /**
+     * Track the draft's language while the user has never chosen one: the sheet
+     * then opens on 中文 for a 汉字 list instead of 英文. A stored choice is
+     * never overridden — it is the user's answer to exactly this question.
+     */
+    private fun syncInferredLang() {
+        if (_ocrLangStored.value == null) {
+            _ocrLang.value = inferOcrLang(parseWords(_draft.value))
+        }
+    }
+
+    /** The sheet's 识别语言 tab: persisted, so the next scan remembers it. */
+    fun setOcrLang(lang: OcrLang) {
+        _ocrLang.value = lang
+        _ocrLangStored.value = lang
+        viewModelScope.launch {
+            try {
+                settings.setOcrLang(lang)
+            } catch (e: Exception) {
+                Log.w(TAG, "ocr lang persist failed", e)
+            }
+        }
     }
 
     fun fillSample(text: String) {
         _draft.value = text
         _startIndex.value = 0
+        syncInferredLang()
         viewModelScope.launch { settings.setDraft(text) }
     }
 
@@ -469,6 +539,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _draft.value = linesText
         _startIndex.value = 0
         _displayMode.value = true
+        syncInferredLang()
         viewModelScope.launch { settings.setDraft(linesText) }
     }
 
@@ -749,11 +820,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 _ocrBusy.value = true
                 _ocrError.value = null
+                _ocrNeedsSettings.value = false
                 _ocrRetryable.value = false
                 // BYOK: no config (or incomplete) → Chinese error with retry
                 // hint; the user must supply their own key in 设置.
                 if (ocrService.config() == null) {
-                    _ocrError.value = "请先在设置中配置 OCR 服务（需自备 API Key）"
+                    failOcrConfig()
                     return@launch
                 }
                 _ocrPhase.value = OCR_PROGRESS_COMPRESSING
@@ -768,13 +840,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 _ocrRetryable.value = true
                 _ocrPhase.value = OCR_PROGRESS_RECOGNIZING
                 when (val outcome = ocrService.recognize(dataUrl, lang)) {
-                    is OcrOutcome.Success -> {
-                        _draft.value = outcome.linesText
-                        _startIndex.value = 0
-                        _displayMode.value = true
-                        settings.setDraft(outcome.linesText)
-                        _ocrOutcome.value = ocrSuccessMessage(outcome.linesText, lang)
-                    }
+                    is OcrOutcome.Success -> applyOcrOutcome(outcome.linesText, lang)
                     is OcrOutcome.Error -> _ocrError.value = outcome.message
                 }
             } catch (e: CancellationException) {
@@ -816,10 +882,66 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearOcrError() {
         _ocrError.value = null
+        _ocrNeedsSettings.value = false
     }
 
     fun clearOcrOutcome() {
         _ocrOutcome.value = null
+    }
+
+    /**
+     * Handle a successful recognition. An empty draft is replaced silently (the
+     * user has nothing to lose — the old behavior, and the common first-use
+     * case); over a non-blank draft the lines are held in [ocrPending] until
+     * the user chooses 替换 / 追加 / 取消 on the screen. The previous draft is
+     * not recoverable afterwards (only a dictation run writes history), so a
+     * silent overwrite was a one-way door.
+     */
+    private fun applyOcrOutcome(linesText: String, lang: OcrLang) {
+        if (parseWords(_draft.value).isEmpty()) {
+            commitOcrOutcome(linesText, lang)
+            return
+        }
+        _ocrPending.value = parseWords(linesText)
+        _ocrOutcome.value = ocrSuccessMessage(linesText, lang)
+    }
+
+    /** 替换草稿 with the recognized lines (the pending-result dialog). */
+    fun replaceDraftWithOcr() {
+        val lines = _ocrPending.value ?: return
+        _ocrPending.value = null
+        commitOcrOutcome(lines.joinToString("\n"), _ocrLang.value)
+    }
+
+    /** 追加 the recognized lines to the current draft, keeping what is there. */
+    fun appendOcrToDraft() {
+        val lines = _ocrPending.value ?: return
+        _ocrPending.value = null
+        val existing = parseWords(_draft.value)
+        commitOcrOutcome((existing + lines).joinToString("\n"), _ocrLang.value)
+    }
+
+    /** 取消 a pending result: the draft (and its persisted copy) is untouched. */
+    fun discardOcrPending() {
+        _ocrPending.value = null
+    }
+
+    private fun commitOcrOutcome(linesText: String, lang: OcrLang) {
+        _draft.value = linesText
+        _startIndex.value = 0
+        _displayMode.value = true
+        syncInferredLang()
+        viewModelScope.launch {
+            try {
+                settings.setDraft(linesText)
+            } catch (e: Exception) {
+                Log.w(TAG, "OCR draft persist failed", e)
+            }
+        }
+        _ocrOutcome.value = ocrSuccessMessage(linesText, lang)
+        // The error card, if any, described the run that just succeeded.
+        _ocrError.value = null
+        _ocrNeedsSettings.value = false
     }
 
     private fun launchOcrRun(lang: OcrLang, acquireDataUrl: suspend () -> String?) {
@@ -830,11 +952,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 _ocrBusy.value = true
                 _ocrError.value = null
+                _ocrNeedsSettings.value = false
                 _ocrRetryable.value = false
                 // BYOK: no config (or incomplete) → Chinese error with retry
                 // hint; the user must supply their own key in 设置.
                 if (ocrService.config() == null) {
-                    _ocrError.value = "请先在设置中配置 OCR 服务（需自备 API Key）"
+                    failOcrConfig()
                     return@launch
                 }
                 _ocrPhase.value = OCR_PROGRESS_COMPRESSING
@@ -847,13 +970,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 _ocrRetryable.value = true
                 _ocrPhase.value = OCR_PROGRESS_RECOGNIZING
                 when (val outcome = ocrService.recognize(dataUrl, lang)) {
-                    is OcrOutcome.Success -> {
-                        _draft.value = outcome.linesText
-                        _startIndex.value = 0
-                        _displayMode.value = true
-                        settings.setDraft(outcome.linesText)
-                        _ocrOutcome.value = ocrSuccessMessage(outcome.linesText, lang)
-                    }
+                    is OcrOutcome.Success -> applyOcrOutcome(outcome.linesText, lang)
                     is OcrOutcome.Error -> _ocrError.value = outcome.message
                 }
             } catch (e: CancellationException) {
@@ -869,6 +986,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 ocrGate.unlock()
             }
         }
+    }
+
+    /**
+     * No usable provider config: the run cannot be retried, only fixed in 设置 —
+     * so the error card carries a 去设置 action (the message alone told the user
+     * where to go and left them there with only 关闭).
+     */
+    private fun failOcrConfig() {
+        _ocrError.value = "请先在设置中配置 OCR 服务（需自备 API Key）"
+        _ocrNeedsSettings.value = true
     }
 
     /** Success toast text: upstream OCR_OUTCOME_MESSAGES (生字/词语 split for CJK). */

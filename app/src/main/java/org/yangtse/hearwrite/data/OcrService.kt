@@ -37,6 +37,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.math.max
 import kotlin.math.roundToInt
+import org.yangtse.hearwrite.domain.isCjkRun
 
 /** Longest image edge after downscaling (alice `OCR_MAX_EDGE`). */
 const val OCR_MAX_EDGE = 1600
@@ -72,7 +73,14 @@ const val OCR_DISCLAIMER = "AI 识图可能存在误差，请核对识别结果"
 const val OCR_PROGRESS_COMPRESSING = "处理图片中…"
 const val OCR_PROGRESS_RECOGNIZING = "识别中…"
 
-/** Recognition language for the vision OCR pass (alice `OcrLang`); [wordListPrompt] is the 拍照识词 word-list prompt, [answerPrompt] the 拍照批改 one. */
+/**
+ * Recognition language for the vision OCR pass (alice `OcrLang`); [wordListPrompt] is the 拍照识词 word-list prompt, [answerPrompt] the 拍照批改 one.
+ *
+ * This picks the **词表类型** (English word list vs 汉字 生字/词语表), not the
+ * language of the photograph: a 生字表 prints 拼音 next to every 汉字, and the
+ * two prompts want opposite things from that page (the English one salvages
+ * English headwords, the Chinese one drops pinyin).
+ */
 enum class OcrLang(val wordListPrompt: String) {
     ENGLISH(ENGLISH_OCR_PROMPT),
     CHINESE(CHINESE_OCR_PROMPT),
@@ -131,6 +139,16 @@ internal fun answerPrompt(lang: OcrLang): String = when (lang) {
     OcrLang.ENGLISH -> ENGLISH_ANSWER_PROMPT
     OcrLang.CHINESE -> CHINESE_ANSWER_PROMPT
 }
+
+/**
+ * Best-guess 识别语言 of a pasted/loaded list — the sheet's opening tab when the
+ * user has never picked one. Uses the same majority rule as `isCjkRun` (the
+ * 拍照批改 prompt selector) so the app has one definition of "this list is a
+ * 汉字 dictation"; an empty or English list is English, the vision sheet's
+ * historical default.
+ */
+fun inferOcrLang(lines: List<String>): OcrLang =
+    if (isCjkRun(lines)) OcrLang.CHINESE else OcrLang.ENGLISH
 
 private val JSON = Json { ignoreUnknownKeys = true }
 private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()

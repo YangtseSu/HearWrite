@@ -70,6 +70,51 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
      *  re-entry guard) so a double tap cannot stage two sessions. */
     private val startGate = Mutex()
 
+    /**
+     * The words the next 起听写 will actually dictate — what the page previews.
+     * Sampled up front (rather than at the button) so the preview is the run,
+     * not a second opinion: [prepareSession] replays this list while
+     * [previewCount] still matches the requested X, and only re-samples when
+     * the user asked for a different size.
+     */
+    private var previewCount = 0
+
+    private val _preview = MutableStateFlow<List<String>>(emptyList())
+
+    /**
+     * The current draw, for the 逐词预览 block (Roadmap #9 left it out). Drawn
+     * once and kept: the run reuses exactly this list, so what the page shows
+     * is what gets dictated.
+     */
+    val preview: StateFlow<List<String>> = _preview.asStateFlow()
+
+    /**
+     * Make sure a draw of the currently requested size exists — sampled on
+     * first use and whenever X changed. Cheap (a shuffle over ≤ a few thousand
+     * lines) but callers still invoke it from a LaunchedEffect on
+     * `(poolSize, count)`, never during composition.
+     */
+    fun ensurePreview() {
+        val pool = candidates
+        if (pool.isEmpty()) {
+            previewCount = 0
+            _preview.value = emptyList()
+            return
+        }
+        val x = _count.value.coerceIn(1, pool.size)
+        if (x == previewCount && _preview.value.isNotEmpty()) return
+        previewCount = x
+        _preview.value = sampleWords(pool, x)
+    }
+
+    /** 换一批: draw a fresh [preview] of the same size (the run follows it). */
+    fun reshufflePreview() {
+        val pool = candidates
+        if (pool.isEmpty()) return
+        previewCount = _count.value.coerceIn(1, pool.size)
+        _preview.value = sampleWords(pool, previewCount)
+    }
+
     init {
         viewModelScope.launch {
             val ids = selection.selectedIds.value.toList()
@@ -144,7 +189,17 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
             val pool = candidates
             if (pool.isEmpty()) return null
             val x = _count.value.coerceIn(1, pool.size)
-            val lines = sampleWords(pool, x)
+            // Replay the previewed draw: the page showed these words, so these
+            // are the words to dictate. Re-sample only when the preview is
+            // stale (X changed after the last draw).
+            val lines = if (previewCount == x && _preview.value.isNotEmpty()) {
+                _preview.value
+            } else {
+                sampleWords(pool, x).also {
+                    previewCount = x
+                    _preview.value = it
+                }
+            }
             if (lines.isEmpty()) return null
             val ids = _pool.value.lists.map { it.id }
             return DrawSession(lines, multiSourceLabel(ids))

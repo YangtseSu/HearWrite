@@ -35,5 +35,23 @@ object Haptics {
         }
     }
 
+    /**
+     * Light single tick — the 选定识别区域 editor's "this is the limit" bump
+     * when a drag is clamped (a side hit the minimum crop side or the image
+     * edge, or a move ran out of image). A silent clamp is indistinguishable from a
+     * dropped gesture, which is what the overlay used to be. The platform's own
+     * predefined tick is used so the feel follows the system haptic settings
+     * rather than an app-invented waveform.
+     */
+    fun tick(context: Context) {
+        try {
+            val vibrator = context.getSystemService(VibratorManager::class.java).defaultVibrator
+            if (!vibrator.hasVibrator()) return
+            vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK))
+        } catch (e: Exception) {
+            Log.w(TAG, "tick vibration failed", e)
+        }
+    }
+
     private const val TAG = "Haptics"
 }

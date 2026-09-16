@@ -174,7 +174,12 @@ private fun GradeEmptyState(
             modifier = Modifier.padding(top = 12.dp),
         )
         Text(
-            "自动与本次词表逐词比对，标出写错的词；AI 识图可能存在误差，逐条核对后再记入错词本",
+            // The caveat used to be spoken twice within 15dp: this sentence
+            // carried "AI 识图可能存在误差" and the verbatim OCR_DISCLAIMER line
+            // below repeated it. The wording here is now about the flow (what
+            // the pass does, and that the human confirms), and the mandated
+            // disclaimer string appears exactly once.
+            "自动与本次词表逐词比对，标出写错的词；逐条核对后再记入错词本",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp),
