@@ -101,11 +101,148 @@ fun dialContentWidthDp(diameterDp: Double, contentHeightDp: Double): Double {
 }
 
 /**
- * Widest content box for a stack of a known height — the hidden dial, whose
- * stack (hearing icon + two labels) is fixed-length and needs no solving.
+ * The hidden dial's stack (hearing icon, 听写中/已暂停, 点按显示词语) as data, in
+ * the units the solver needs. Text is carried as **sp** plus the density's
+ * [fontScale], never as pre-multiplied dp: a 16 sp label is 16 dp wide per unit
+ * at scale 1 and 24 dp at scale 1.5, and treating the two as one number is what
+ * makes a stack "fit" in the arithmetic and overflow on screen.
  */
-fun dialBoxWidthDp(contentHeightDp: Double, metrics: DialMetrics): Double =
-    (dialContentWidthDp(metrics.diameterDp, contentHeightDp) - metrics.marginDp).coerceAtLeast(0.0)
+data class DialHiddenMetrics(
+    val iconDp: Double,
+    val iconGapDp: Double,
+    val stateGapDp: Double,
+    val stateFontSp: Double,
+    val stateLineSp: Double,
+    /** Width of the state word in [displayWidth] units (3 for 听写中). */
+    val stateUnits: Double,
+    val hintFontSp: Double,
+    val hintLineSp: Double,
+    /** Width of 点按显示词语 in [displayWidth] units. */
+    val hintUnits: Double,
+    /** `Density.fontScale`: one sp is this many dp. */
+    val fontScale: Double,
+) {
+    /** Width in dp the widest child needs at [scale]. */
+    fun widestChildDp(keepState: Boolean, keepHint: Boolean, scale: Double): Double = maxOf(
+        iconDp,
+        if (keepState) stateUnits * stateFontSp * fontScale else 0.0,
+        if (keepHint) hintUnits * hintFontSp * fontScale else 0.0,
+    ) * scale
+
+    /** Height in dp of the stack with the dropped parts costing nothing. */
+    fun heightDp(keepState: Boolean, keepHint: Boolean, scale: Double): Double {
+        val state = if (keepState) iconGapDp + stateLineSp * fontScale + stateGapDp else 0.0
+        val hint = if (keepHint) hintLineSp * fontScale else 0.0
+        return (iconDp + state + hint) * scale
+    }
+}
+
+/**
+ * The hidden stack as one disc can actually carry it — every element either
+ * drawn at its own size or not drawn at all, because the disc is no longer a
+ * fixed 204 dp: a landscape stage hands the dial ~70 dp, where the full 95 dp
+ * stack has `√(D²−h²) = 0` and the dial drew nothing at all (AUDIT C6, found on
+ * device).
+ *
+ * Candidates are tried largest-first and the first that fits wins whole: the
+ * 点按显示词语 hint goes before the state word (the 显示词语 button beside the
+ * dial carries the same words, so dropping the hint costs nothing), and the
+ * hearing icon is the last resort — it is a glyph, so it is the one part that
+ * *scales* instead of being dropped, and the dial is never empty.
+ *
+ * Labels are never shrunk to squeeze them in: a 13 sp hint rendered at 9 sp is
+ * neither readable nor honest about the layout, and the state word is what the
+ * student actually needs. The 204 dp portrait disc returns the whole stack
+ * unchanged, so the geometry AUDIT C2 verified is untouched.
+ */
+fun dialHiddenStack(
+    diameterDp: Double,
+    metrics: DialMetrics,
+    hidden: DialHiddenMetrics,
+): DialHiddenStack {
+    for ((keepState, keepHint) in HIDDEN_STACK_CANDIDATES) {
+        if (hiddenFits(diameterDp, metrics, hidden, keepState, keepHint, scale = 1.0)) {
+            return hiddenStack(hidden, keepState, keepHint, scale = 1.0)
+        }
+    }
+    // Icon alone, at the largest size the disc affords: the dial must never be
+    // blank, and a scaled glyph reads at any size where a scaled CJK label does
+    // not.
+    val scale = largestHiddenScale(diameterDp, metrics, hidden, keepState = false, keepHint = false)
+    return hiddenStack(hidden, keepState = false, keepHint = false, scale = scale)
+}
+
+/**
+ * The stack candidates in drop order: the whole thing, then without the hint,
+ * then the icon alone ([HIDDEN_STACK_CANDIDATES] covers the first two — the
+ * icon-only case is the scaled fallback above).
+ */
+private val HIDDEN_STACK_CANDIDATES = listOf(true to true, true to false)
+
+/** Whether [keepState]/[keepHint]'s stack fits the disc at [scale]. */
+private fun hiddenFits(
+    diameterDp: Double,
+    metrics: DialMetrics,
+    hidden: DialHiddenMetrics,
+    keepState: Boolean,
+    keepHint: Boolean,
+    scale: Double,
+): Boolean {
+    val box = dialContentWidthDp(diameterDp, hidden.heightDp(keepState, keepHint, scale)) -
+        metrics.marginDp
+    return box > 0.0 &&
+        hidden.widestChildDp(keepState, keepHint, scale) <= box + FIT_EPSILON_DP
+}
+
+/** Largest uniform scale ≤ 1 at which the icon fits its own box. */
+private fun largestHiddenScale(
+    diameterDp: Double,
+    metrics: DialMetrics,
+    hidden: DialHiddenMetrics,
+    keepState: Boolean,
+    keepHint: Boolean,
+): Double {
+    if (hiddenFits(diameterDp, metrics, hidden, keepState, keepHint, scale = 1.0)) return 1.0
+    var low = 0.0
+    var high = 1.0
+    repeat(HIDDEN_BISECTION_STEPS) {
+        val mid = (low + high) / 2.0
+        if (hiddenFits(diameterDp, metrics, hidden, keepState, keepHint, mid)) low = mid else high = mid
+    }
+    return low
+}
+
+/** Resolved hidden stack: what the dial renders while the word is concealed. */
+data class DialHiddenStack(
+    val iconDp: Double,
+    val iconGapDp: Double,
+    /** 0 → the state word does not fit this disc and is not drawn. */
+    val stateFontSp: Double,
+    val stateLineSp: Double,
+    val stateGapDp: Double,
+    /** 0 → the 点按显示词语 hint does not fit this disc and is not drawn. */
+    val hintFontSp: Double,
+) {
+    val showsState: Boolean get() = stateFontSp > 0.0
+    val showsHint: Boolean get() = hintFontSp > 0.0
+}
+
+private fun hiddenStack(
+    hidden: DialHiddenMetrics,
+    keepState: Boolean,
+    keepHint: Boolean,
+    scale: Double,
+): DialHiddenStack = DialHiddenStack(
+    iconDp = hidden.iconDp * scale,
+    iconGapDp = hidden.iconGapDp * scale,
+    stateFontSp = if (keepState) hidden.stateFontSp * scale else 0.0,
+    stateLineSp = if (keepState) hidden.stateLineSp * scale else 0.0,
+    stateGapDp = if (keepState) hidden.stateGapDp * scale else 0.0,
+    hintFontSp = if (keepHint) hidden.hintFontSp * scale else 0.0,
+)
+
+/** Probes the hidden stack's bisection makes (it resolves 0.6 in ~1e-6). */
+private const val HIDDEN_BISECTION_STEPS = 20
 
 /**
  * Lines [text] occupies when broken greedily into lines of [unitsPerLine] —

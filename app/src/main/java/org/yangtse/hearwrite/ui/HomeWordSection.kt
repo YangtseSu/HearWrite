@@ -42,6 +42,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,6 +61,10 @@ private const val SAMPLE_EN = "apple | n. | 苹果\nbanana | n. | 香蕉\nschool
 
 /** 示例 content: bare 汉字词语 (zh-CN dictation). */
 private const val SAMPLE_CJK = "香蕉\n学校\n苹果\n月亮\n生日"
+
+/** 示例 labels — also the keys the pending-sample confirm is saved under. */
+private const val SAMPLE_EN_LABEL = "英文示例"
+private const val SAMPLE_CJK_LABEL = "汉字示例"
 
 /**
  * 单词列表 section (alice's WordInputSection + section header): the header row
@@ -110,8 +115,13 @@ fun WordListSection(
     // 清空/示例 replace whatever the user typed, so they ask first — except
     // over a draft that is blank, where the 示例 presets fill straight away
     // (清空 is disabled there: see the footer).
-    var confirmClear by remember { mutableStateOf(false) }
-    var pendingSample by remember { mutableStateOf<Pair<String, String>?>(null) }
+    //
+    // Both are questions the user is mid-answer on, so they survive a
+    // configuration change: a rotation used to dismiss 清空草稿？ without an
+    // answer (the same defect as 结束听写？ on the dictation screen, AUDIT C6).
+    // The sample is held by its label, which is all rememberSaveable can carry.
+    var confirmClear by rememberSaveable { mutableStateOf(false) }
+    var pendingSample by rememberSaveable { mutableStateOf<String?>(null) }
     // A 展示态 whose list is empty renders the editor, so filling it is the
     // sample preset's job and the mode must flip with it (see emptyDisplay use).
     val emptyDisplay = displayMode && wordCount == 0
@@ -124,7 +134,7 @@ fun WordListSection(
             if (emptyDisplay) onToggleDisplayMode()
             onFillSample(sample)
         } else {
-            pendingSample = label to sample
+            pendingSample = label
         }
     }
     Column(modifier = modifier) {
@@ -263,10 +273,10 @@ fun WordListSection(
                 // CountBadge right above this row, so repeating it here would
                 // state the same number twice in one view.
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = { requestSample("英文示例", SAMPLE_EN) }) {
+                TextButton(onClick = { requestSample(SAMPLE_EN_LABEL, SAMPLE_EN) }) {
                     Text("英文示例")
                 }
-                TextButton(onClick = { requestSample("汉字示例", SAMPLE_CJK) }) {
+                TextButton(onClick = { requestSample(SAMPLE_CJK_LABEL, SAMPLE_CJK) }) {
                     Text("汉字示例")
                 }
                 // Pressable at 0 words this button only opened a confirm dialog
@@ -297,7 +307,8 @@ fun WordListSection(
                 },
             )
         }
-        pendingSample?.let { (label, sample) ->
+        pendingSample?.let { label ->
+            val sample = if (label == SAMPLE_CJK_LABEL) SAMPLE_CJK else SAMPLE_EN
             AlertDialog(
                 onDismissRequest = { pendingSample = null },
                 title = { Text("覆盖当前草稿？") },

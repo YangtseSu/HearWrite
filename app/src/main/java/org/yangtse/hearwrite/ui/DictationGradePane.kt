@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -68,83 +69,92 @@ fun DictationGradePane(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = 20.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            // The judged rows are text pairs to compare by eye; on a wide window
+            // an edge-to-edge list makes the eye travel the full width between
+            // the expected word and what was written (AUDIT C6).
+            modifier = Modifier
+                .fillMaxHeight()
+                .contentWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                "拍照批改",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onBack) { Text("返回成绩") }
-        }
-
-        if (busy) {
-            OcrProgressStrip(
-                phase = phase,
-                onCancel = onCancel,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-        }
-
-        error?.let { message ->
-            Surface(
-                color = MaterialTheme.colorScheme.errorContainer,
-                contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(Modifier.padding(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.ErrorOutline, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text(
-                            message,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(start = 8.dp),
-                        )
-                    }
-                    Row {
-                        if (retryable) {
-                            TextButton(onClick = onRetry, enabled = !busy) { Text("重试") }
+                Text(
+                    "拍照批改",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onBack) { Text("返回成绩") }
+            }
+
+            if (busy) {
+                OcrProgressStrip(
+                    phase = phase,
+                    onCancel = onCancel,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            }
+
+            error?.let { message ->
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.ErrorOutline, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text(
+                                message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
                         }
-                        TextButton(onClick = onCamera, enabled = !busy && !pickerBusy) {
-                            Text("重新拍照")
+                        Row {
+                            if (retryable) {
+                                TextButton(onClick = onRetry, enabled = !busy) { Text("重试") }
+                            }
+                            TextButton(onClick = onCamera, enabled = !busy && !pickerBusy) {
+                                Text("重新拍照")
+                            }
                         }
                     }
                 }
             }
-        }
 
-        when {
-            result == null -> GradeEmptyState(
-                pickerBusy = pickerBusy,
-                busy = busy,
-                onCamera = onCamera,
-                onGallery = onGallery,
-            )
+            when {
+                result == null -> GradeEmptyState(
+                    pickerBusy = pickerBusy,
+                    busy = busy,
+                    onCamera = onCamera,
+                    onGallery = onGallery,
+                )
 
-            result.expectedTotal == 0 -> Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) { Text("本场没有可批改的词") }
+                result.expectedTotal == 0 -> Box(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) { Text("本场没有可批改的词") }
 
-            else -> GradeReview(
-                result = result,
-                selected = selected,
-                busy = busy,
-                pickerBusy = pickerBusy,
-                onToggle = onToggle,
-                onRecapture = onCamera,
-                onConfirm = onConfirm,
-                modifier = Modifier.weight(1f),
-            )
+                else -> GradeReview(
+                    result = result,
+                    selected = selected,
+                    busy = busy,
+                    pickerBusy = pickerBusy,
+                    onToggle = onToggle,
+                    onRecapture = onCamera,
+                    onConfirm = onConfirm,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }

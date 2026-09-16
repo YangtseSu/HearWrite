@@ -159,37 +159,45 @@ fun StatsScreen(
             // each recorded run is its own row, composing only what is on
             // screen. A nested LazyColumn inside this one would be a crash, so
             // the record's card is drawn per row instead (see [SectionCardRow]).
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
-                contentPadding = PaddingValues(bottom = 32.dp),
+            // The list is capped to a reading measure and centred, so a tablet
+            // or desktop window does not stretch every card edge to edge; the
+            // Box only centres, the list still fills the viewport's height.
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.TopCenter,
             ) {
-                when {
-                    // A whole-viewport item, so the spinner / empty state / error
-                    // card sits where it did when the page was a scroll column.
-                    ui.loading -> item {
-                        Box(
-                            modifier = Modifier.fillParentMaxSize(),
-                            contentAlignment = Alignment.Center,
-                        ) { CircularProgressIndicator() }
-                    }
+                LazyColumn(
+                    modifier = Modifier.fillMaxHeight().contentWidth().padding(innerPadding),
+                    contentPadding = PaddingValues(bottom = 32.dp),
+                ) {
+                    when {
+                        // A whole-viewport item, so the spinner / empty state / error
+                        // card sits where it did when the page was a scroll column.
+                        ui.loading -> item {
+                            Box(
+                                modifier = Modifier.fillParentMaxSize(),
+                                contentAlignment = Alignment.Center,
+                            ) { CircularProgressIndicator() }
+                        }
 
-                    ui.loadFailed -> item {
-                        LoadFailed(
-                            onRetry = viewModel::retryLoad,
-                            modifier = Modifier.fillParentMaxSize(),
+                        ui.loadFailed -> item {
+                            LoadFailed(
+                                onRetry = viewModel::retryLoad,
+                                modifier = Modifier.fillParentMaxSize(),
+                            )
+                        }
+
+                        ui.summary.runs == 0 -> item {
+                            EmptyStats(modifier = Modifier.fillParentMaxSize())
+                        }
+
+                        else -> statsContent(
+                            ui = ui,
+                            showAllRecent = showAllRecent,
+                            onToggleRecent = { showAllRecent = !showAllRecent },
+                            onJumpToSource = onOpenLibraryPreview,
                         )
                     }
-
-                    ui.summary.runs == 0 -> item {
-                        EmptyStats(modifier = Modifier.fillParentMaxSize())
-                    }
-
-                    else -> statsContent(
-                        ui = ui,
-                        showAllRecent = showAllRecent,
-                        onToggleRecent = { showAllRecent = !showAllRecent },
-                        onJumpToSource = onOpenLibraryPreview,
-                    )
                 }
             }
         }

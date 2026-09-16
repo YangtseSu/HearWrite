@@ -2,10 +2,12 @@ package org.yangtse.hearwrite.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -114,14 +116,16 @@ fun LibraryDrawScreen(
                         // button must yield to the keyboard themselves.
                         .navigationBarsPadding()
                         .imePadding(),
+                    // The bar's surface stays full width (its divider reads as
+                    // the screen's edge); its content is capped and centred so
+                    // the summary, the field and the start button keep one
+                    // measure on a wide window (AUDIT C6).
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     HorizontalDivider()
-                    // The pool the button argues for stays pinned with it (and
-                    // it is the only place these numbers appear, so the summary
-                    // cannot contradict a second copy further up the list).
                     Column(
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .contentWidth()
                             .padding(start = 20.dp, end = 20.dp, top = 10.dp),
                     ) {
                         Text(
@@ -149,7 +153,7 @@ fun LibraryDrawScreen(
                     // overflows every phone; wrapping keeps all four reachable.
                     FlowRow(
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .contentWidth()
                             .padding(start = 20.dp, end = 20.dp, top = 6.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -199,7 +203,7 @@ fun LibraryDrawScreen(
                             }
                         },
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .contentWidth()
                             .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 12.dp),
                     ) {
                         Text(
@@ -210,10 +214,15 @@ fun LibraryDrawScreen(
             }
         },
     ) { innerPadding ->
+        // The Scaffold content slot places a narrower child at its start, so the
+        // capped column is centred by this Box rather than hugging the left edge
+        // (AUDIT C6).
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         when {
             pool.loading -> Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxHeight()
+                    .contentWidth()
                     .padding(innerPadding)
                     .padding(32.dp),
                 verticalArrangement = Arrangement.Center,
@@ -223,7 +232,8 @@ fun LibraryDrawScreen(
             }
             pool.lists.isEmpty() -> Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxHeight()
+                    .contentWidth()
                     .padding(innerPadding)
                     .padding(32.dp),
                 verticalArrangement = Arrangement.Center,
@@ -239,7 +249,8 @@ fun LibraryDrawScreen(
             }
             else -> LazyColumn(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxHeight()
+                    .contentWidth()
                     .padding(innerPadding),
             ) {
                 item {
@@ -293,6 +304,7 @@ fun LibraryDrawScreen(
                     HorizontalDivider()
                 }
             }
+        }
         }
     }
 }

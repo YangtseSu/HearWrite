@@ -7,11 +7,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -62,8 +64,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
@@ -80,39 +84,39 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import org.yangtse.hearwrite.domain.DialHiddenMetrics
 import org.yangtse.hearwrite.domain.DialMetrics
+import org.yangtse.hearwrite.domain.DialStageLayout
 import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.PlayState
 import org.yangtse.hearwrite.domain.WordEntry
-import org.yangtse.hearwrite.domain.dialBoxWidthDp
 import org.yangtse.hearwrite.domain.dialFit
+import org.yangtse.hearwrite.domain.dialHiddenStack
+import org.yangtse.hearwrite.domain.dialStageGeometry
+import org.yangtse.hearwrite.domain.displayWidth
 import org.yangtse.hearwrite.domain.isCjkEntry
 import org.yangtse.hearwrite.domain.parseWordLine
 import org.yangtse.hearwrite.domain.speakTextFromEntry
 import kotlin.math.ceil
 
 /**
- * Dial geometry. [DIAL_RING_SIZE] is the countdown ring; the word sits on
- * [DIAL_INNER_SIZE]'s disc, which clips every child to its circle — the reason
- * the contents are sized by [dialFit] instead of a hand-picked stack
- * (AUDIT C2: the 展开全部 button used to fall outside the disc and vanish).
- */
-private val DIAL_RING_SIZE = 248.dp
-private val DIAL_INNER_SIZE = 204.dp
-
-/**
  * What the dial's content is measured against — disc diameter, font sizes and
  * line boxes of the styles it renders. Kept next to the composables that use
  * them so the two cannot drift, and read as data by the fit solver in
  * `domain/DialFit.kt`.
+ *
+ * The diameter is a parameter because the disc is no longer a fixed 204 dp: the
+ * stage solves the ring against the window it is given (AUDIT C6), and the fit
+ * must be computed against the disc that is actually drawn.
  */
-private val DIAL_METRICS = DialMetrics(
-    diameterDp = DIAL_INNER_SIZE.value.toDouble(),
+private fun dialMetrics(discDp: Double, fontScale: Double) = DialMetrics(
+    diameterDp = discDp,
     wordMaxSp = 40.0, // displayMedium
     wordMinSp = 22.0,
     wordLineRatio = 52.0 / 40.0, // displayMedium's leading ÷ its size
@@ -121,10 +125,43 @@ private val DIAL_METRICS = DialMetrics(
     wordPosGapDp = 6.0,
     glossMaxLines = 2,
     glossGapDp = 2.0,
+    fontScale = fontScale,
 )
 
 /** Height of the 展开全部 row under the dial — a Material text button. */
 private val DIAL_DETAIL_ROW_HEIGHT = 40.dp
+
+/**
+ * What the stage spends under the ring besides the dial: the 展开全部 row, the
+ * seconds readout (`displaySmall`'s 42 sp leading) and the two word actions with
+ * their gap. Measured here and handed to `dialStageGeometry`, which needs the
+ * real numbers to decide between stacking, going two-column and scrolling.
+ */
+private const val STAGE_COUNTDOWN_LINE_SP = 42.0
+private val STAGE_ACTIONS_TOP_GAP = 16.dp
+private val STAGE_ACTION_HEIGHT = 52.dp
+
+/**
+ * Width the beside row needs before the stage splits into two columns: the two
+ * word actions at their minimum (each a 48 dp target plus label) plus the
+ * 展开全部 / seconds block. Below this the row would squeeze the actions, so the
+ * window is simply too narrow to split.
+ */
+private val STAGE_READOUTS_WIDTH = 220.dp
+
+/** Widest the readout stack grows to — beyond this the two actions drift apart. */
+private val STAGE_ACTIONS_MAX_WIDTH = 420.dp
+
+/**
+ * The dial's size when the stage has room for it: the phone value — the size
+ * AUDIT C2's geometry was verified at — and the larger one used once the stage
+ * box is tall enough to carry it, where a phone-sized dial on a tablet or an
+ * unfolded foldable reads as an ornament rather than the stage's centrepiece
+ * (AUDIT C6).
+ */
+private const val DIAL_RING_PHONE = 248.0
+private const val DIAL_RING_EXPANDED = 320.0
+private const val DIAL_STAGE_TALL = 700.0
 
 /** Chips the finish card composes before offering 查看全部. */
 private const val WRONG_CHIP_CAP = 24
@@ -152,8 +189,12 @@ fun DictationScreen(
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
     val runLines by viewModel.activeLines.collectAsStateWithLifecycle()
-    var showWord by remember { mutableStateOf(false) }
-    var exitDialogVisible by remember { mutableStateOf(false) }
+    // Saved across configuration changes (AUDIT C6): both are answers the user
+    // is in the middle of giving, and rotating the phone — or resizing the
+    // window on a foldable — used to re-hide a word the student had just
+    // revealed and dismiss the 结束听写？ question without an answer.
+    var showWord by rememberSaveable { mutableStateOf(false) }
+    var exitDialogVisible by rememberSaveable { mutableStateOf(false) }
 
     // A dictation session runs for minutes with nothing to touch — keep the
     // screen awake while it is up (active, paused or the finish card). Leaving
@@ -164,14 +205,25 @@ fun DictationScreen(
         onDispose { view.keepScreenOn = false }
     }
 
-    // The word re-hides on every word change (reveal must not leak across words).
+    // The word re-hides on every word change (reveal must not leak across words)
+    // and when a new run starts (复习错词 round) even if the index is unchanged.
+    // Keyed on the *value that changed*, not on the composition: a plain
+    // LaunchedEffect(ui.index) re-runs after a configuration change — a fresh
+    // composition with the same key — and would immediately re-hide the word the
+    // student had revealed, defeating the savedInstanceState above (AUDIT C6).
+    // Skipping the first emission is what makes these effects verb, not state.
+    var previousIndex by rememberSaveable { mutableIntStateOf(ui.index) }
+    var previousFinished by rememberSaveable { mutableStateOf(ui.finished) }
     LaunchedEffect(ui.index) {
-        showWord = false
-    }
-    // … and when a new run starts (复习错词 round) even if the index is unchanged.
-    LaunchedEffect(ui.finished) {
-        if (!ui.finished) {
+        if (ui.index != previousIndex) {
+            previousIndex = ui.index
             showWord = false
+        }
+    }
+    LaunchedEffect(ui.finished) {
+        if (ui.finished != previousFinished) {
+            previousFinished = ui.finished
+            if (!ui.finished) showWord = false
         }
     }
 
@@ -338,7 +390,18 @@ private fun DictationContent(
         }
     }
 
-    Column(modifier = modifier) {
+    // One capped, centred column for the whole dictation surface: the progress
+    // rows, the stage and the playback panel share one reading measure on a
+    // tablet instead of each stretching edge to edge (AUDIT C6).
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.TopCenter,
+    ) {
+    Column(
+        modifier = Modifier
+            .fillMaxHeight()
+            .contentWidth(),
+    ) {
         // Position counter: the word being dictated (index + 1) while
         // active; at completion the engine index parks on the last word, so
         // the finished run shows total / total (the bar matches the count).
@@ -459,65 +522,14 @@ private fun DictationContent(
                 val headword = remember(runLines, ui.index) {
                     runLines.getOrNull(ui.index)?.let(::speakTextFromEntry).orEmpty()
                 }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    WatchDial(
-                        ui = ui,
-                        line = runLines.getOrNull(ui.index),
-                        showWord = showWord,
-                        onToggleWord = onToggleWord,
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        OutlinedButton(
-                            onClick = onToggleWord,
-                            enabled = ui.isActive,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(52.dp)
-                                .padding(horizontal = 4.dp),
-                        ) {
-                            Icon(
-                                if (showWord) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(if (showWord) "隐藏词语" else "显示词语")
-                        }
-                        // Marking the current word is a toggle: the same button
-                        // takes the mark back, so a mis-tap mid-run no longer
-                        // costs the score (AUDIT C2). The label says which way
-                        // it will go, and 取消标记 — an undo of a mark *this* run
-                        // made — is tonally quiet, not the error container the
-                        // destructive 标记 keeps.
-                        val marked = headword in ui.runMarks
-                        Button(
-                            onClick = viewModel::toggleCurrentWrong,
-                            enabled = ui.isActive,
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(52.dp)
-                                .padding(horizontal = 4.dp),
-                            colors = if (marked) {
-                                ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                                )
-                            } else {
-                                ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                                )
-                            },
-                        ) {
-                            Text(if (marked) "取消标记" else "标记错词")
-                        }
-                    }
-                }
+                DictationStage(
+                    ui = ui,
+                    line = runLines.getOrNull(ui.index),
+                    showWord = showWord,
+                    marked = headword in ui.runMarks,
+                    onToggleWord = onToggleWord,
+                    onToggleMark = viewModel::toggleCurrentWrong,
+                )
             }
         }
 
@@ -531,6 +543,7 @@ private fun DictationContent(
             onPrevious = viewModel::goToPrevious,
             onNext = viewModel::skipToNext,
         )
+    }
     }
 }
 
@@ -561,15 +574,25 @@ private fun FinishCard(
 ) {
     val messages = LocalMessages.current
     val wrong = ui.wrongWords
-    var clearWrongConfirm by remember { mutableStateOf(false) }
-    var showAllWrong by remember { mutableStateOf(false) }
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    // Both are answers mid-flight (an open confirm, a list the user expanded):
+    // a rotation must not drop them any more than it may drop the reveal flag.
+    var clearWrongConfirm by rememberSaveable { mutableStateOf(false) }
+    var showAllWrong by rememberSaveable { mutableStateOf(false) }
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter,
     ) {
+        Column(
+            // The score card is a reading surface: the score lines, the two
+            // replay buttons and the 错词本 chips read best at a capped measure
+            // (AUDIT C6).
+            modifier = Modifier
+                .fillMaxHeight()
+                .contentWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
         val doneColor = hearWriteSemantics.success
         Icon(
             Icons.Filled.CheckCircle,
@@ -772,131 +795,272 @@ private fun FinishCard(
 
         Button(onClick = onClose, modifier = Modifier.padding(top = 12.dp)) { Text("返回") }
         Spacer(Modifier.height(8.dp))
+        }
     }
 }
 
 /**
- * The ring + reveal zone. Word hidden by default: a hearing icon and a hint;
- * the 显示词语 button below the dial reveals word, pinyin/POS and meaning.
- * The border flashes red while a wrong-word mark is in flight.
+ * The dictation stage: the dial plus its readouts (展开全部, the seconds, the
+ * reveal / 标记错词 actions), arranged for the window it is given (AUDIT C6).
  *
- * Every child is laid out inside a box solved by [dialFit] for the stack's own
- * height, so the disc's clip can never reach it; a stack that outgrows the disc
- * says so with an 展开全部 button under the dial — outside the clip, where no
- * geometry can swallow it — rather than being silently cut in half (AUDIT C2).
+ * The dial used to be a fixed 248 dp ring in a non-scrolling `weight(1f)` box:
+ * in landscape the box is ~110 dp tall, so the ring drew over the progress row
+ * and the panel with no way to reach the parts that were cut off. The stage now
+ * measures its own box and asks `dialStageGeometry` which of three arrangements
+ * to draw — stacked (portrait phone), two columns with the readouts beside the
+ * ring (short-and-wide), or stacked-and-scrolling when even the smallest ring
+ * does not fit. The word itself is hidden by default and revealed by tapping the
+ * dial (AGENTS.md:94 "tap to reveal, the core interaction").
  */
 @Composable
-private fun WatchDial(
+private fun DictationStage(
     ui: DictationUiState,
     line: String?,
     showWord: Boolean,
+    marked: Boolean,
     onToggleWord: () -> Unit,
+    onToggleMark: () -> Unit,
 ) {
     val entry = remember(line) { line?.let(::parseWordLine) }
     val isCjk = remember(line) { line?.let(::isCjkEntry) ?: false }
-    var detailOpen by remember(entry?.word) { mutableStateOf(false) }
+    // Reading the full word is an answer in progress too: keep the card open
+    // across a rotation (same reasoning as the screen's reveal flag).
+    var detailOpen by rememberSaveable(entry?.word) { mutableStateOf(false) }
+    val density = LocalDensity.current
+    val fontScale = density.fontScale.toDouble()
+    // What the readouts cost, in the same units the renderer will use: the
+    // seconds slot is a font-scale-driven line box, and the actions scale with
+    // it too — assuming a dp figure here would break at font_scale 1.5.
+    // What the readouts cost, measured in the same units the renderer will use:
+    // the seconds slot is a font-scale-driven line box and the detail row is a
+    // Material text button, so a hard-coded dp figure would break at
+    // font_scale 1.5. Both shapes are given to the solver — their difference is
+    // exactly why a landscape stage can fit beside what it cannot stack.
+    val detailRowDp = DIAL_DETAIL_ROW_HEIGHT.value.toDouble()
+    val actionHeightDp = STAGE_ACTION_HEIGHT.value.toDouble()
+    val gapDp = STAGE_ACTIONS_TOP_GAP.value.toDouble()
+    val secondsLineDp = STAGE_COUNTDOWN_LINE_SP * fontScale
+    val stackedReadoutsHeightDp = detailRowDp + secondsLineDp + gapDp + actionHeightDp
+    val besideReadoutsHeightDp = maxOf(secondsLineDp, actionHeightDp)
 
-    val fraction = ui.remainingMs?.let {
-        val totalMs = (ui.intervalSec * 1000).coerceAtLeast(1.0)
-        (it / totalMs).coerceIn(0.0, 1.0).toFloat()
-    }
-    val ringColor = MaterialTheme.colorScheme.primary
-    val trackColor = hearWriteSemantics.ringTrack
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val availableHeightDp = maxHeight.value.toDouble()
+        // Two columns are a window-level decision, never a stage-local one: this
+        // box is ~411 dp wide on a portrait phone, which is more than a ring plus
+        // the readout row need, so a local threshold would split a phone.
+        val wideWindow = isWindowAtLeast(WIDTH_DP_MEDIUM)
+        // The dial's size when there is room for it: the phone value, or the
+        // larger one once the stage is tall enough to carry it (a tablet or an
+        // unfolded foldable would otherwise show a phone-sized dial as an
+        // ornament). Gated on the stage box, not the window: a landscape phone
+        // is wide but its stage is short, and the solver's height check decides
+        // what actually fits. The fit solver is handed the resulting disc, so
+        // the word scales with the dial.
+        val preferredRingDp =
+            if (availableHeightDp >= DIAL_STAGE_TALL) DIAL_RING_EXPANDED else DIAL_RING_PHONE
 
-    val seconds = ui.remainingMs?.let { ceil(it / 1000.0).toInt() }
-    val counting = ui.isActive && seconds != null
+        val geometry = dialStageGeometry(
+            availableWidthDp = maxWidth.value.toDouble(),
+            availableHeightDp = availableHeightDp,
+            stackedReadoutsHeightDp = stackedReadoutsHeightDp,
+            besideReadoutsHeightDp = besideReadoutsHeightDp,
+            readoutsWidthDp = STAGE_READOUTS_WIDTH.value.toDouble(),
+            twoColumnsAllowed = wideWindow,
+            preferredRingDp = preferredRingDp,
+        )
+        // The fit is solved against the disc actually drawn, so "the word holds
+        // its lines inside the disc" survives the ring shrinking.
+        val metrics = remember(geometry.discDp, fontScale) {
+            dialMetrics(geometry.discDp, fontScale)
+        }
+        val needsDetail = showWord && entry != null &&
+            dialFit(entry.word, entry.meaning, entry.pos != null, metrics).needsDetail
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        CountdownRing(
-            progressFraction = fraction,
-            modifier = Modifier
-                .size(DIAL_RING_SIZE)
-                // Tap-to-reveal (AGENTS.md:94 "tap to reveal, the core
-                // interaction"): the whole dial is the target, so a student
-                // glancing up from paper hits it anywhere — the 显示词语
-                // button below stays as the visible label. Gated on isActive
-                // like that button, and merged into one semantics node so
-                // TalkBack reads the same action the screen shows.
-                .clickable(
-                    enabled = ui.isActive,
-                    role = Role.Button,
-                    onClickLabel = if (showWord) "隐藏词语" else "显示词语",
-                    onClick = onToggleWord,
-                ),
-            color = ringColor,
-            trackColor = trackColor,
-        ) {
-            DialCenter(
+        val dial: @Composable () -> Unit = {
+            DialRing(
+                ui = ui,
                 entry = entry,
                 isCjk = isCjk,
-                markedFlash = ui.markedFlash,
                 showWord = showWord,
-                playing = ui.state == PlayState.PLAYING,
+                ringDp = geometry.ringDp.dp,
+                metrics = metrics,
+                onToggleWord = onToggleWord,
             )
         }
-
-        // The 展开全部 entry lives under the dial, not inside it: the disc's
-        // clip is the reason the old one was invisible (AUDIT C2). The row is
-        // always laid out, whether or not this word needs it — same reasoning
-        // as the countdown slot below: revealing a word must not shift the dial
-        // and the seconds readout the student is watching, and a long word only
-        // changes what the row contains.
-        Box(
-            modifier = Modifier.height(DIAL_DETAIL_ROW_HEIGHT),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (showWord && entry != null) {
-                val metrics = DIAL_METRICS.copy(
-                    fontScale = LocalDensity.current.fontScale.toDouble(),
+        // The readouts, in the two shapes the arrangements need. Both render
+        // the same controls and the same semantics; only their axis differs,
+        // because that is what decides whether the stage fits at all: stacked
+        // they are a ~150 dp column, side by side a ~52 dp row (AUDIT C6).
+        val detailEntry: @Composable () -> Unit = {
+            // The 展开全部 entry lives outside the disc: the clip is the reason
+            // the old one was invisible (AUDIT C2). The slot is always laid out,
+            // whether or not this word needs it — revealing a word must not
+            // shift the dial and the seconds the student watches, and a long
+            // word only changes what the slot contains.
+            if (needsDetail) {
+                TextButton(onClick = { detailOpen = true }) { Text("展开全部") }
+            }
+        }
+        val secondsText: @Composable () -> Unit = {
+            // Seconds readout; clearAndSetSemantics re-announces on each whole
+            // second so TalkBack reports the shrinking countdown. An invisible
+            // sizer reserves the slot: same style AND same script mix (digit +
+            // CJK) as the live text, so the same fallback fonts measure and the
+            // row never changes size when the countdown appears/disappears. No
+            // fixed dp: the slot grows with the system font scale instead of
+            // clipping (a min-height cannot cover every scale; a fixed height
+            // clips the text once the scale outgrows it). The sizer is cleared
+            // from semantics — alpha(0f) hides it visually but not from
+            // TalkBack. It reserves the widest readout ("10 秒",
+            // [COUNTDOWN_SLOT_TEXT]), which is what makes the claim hold: an
+            // "8 秒" placeholder was a glyph narrower than the 10 s countdown it
+            // stood in for (AUDIT C2).
+            val seconds = ui.remainingMs?.let { ceil(it / 1000.0).toInt() }
+            val counting = ui.isActive && seconds != null
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    COUNTDOWN_SLOT_TEXT,
+                    style = MaterialTheme.typography.displaySmall,
+                    modifier = Modifier
+                        .alpha(0f)
+                        .clearAndSetSemantics {},
                 )
-                if (dialFit(entry.word, entry.meaning, entry.pos != null, metrics).needsDetail) {
-                    TextButton(onClick = { detailOpen = true }) {
-                        Text("展开全部")
-                    }
+                if (counting) {
+                    Text(
+                        "$seconds 秒",
+                        style = MaterialTheme.typography.displaySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clearAndSetSemantics {
+                            contentDescription = "剩余 $seconds 秒"
+                            liveRegion = LiveRegionMode.Polite
+                        },
+                    )
+                } else {
+                    Text(
+                        "—",
+                        style = MaterialTheme.typography.displaySmall,
+                        color = hearWriteSemantics.ringTrack,
+                        modifier = Modifier.clearAndSetSemantics {},
+                    )
                 }
             }
         }
-
-        // Seconds readout; clearAndSetSemantics re-announces on each whole
-        // second so TalkBack reports the shrinking countdown. An invisible
-        // sizer reserves the slot: same style AND same script mix (digit +
-        // CJK) as the live text, so the same fallback fonts measure and the
-        // row never changes size when the countdown appears/disappears. No
-        // fixed dp: the slot grows with the system font scale instead of
-        // clipping (a min-height cannot cover every scale; a fixed height
-        // clips the text once the scale outgrows it). The sizer is cleared
-        // from semantics — alpha(0f) hides it visually but not from TalkBack.
-        // It reserves the widest readout ("10 秒", [COUNTDOWN_SLOT_TEXT]), which
-        // is what makes the claim hold: an "8 秒" placeholder was a glyph
-        // narrower than the 10 s countdown it stood in for (AUDIT C2).
-        Box(
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                COUNTDOWN_SLOT_TEXT,
-                style = MaterialTheme.typography.displaySmall,
-                modifier = Modifier
-                    .alpha(0f)
-                    .clearAndSetSemantics {},
-            )
-            if (counting) {
-                Text(
-                    "$seconds 秒",
-                    style = MaterialTheme.typography.displaySmall,
-                    color = ringColor,
-                    modifier = Modifier.clearAndSetSemantics {
-                        contentDescription = "剩余 $seconds 秒"
-                        liveRegion = LiveRegionMode.Polite
+        val wordActions: @Composable (Modifier) -> Unit = { rowModifier ->
+            Row(
+                modifier = rowModifier,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onToggleWord,
+                    enabled = ui.isActive,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(STAGE_ACTION_HEIGHT)
+                        .padding(horizontal = 4.dp),
+                ) {
+                    Icon(
+                        if (showWord) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (showWord) "隐藏词语" else "显示词语")
+                }
+                // Marking the current word is a toggle: the same button takes
+                // the mark back, so a mis-tap mid-run no longer costs the score
+                // (AUDIT C2). The label says which way it will go, and 取消标记
+                // — an undo of a mark *this* run made — is tonally quiet, not
+                // the error container 标记 keeps.
+                Button(
+                    onClick = onToggleMark,
+                    enabled = ui.isActive,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(STAGE_ACTION_HEIGHT)
+                        .padding(horizontal = 4.dp),
+                    colors = if (marked) {
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    } else {
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        )
                     },
-                )
-            } else {
-                Text(
-                    "—",
-                    style = MaterialTheme.typography.displaySmall,
-                    color = trackColor,
-                    modifier = Modifier.clearAndSetSemantics {},
+                ) {
+                    Text(if (marked) "取消标记" else "标记错词")
+                }
+            }
+        }
+        // Stacked: 展开全部, the seconds, then the actions under them. The
+        // heights here are the ones the solver was given, so the arrangement it
+        // chose is the arrangement that fits.
+        val readoutsColumn: @Composable () -> Unit = {
+            Column(
+                modifier = Modifier.contentWidth(STAGE_ACTIONS_MAX_WIDTH),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    modifier = Modifier.height(DIAL_DETAIL_ROW_HEIGHT),
+                    contentAlignment = Alignment.Center,
+                ) { detailEntry() }
+                secondsText()
+                wordActions(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = STAGE_ACTIONS_TOP_GAP),
                 )
             }
+        }
+        // Beside: everything on one row, so the stage only needs its tallest
+        // control (52 dp) instead of their sum. 展开全部 and the seconds share
+        // the leading block.
+        val readoutsRow: @Composable () -> Unit = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) { detailEntry() }
+                secondsText()
+                wordActions(Modifier.width(STAGE_ACTIONS_MAX_WIDTH))
+            }
+        }
+
+        // Three arrangements, one source: the geometry decides, the stage only
+        // renders. `scrolls` is the last resort — the dial keeps its floor size
+        // and the stage scrolls rather than cropping it.
+        val body: @Composable () -> Unit = {
+            when (geometry.layout) {
+                DialStageLayout.STACKED -> Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    dial()
+                    readoutsColumn()
+                }
+                DialStageLayout.BESIDE -> Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    dial()
+                    Spacer(Modifier.width(DIAL_STAGE_BESIDE_GAP))
+                    readoutsRow()
+                }
+            }
+        }
+        if (geometry.scrolls) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) { body() }
+        } else {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { body() }
         }
     }
 
@@ -905,6 +1069,58 @@ private fun WatchDial(
             entry = entry,
             isCjk = isCjk,
             onDismiss = { detailOpen = false },
+        )
+    }
+}
+
+/** Gap between the ring and the readouts in the two-column arrangement. */
+private val DIAL_STAGE_BESIDE_GAP = 16.dp
+
+/**
+ * The ring and the disc it clips its content to. Sized by the caller (the stage
+ * solved it from the window) and by [metrics] for the content fit, so a shrunk
+ * ring still shows a whole word.
+ */
+@Composable
+private fun DialRing(
+    ui: DictationUiState,
+    entry: WordEntry?,
+    isCjk: Boolean,
+    showWord: Boolean,
+    ringDp: Dp,
+    metrics: DialMetrics,
+    onToggleWord: () -> Unit,
+) {
+    val fraction = ui.remainingMs?.let {
+        val totalMs = (ui.intervalSec * 1000).coerceAtLeast(1.0)
+        (it / totalMs).coerceIn(0.0, 1.0).toFloat()
+    }
+    CountdownRing(
+        progressFraction = fraction,
+        modifier = Modifier
+            .size(ringDp)
+            // Tap-to-reveal (AGENTS.md:94 "tap to reveal, the core
+            // interaction"): the whole dial is the target, so a student
+            // glancing up from paper hits it anywhere — the 显示词语
+            // button stays as the visible label. Gated on isActive like that
+            // button, and merged into one semantics node so TalkBack reads the
+            // same action the screen shows.
+            .clickable(
+                enabled = ui.isActive,
+                role = Role.Button,
+                onClickLabel = if (showWord) "隐藏词语" else "显示词语",
+                onClick = onToggleWord,
+            ),
+        color = MaterialTheme.colorScheme.primary,
+        trackColor = hearWriteSemantics.ringTrack,
+    ) {
+        DialCenter(
+            entry = entry,
+            isCjk = isCjk,
+            markedFlash = ui.markedFlash,
+            showWord = showWord,
+            playing = ui.state == PlayState.PLAYING,
+            metrics = metrics,
         )
     }
 }
@@ -924,6 +1140,7 @@ private fun DialCenter(
     markedFlash: Boolean,
     showWord: Boolean,
     playing: Boolean,
+    metrics: DialMetrics,
 ) {
     val flashColor by animateColorAsState(
         targetValue = if (markedFlash) MaterialTheme.colorScheme.error else Color.Transparent,
@@ -938,12 +1155,12 @@ private fun DialCenter(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
-    val metrics = DIAL_METRICS.copy(fontScale = LocalDensity.current.fontScale.toDouble())
     val fit = dialFit(entry?.word, entry?.meaning, entry?.pos != null, metrics)
+    val stateText = if (playing) "听写中" else "已暂停"
 
     Surface(
         modifier = Modifier
-            .size(DIAL_INNER_SIZE)
+            .size(metrics.diameterDp.dp)
             .border(
                 width = 2.dp,
                 color = if (markedFlash) flashColor else MaterialTheme.colorScheme.outlineVariant,
@@ -987,7 +1204,7 @@ private fun DialCenter(
                             color = hintColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = DIAL_METRICS.wordPosGapDp.dp),
+                            modifier = Modifier.padding(top = metrics.wordPosGapDp.dp),
                         )
                     }
                     if (!entry.meaning.isNullOrEmpty() && fit.glossLines > 0) {
@@ -998,24 +1215,37 @@ private fun DialCenter(
                             maxLines = fit.glossLines,
                             overflow = TextOverflow.Ellipsis,
                             color = hintColor,
-                            modifier = Modifier.padding(top = DIAL_METRICS.glossGapDp.dp),
+                            modifier = Modifier.padding(top = metrics.glossGapDp.dp),
                         )
                     }
                 }
             } else {
-                // The hidden stack (icon + state word + tap hint) is fixed
-                // length, so its box needs no solving: the natural height feeds
-                // dialBoxWidthDp, and the column is width-constrained only —
-                // its height IS that stack, so the width computed for it is
-                // inside the disc by construction.
-                val hiddenHeightDp = DIAL_ICON_SIZE_DP +
-                    DIAL_ICON_GAP_DP +
-                    DIAL_STATE_LINE_SP * metrics.fontScale +
-                    DIAL_STATE_GAP_DP +
-                    DIAL_HINT_LINE_SP * metrics.fontScale
-                val boxWidth = dialBoxWidthDp(hiddenHeightDp, metrics)
+                // The hidden stack is solved like the revealed one, for the same
+                // reason: the disc is no longer a fixed 204 dp, and a landscape
+                // stage hands the dial ~70 dp — where the full 95 dp stack has
+                // √(D²−h²) = 0 and the dial rendered nothing at all (AUDIT C6,
+                // found on device). [dialHiddenStack] drops whole elements (the
+                // 点按显示词语 hint first, its 显示词语 button is right beside the
+                // dial) and scales what stays, so the disc always shows the
+                // hearing icon. At the portrait disc it returns the full stack at
+                // scale 1, so the geometry AUDIT C2 verified is untouched.
+                val hidden = dialHiddenStack(
+                    diameterDp = metrics.diameterDp,
+                    metrics = metrics,
+                    hidden = DialHiddenMetrics(
+                        iconDp = DIAL_ICON_SIZE_DP,
+                        iconGapDp = DIAL_ICON_GAP_DP,
+                        stateGapDp = DIAL_STATE_GAP_DP,
+                        stateFontSp = DIAL_STATE_FONT_SP,
+                        stateLineSp = DIAL_STATE_LINE_SP,
+                        stateUnits = displayWidth(stateText),
+                        hintFontSp = DIAL_HINT_FONT_SP,
+                        hintLineSp = DIAL_HINT_LINE_SP,
+                        hintUnits = displayWidth("点按显示词语"),
+                        fontScale = metrics.fontScale,
+                    ),
+                )
                 Column(
-                    modifier = Modifier.width(boxWidth.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
@@ -1023,24 +1253,33 @@ private fun DialCenter(
                         Icons.Filled.Hearing,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(40.dp),
+                        modifier = Modifier.size(hidden.iconDp.dp),
                     )
-                    Text(
-                        // The dial must not claim 听写中 while the pill says
-                        // 已暂停 (AUDIT C2): the state word follows playback.
-                        if (playing) "听写中" else "已暂停",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                    Text(
-                        "点按显示词语",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
+                    if (hidden.showsState) {
+                        Text(
+                            // The dial must not claim 听写中 while the pill says
+                            // 已暂停 (AUDIT C2): the state word follows playback.
+                            stateText,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = hidden.stateFontSp.sp,
+                                lineHeight = hidden.stateLineSp.sp,
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = hidden.iconGapDp.dp),
+                        )
+                    }
+                    if (hidden.showsHint) {
+                        Text(
+                            "点按显示词语",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = hidden.hintFontSp.sp,
+                            ),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = hidden.stateGapDp.dp),
+                        )
+                    }
                 }
             }
         }
@@ -1051,9 +1290,11 @@ private fun DialCenter(
 private const val DIAL_ICON_SIZE_DP = 40.0
 private const val DIAL_ICON_GAP_DP = 8.0
 private const val DIAL_STATE_GAP_DP = 4.0
-/** `labelMedium`'s line height, for the 点按显示词语 hint. */
+/** `labelMedium`'s size and line height, for the 点按显示词语 hint. */
+private const val DIAL_HINT_FONT_SP = 13.0
 private const val DIAL_HINT_LINE_SP = 19.0
-/** `titleMedium`'s line height, for the 听写中 state word. */
+/** `titleMedium`'s size and line height, for the 听写中 state word. */
+private const val DIAL_STATE_FONT_SP = 16.0
 private const val DIAL_STATE_LINE_SP = 24.0
 
 /**

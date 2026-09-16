@@ -112,11 +112,16 @@ fun LibraryPreviewScreen(
                         // already own theirs). No imePadding here — the screen
                         // has no text input.
                         .navigationBarsPadding(),
+                    // The strip and its divider stay full width; the two action
+                    // rows are capped to the reading measure and centred, so
+                    // 随机顺序 and 听写本词表 stop drifting to opposite edges of
+                    // a tablet window (AUDIT C6).
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     HorizontalDivider()
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .contentWidth()
                             .padding(start = 20.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -180,7 +185,7 @@ fun LibraryPreviewScreen(
                     }
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .contentWidth()
                             .padding(start = 20.dp, end = 20.dp, bottom = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -221,55 +226,65 @@ fun LibraryPreviewScreen(
             }
         },
     ) { innerPadding ->
-        when (val current = entries) {
-            null -> Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(32.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                CircularProgressIndicator()
-            }
-            else -> {
-                // Expansion lives at the list level so it survives rows
-                // scrolling out of the LazyColumn cache window (Home parity);
-                // resets with the entries (the parsed → enriched swap).
-                var expanded by remember(current) { mutableStateOf(setOf<Int>()) }
-                LazyColumn(
+        // Entries and the loading state share one capped, centred column so the
+        // rows do not stretch edge to edge on a tablet (AUDIT C6). The Box only
+        // centres; the list still fills the viewport's height.
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            when (val current = entries) {
+                null -> Column(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding),
+                        .fillMaxHeight()
+                        .contentWidth()
+                        .padding(innerPadding)
+                        .padding(32.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    item {
-                        Text(
-                            "${viewModel.category} · 共 ${current.size} 词",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                        )
-                    }
-                    itemsIndexed(current) { index, entry ->
-                        EntryRow(
-                            entry = entry,
-                            index = index,
-                            selected = index == startIndex,
-                            expanded = index in expanded,
-                            onSelect = viewModel::selectStart,
-                            onToggleExpand = {
-                                // Non-expandable rows (short single-sense glosses)
-                                // only select the 起始词 — same gate as Home.
-                                if (glossNeedsExpansion(entry.meaning)) {
-                                    expanded = if (index in expanded) {
-                                        expanded - index
-                                    } else {
-                                        expanded + index
+                    CircularProgressIndicator()
+                }
+                else -> {
+                    // Expansion lives at the list level so it survives rows
+                    // scrolling out of the LazyColumn cache window (Home parity);
+                    // resets with the entries (the parsed → enriched swap).
+                    var expanded by remember(current) { mutableStateOf(setOf<Int>()) }
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .contentWidth()
+                            .padding(innerPadding),
+                    ) {
+                        item {
+                            Text(
+                                "${viewModel.category} · 共 ${current.size} 词",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            )
+                        }
+                        itemsIndexed(current) { index, entry ->
+                            EntryRow(
+                                entry = entry,
+                                index = index,
+                                selected = index == startIndex,
+                                expanded = index in expanded,
+                                onSelect = viewModel::selectStart,
+                                onToggleExpand = {
+                                    // Non-expandable rows (short single-sense glosses)
+                                    // only select the 起始词 — same gate as Home.
+                                    if (glossNeedsExpansion(entry.meaning)) {
+                                        expanded = if (index in expanded) {
+                                            expanded - index
+                                        } else {
+                                            expanded + index
+                                        }
                                     }
-                                }
-                            },
-                        )
-                        HorizontalDivider()
+                                },
+                            )
+                            HorizontalDivider()
+                        }
                     }
                 }
             }

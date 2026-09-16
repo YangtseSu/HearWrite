@@ -188,16 +188,6 @@ class DialFitTest {
         assertTrue(without.contentHeightDp < withGloss.contentHeightDp)
     }
 
-    // --- the hidden dial's box ---
-
-    @Test
-    fun `the hidden stack's box fits the disc`() {
-        val width = dialBoxWidthDp(40.0 + 8.0 + 24.0 + 4.0 + 19.0, metrics)
-        assertEquals(width, dialContentWidthDp(204.0, 95.0) - metrics.marginDp, 1e-9)
-        assertTrue(width > 160.0)
-        assertTrue(width < 204.0)
-    }
-
     // --- greedy line breaking (the wrapping the renderer performs) ---
 
     @Test

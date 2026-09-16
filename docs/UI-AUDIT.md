@@ -366,11 +366,11 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 | 双击可能叠栈 | `HearWriteApp.kt:52,57,58` vs `:98,110` | `LIBRARY_DRAW` 用了 `launchSingleTop`，`STATS`/`SETTINGS`/`LIBRARY` 没有——快速双击会压两层，返回一次还停在同屏 |
 | 死代码 | `HearWriteApp.kt:44-46`（`startDictation` 无引用）、`HomeViewModel.kt:351`（`adjustStartIndex` 无引用）、`HomePlaybackPanel.kt:20`（未用 import）、`StatsScreen.kt:50`（未用 import）、`SettingsProviderPages.kt:44`（未用 import） |
 
-### C6 · 大屏 / 横屏 / 大字号
+### C6 · 大屏 / 横屏 / 大字号 —— ✅ 已完成（见 §5 阶段 C）
 - 无 `WindowSizeClass`（全仓 0 命中），分类网格固定 `GridCells.Fixed(2)`（`LibraryScreen.kt:165`），首页编辑器在全宽展开（折叠屏上 CJK 行宽过长）。
 - 表盘写死 248dp/204dp（`DictationScreen.kt:585, 660`），而舞台是 `weight(1f)` 非滚动 `Box`；横屏（高度 ≈ 360dp 减去 64dp app bar 与 ~150dp 面板）时表盘会坍缩或被裁切且无处滚动。
 - `DictationScreen.kt:116-118` 的 `showWord`/`metaExpanded`/`exitDialogVisible` 是普通 `remember`：旋转会重置词语显示态，并**无回答地关掉** `结束听写？` 确认框（首页同类状态做对了，`HomeScreen.kt:128-129` 用 `rememberSaveable`）。
-- Manifest 无 `android:configChanges`（合规），也没有 `windowSoftInputMode`。
+- Manifest 无 `android:configChanges`（合规），也没有 `windowSoftInputMode`——后者**刻意不加**，IME 收边由各屏 `imePadding()` 负责（见 §5 C6）。
 
 ### C7 · 文案与术语
 - 三种叫法指同一功能：`多选词库`（`LibrarySelectionStore.kt:9`、ROADMAP）、`多选词表`（入口图标 `LibraryScreen.kt:90`）、`多选模式`（页内提示 `LibraryScreen.kt:133`）。
@@ -717,7 +717,55 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 
 
 
-> 说明：本节此前写作「`C4` → `C6`」，跳过了 `C5` —— 那是审计时按"阶段分组"随手排的顺序，不是"C5 无需修复"的结论。`C5` 已于 2026-09-16 完成（见上），`C6`（`WindowSizeClass`、表盘随约束、旋转不丢状态）仍待做。
+#### C6（大屏 / 横屏 / 大字号）—— ✅ 已完成
+
+范围：`C6` 全表 4 行。
+
+**先说两个"不做"，理由都是实测的**：
+
+- **`NavigationSuiteScaffold`（导航套件）不适用**：本 app 没有底部导航栏，四个顶层目的地走的是顶栏图标 + 首页 header（`HearWriteApp.kt` 的 `NavHost`）。没有导航区域要"变成 rail"，硬加一套会是新增需求而不是修缺陷。
+- **`Navigation 3` 的 `SceneStrategy` 多窗格不适用**：仓库用的是 `navigation-compose` 2.x（`libs.versions.toml`），`list-detail` 双窗格需要先迁移到 Nav3 —— 那是独立的一次导航重写，不在 `C6` 的范围内，且 `C6` 记录的三条缺陷（网格列数、表盘约束、旋转丢状态）没有一条由双窗格解决。
+
+| 项 | 做法 |
+|---|---|
+| 无 `WindowSizeClass`，分类网格固定 2 列、首页编辑器全宽 | 新增 `ui/Adaptive.kt` 作为唯一的窗口尺寸缝：`windowSizeClass()`（取 `currentWindowAdaptiveInfoV2().windowSizeClass`，**按窗口而非 `LocalConfiguration` 的显示器**度量，分屏/自由窗口下才正确）、`isWindowAtLeast(dp)`、`Modifier.contentWidth(max)`（`widthIn` 收窄 + `fillMaxWidth` 铺满，父级负责居中）。新增依赖 `androidx.compose.material3.adaptive:adaptive`（BOM 管版本，无需 pin）。分类网格 `GridCells.Fixed(2)` → `GridCells.Adaptive(minSize = 180.dp)`：**手机仍是 2 列**（411 − 32 = 379 dp ⇒ 2），平板 3 列、更宽 4 列。所有滚动面（首页编辑器 / 词库 / 预览 / 抽词 / 统计 / 设置 / 成绩卡 / 批改页）与两条底部操作栏的内容都过 `Modifier.contentWidth()`（默认 720 dp 阅读尺度）；**栏的表面保持全宽**（它的分隔线读作屏幕边缘），只收内容 |
+| 表盘写死 248/204dp，横屏无处置放 | 新增 `domain/DialStage.kt`（纯函数，JVM 可测）：按**实测的 stage 盒子**解出三选一。① **STACKED**（表盘 + 下方读数）——手机竖屏，保持 preferred 尺寸；② **BESIDE**（读数移到表盘**右侧且按行排**）——横屏手机/展开折叠屏：横屏只留 ~86 dp，而读数竖排就要 ~150 dp，**行排只要 52 dp**，所以"横屏装得下"靠的正是这一点；③ 收缩到盘面下限后仍不够则 `scrolls = true`，屏幕改为滚动而不是裁掉表盘。两列只在**窗口**层面允许（`WindowSizeClass` ≥ medium），绝不在 stage 盒子上判断——竖屏手机 stage 宽 411 dp，比"表盘 + 读数行"还宽，本地阈值会把手机劈成两半 |
+| 旋转重置词语显示态、无回答地关掉 `结束听写？` | `DictationScreen` 的 `showWord`/`exitDialogVisible` 改 `rememberSaveable`；`DialDetailDialog` 的展开态、成绩卡的 `清空错词本？`/`查看全部` 同样；首页六个抽屉开关与 `清空历史记录？`/`清空错词本？`、`WordListSection` 的 `清空草稿？`/`覆盖当前草稿？` 一并改 `rememberSaveable`（示例用标签做键，`Pair` 不可保存）。**"换词即收起"的两个 effect 改成按值变化驱动**：原来 `LaunchedEffect(ui.index)` 在旋转后的新组合里会以同样的 key 重跑，把刚恢复的显示态立刻抹掉——这正是设备上先复现出来的那次失败 |
+| Manifest 无 `configChanges`、无 `windowSoftInputMode` | **不做**。`configChanges` 是合规的默认（AGENTS.md 明确"合规"）；`windowSoftInputMode` 由 `enableEdgeToEdge()` + 各屏自己的 `imePadding()` 处理，两张 provider 表单的 IME 收边已在 `A7` 落地并验收。新增声明属于无需求变更 |
+
+**实现上偏离审计建议的地方**：审计对表盘的方案是"随约束缩放"；实现时为横屏多加了**BESIDE 这一档**，因为实测表明光缩放救不了——横屏 stage 给不出读数竖排所需的 150 dp。另外 `DialCenter` 的**隐藏态**也变成了求解（`domain/DialFit.kt` 的 `dialHiddenStack`）：盘面缩到 70 dp 时，旧的固定 95 dp 叠层 `√(D²−h²) = 0`，表盘**整个渲染成空**——设备上抓到的第二个真缺陷。规则是**整件丢弃而非裁剪**：先丢 `点按显示词语`（旁边的 `显示词语` 按钮就是同一句话），再丢状态词，图标缩放兜底（字形缩了仍可读，汉字标签缩了不可读）。
+
+**两处刻意的行为变更**：横屏听写的读数从"表盘下方"变为"表盘右侧"；表盘在足高的窗口上放大到 320 dp（手机仍是 248 dp，C2 的几何逐字未变）。
+
+**验收证据（2026-09-16，模拟器 `HearWrite37`，`uiautomator dump` 属性/坐标断言 + 程序化像素取样）**：
+
+| 项 | 断言 | 结果 |
+|---|---|---|
+| 手机竖屏未被改变 | 411×892dp：表盘内 `听写中` @ `[479,976][605,1037]`、两按钮 @ y=1616 —— 与 `C2` 记录的逐字相同 | ✅ 设备 |
+| 横屏：两按钮可见且全屏无滚动 | 923×411dp：`显示词语` @ `[1233,478][1379,531]`、`标记错词` @ `[1766,478][1912,531]` 同时在场；`scrollable="true"` 节点 **0** 个（修复前表盘压在进度行上、两按钮被挤出屏外） | ✅ 设备 |
+| 横屏：表盘真的画出来了 | 盘区像素取样：主色 `#1B5FAA`（27,95,170）**13671 px** 出现在 86 dp 的表盘与图标上（修复前该区域是空的） | ✅ 像素 |
+| 平板：内容收边并居中 | 1280×800dp：`单词列表` 左缘 600、词头 680、`开始听写` 1204 —— 720 dp 尺度居中于 1280 dp 窗口 | ✅ 设备 |
+| 平板：分类网格列数 | 2560×1600 @320dpi：分类卡左缘 3 个不同值（644/1111/1578）⇒ **3 列**；同屏卡片 11 张全部在场 | ✅ 设备 |
+| 手机：分类网格列数 | 1080×2424 @420dpi：分类卡左缘 2 个值（110/624）⇒ **2 列**，与修复前一致 | ✅ 设备 |
+| 平板：设置页收边 | 设置 hub 卡内容左缘 560 = (2560−1440)/2，`语速` 行 592–1923（720 dp 尺度） | ✅ 设备 |
+| 平板：听写舞台不滚动 | 800×1280dp：表盘段 0 个滚动节点，`显示词语`/`标记错词` 与 `剩余 9 秒` 同屏 | ✅ 设备 |
+| 大字号竖屏 | `font_scale 1.5`：0 个滚动节点，表盘与两按钮完整（读数槽位随字号增长而非被裁） | ✅ 设备 |
+| 大字号横屏（走滚动兜底） | `font_scale 1.5` + 横屏：1 个 `ScrollView`（`[338,416][2228,591]`）**且两按钮的 bounds 完全落在它内部** —— 读数行此时高出 86 dp 盒子，`scrolls` 正确触发，动作仍可达 | ✅ 设备 |
+| 旋转不丢显示态 | 竖屏点表盘 → `隐藏词语`；旋转到横屏 → 仍 `隐藏词语`；再转回 → 仍 `隐藏词语`。对照组：词自然推进（`3 / 5` → `4 / 5`）时照常收起 | ✅ 设备 |
+| 旋转不丢 `结束听写？` | 竖屏按返回 → `结束听写？`；旋转 → 对话框与正文 `退出后进度将丢失。` 仍在 | ✅ 设备 |
+| 旋转不丢 `清空草稿？` | 首页 `编辑` → `清空` → 对话框在场；旋转 → `清空草稿？` + `当前草稿将被清空，内容无法恢复。` 仍在 | ✅ 设备 |
+| 门禁 | `testDebugUnitTest` **383/383** 绿（基线 369，净增 14：`DialStageTest` 10 + `DialHiddenStackTest` 5，另删 1 条随 `dialBoxWidthDp` 一起作废的旧用例）；`lintDebug` `No issues found.` | ✅ |
+
+**未能闭环项（如实记录）**：
+- **没有 Compose 预览截图测试**：仓库此前零 `@Preview`（`ui-tooling-preview` 只在依赖里，无调用点），而 `C6` 的表盘/网格缺陷全部是**几何**问题——`bounds` 三元组与像素取样能直接证伪，截图测试引入的是同一批数字的另一种载体。是否补 `@PreviewTest` 基础设施登记为独立决定（见下），不在本阶段顺带引入。
+- **折叠屏铰链姿态（`Posture.Tabletop`）未在设备上采样**：AVD 无折叠屏形态，`WindowSizeClass` 的宽度分档已覆盖"展开=宽"，铰链分屏（同一窗口内被铰链切开）属于另一档需求，未实现也未验收。
+- **多窗口/分屏（freeform）未采样**：`currentWindowAdaptiveInfoV2()` 按窗口度量而非显示器（这正是选它而非 `LocalConfiguration` 的理由），但分屏下的实际窗口尺寸变化未在设备上重放。
+
+> 说明：本节此前写作「`C4` → `C6`」，跳过了 `C5` —— 那是审计时按"阶段分组"随手排的顺序，不是"C5 无需修复"的结论。`C5` 与 `C6` 均已于 2026-09-16 完成（见上）。
+
+#### C6 遗留的独立决定（未做，需作者拍板）
+
+**要不要引入 Compose 预览截图测试（`com.android.compose.screenshot` ≥ 0.0.1-alpha16）**：它是 `adaptive` skill 与 Google 推荐的形态化验收手段，但本阶段的每条结论都能用 `bounds`/像素直接证伪，故未在 `C6` 内顺带引入。若引入，代价是：新的 `screenshotTest` 源集 + `gradle.properties` 的实验开关 + 参考图（`app/src/screenshotTestDebug/reference/`）入库，且 `alpha16` 是 alpha 依赖——按仓库"track the latest stable"的版本政策，alpha 需要显式豁免。**建议**：等 `Compose` 1.11 的 `Grid`/`FlexBox` 转正、截图插件出 stable 后一次性接入，届时把 `C6` 的四档形态（手机/横屏/平板/1.5× 字号）固化为参考图。
 
 ### 阶段 D — 打磨（按喜好）
 动效（§4）、术语统一（C7）、系统栏图标随自选主题、动态取色（Material You）。（原列表中的 `launchSingleTop`、结束页 → 本次统计入口、死代码清理已随 `C1c` / `C5` 落地。）

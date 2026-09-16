@@ -3,9 +3,11 @@ package org.yangtse.hearwrite.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -222,181 +224,190 @@ private fun SettingsHub(
         snackbarHost = { MessageHost(messages) },
     ) { innerPadding ->
         CompositionLocalProvider(LocalMessages provides messages) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .verticalScroll(scrollState)
-                    .padding(bottom = 24.dp),
+            // The hub is a bar-shaped surface: it stays full width, but its
+            // content is capped to a reading measure and centred, so the cards
+            // do not stretch edge to edge on a tablet, foldable or desktop.
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.TopCenter,
             ) {
-                SettingsSectionHeader("外观")
-                SettingsCard {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            // One exclusive choice (浅色/深色/跟随系统): the group
-                            // tells TalkBack the three cards are alternatives.
-                            .selectableGroup()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        ThemePreviewCard(
-                            label = "浅色",
-                            selected = theme == ThemeMode.LIGHT,
-                            onClick = { viewModel.onThemeChange(ThemeMode.LIGHT) },
-                            modifier = Modifier.weight(1f),
-                        )
-                        ThemePreviewCard(
-                            label = "深色",
-                            selected = theme == ThemeMode.DARK,
-                            onClick = { viewModel.onThemeChange(ThemeMode.DARK) },
-                            modifier = Modifier.weight(1f),
-                        )
-                        ThemePreviewCard(
-                            label = "跟随系统",
-                            selected = theme == ThemeMode.SYSTEM,
-                            onClick = { viewModel.onThemeChange(ThemeMode.SYSTEM) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-
-                SettingsSectionHeader("听写")
-                SettingsCard {
-                    Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "语速",
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                formatRate(speechRate),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                        Slider(
-                            value = speechRate,
-                            onValueChange = viewModel::onSpeechRateChange,
-                            valueRange = MIN_SPEECH_RATE..MAX_SPEECH_RATE,
-                            steps = 9, // 0.1 steps → 11 stops incl. endpoints
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .contentWidth()
+                        .padding(innerPadding)
+                        .verticalScroll(scrollState)
+                        .padding(bottom = 24.dp),
+                ) {
+                    SettingsSectionHeader("外观")
+                    SettingsCard {
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .semantics { contentDescription = "听写语速" },
+                                // One exclusive choice (浅色/深色/跟随系统): the group
+                                // tells TalkBack the three cards are alternatives.
+                                .selectableGroup()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            ThemePreviewCard(
+                                label = "浅色",
+                                selected = theme == ThemeMode.LIGHT,
+                                onClick = { viewModel.onThemeChange(ThemeMode.LIGHT) },
+                                modifier = Modifier.weight(1f),
+                            )
+                            ThemePreviewCard(
+                                label = "深色",
+                                selected = theme == ThemeMode.DARK,
+                                onClick = { viewModel.onThemeChange(ThemeMode.DARK) },
+                                modifier = Modifier.weight(1f),
+                            )
+                            ThemePreviewCard(
+                                label = "跟随系统",
+                                selected = theme == ThemeMode.SYSTEM,
+                                onClick = { viewModel.onThemeChange(ThemeMode.SYSTEM) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+
+                    SettingsSectionHeader("听写")
+                    SettingsCard {
+                        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "语速",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    formatRate(speechRate),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            Slider(
+                                value = speechRate,
+                                onValueChange = viewModel::onSpeechRateChange,
+                                valueRange = MIN_SPEECH_RATE..MAX_SPEECH_RATE,
+                                steps = 9, // 0.1 steps → 11 stops incl. endpoints
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .semantics { contentDescription = "听写语速" },
+                            )
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
+                        SettingsRow(
+                            title = "英文词朗读后跟读中文释义",
+                            leading = { Icon(Icons.Outlined.Translate, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            // The row carries the state and the visible Chinese title
+                            // names it; a contentDescription on the decorative Switch
+                            // would only replace that title in the semantics tree.
+                            trailing = {
+                                Switch(
+                                    checked = readTranslation,
+                                    onCheckedChange = null,
+                                )
+                            },
+                            divider = false,
+                            toggle = RowToggle(
+                                checked = readTranslation,
+                                role = Role.Switch,
+                                onToggle = { viewModel.onReadTranslationChange(!readTranslation) },
+                            ),
                         )
                     }
-                    HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
-                    SettingsRow(
-                        title = "英文词朗读后跟读中文释义",
-                        leading = { Icon(Icons.Outlined.Translate, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                        // The row carries the state and the visible Chinese title
-                        // names it; a contentDescription on the decorative Switch
-                        // would only replace that title in the semantics tree.
-                        trailing = {
-                            Switch(
-                                checked = readTranslation,
-                                onCheckedChange = null,
-                            )
-                        },
-                        divider = false,
-                        toggle = RowToggle(
-                            checked = readTranslation,
-                            role = Role.Switch,
-                            onToggle = { viewModel.onReadTranslationChange(!readTranslation) },
-                        ),
-                    )
-                }
 
-                SettingsSectionHeader("语音")
-                SettingsCard {
-                    SettingsRow(
-                        title = "发音来源",
-                        supporting = when (ttsSource) {
-                            TtsSource.YOUDAO -> "有道真人词典发音，需要网络；失败时自动改用系统语音"
-                            TtsSource.EDGE -> "微软在线神经网络语音，免费无需 API Key"
-                            TtsSource.SYSTEM -> "系统内置语音，完全离线"
-                            TtsSource.CUSTOM -> ttsActive?.let {
-                                "当前使用：${it.model.trim()}"
-                            } ?: "尚未保存可用配置，暂用系统语音"
-                        },
-                        leading = { Icon(Icons.Outlined.RecordVoiceOver, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                        trailing = {
-                            SettingsValueTrailing(
-                                when (ttsSource) {
-                                    TtsSource.YOUDAO -> "有道词典"
-                                    TtsSource.EDGE -> "微软 Edge"
-                                    TtsSource.SYSTEM -> "系统语音"
-                                    TtsSource.CUSTOM -> "OpenAI 兼容语音"
-                                },
-                            )
-                        },
-                        onClick = { onOpen(SettingsSubPage.VOICE_SOURCE) },
-                    )
-                    SettingsRow(
-                        title = "提示音",
-                        leading = { Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                        trailing = {
-                            Switch(
+                    SettingsSectionHeader("语音")
+                    SettingsCard {
+                        SettingsRow(
+                            title = "发音来源",
+                            supporting = when (ttsSource) {
+                                TtsSource.YOUDAO -> "有道真人词典发音，需要网络；失败时自动改用系统语音"
+                                TtsSource.EDGE -> "微软在线神经网络语音，免费无需 API Key"
+                                TtsSource.SYSTEM -> "系统内置语音，完全离线"
+                                TtsSource.CUSTOM -> ttsActive?.let {
+                                    "当前使用：${it.model.trim()}"
+                                } ?: "尚未保存可用配置，暂用系统语音"
+                            },
+                            leading = { Icon(Icons.Outlined.RecordVoiceOver, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            trailing = {
+                                SettingsValueTrailing(
+                                    when (ttsSource) {
+                                        TtsSource.YOUDAO -> "有道词典"
+                                        TtsSource.EDGE -> "微软 Edge"
+                                        TtsSource.SYSTEM -> "系统语音"
+                                        TtsSource.CUSTOM -> "OpenAI 兼容语音"
+                                    },
+                                )
+                            },
+                            onClick = { onOpen(SettingsSubPage.VOICE_SOURCE) },
+                        )
+                        SettingsRow(
+                            title = "提示音",
+                            leading = { Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            trailing = {
+                                Switch(
+                                    checked = soundEnabled,
+                                    onCheckedChange = null,
+                                )
+                            },
+                            toggle = RowToggle(
                                 checked = soundEnabled,
-                                onCheckedChange = null,
-                            )
-                        },
-                        toggle = RowToggle(
-                            checked = soundEnabled,
-                            role = Role.Switch,
-                            onToggle = { viewModel.onSoundEnabledChange(!soundEnabled) },
-                        ),
-                    )
-                    SettingsRow(
-                        title = "清空发音缓存",
-                        leading = { Icon(Icons.Outlined.DeleteSweep, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                        trailing = {
-                            val info = cacheInfo
-                            Text(
-                                when {
-                                    info == null -> "计算中…"
-                                    info.bytes > 0L -> formatBytes(info.bytes)
-                                    else -> "无缓存"
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        },
-                        divider = false,
-                        onClick = if (hasCache) {
-                            { showClearCacheDialog = true }
-                        } else {
-                            null
-                        },
-                    )
-                }
+                                role = Role.Switch,
+                                onToggle = { viewModel.onSoundEnabledChange(!soundEnabled) },
+                            ),
+                        )
+                        SettingsRow(
+                            title = "清空发音缓存",
+                            leading = { Icon(Icons.Outlined.DeleteSweep, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            trailing = {
+                                val info = cacheInfo
+                                Text(
+                                    when {
+                                        info == null -> "计算中…"
+                                        info.bytes > 0L -> formatBytes(info.bytes)
+                                        else -> "无缓存"
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            },
+                            divider = false,
+                            onClick = if (hasCache) {
+                                { showClearCacheDialog = true }
+                            } else {
+                                null
+                            },
+                        )
+                    }
 
-                SettingsSectionHeader("拍照识词")
-                SettingsCard {
-                    SettingsRow(
-                        title = "识别服务",
-                        supporting = ocrActive?.let {
-                            "用 AI 视觉识别课本照片中的词表 · ${it.model.trim()}"
-                        } ?: "用 AI 视觉识别课本照片中的词表（需自备 API Key）",
-                        leading = { Icon(Icons.Outlined.DocumentScanner, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                        trailing = { SettingsValueTrailing(ocrPresetLabel) },
-                        divider = false,
-                        onClick = { onOpen(SettingsSubPage.OCR_PROVIDER) },
-                    )
-                }
+                    SettingsSectionHeader("拍照识词")
+                    SettingsCard {
+                        SettingsRow(
+                            title = "识别服务",
+                            supporting = ocrActive?.let {
+                                "用 AI 视觉识别课本照片中的词表 · ${it.model.trim()}"
+                            } ?: "用 AI 视觉识别课本照片中的词表（需自备 API Key）",
+                            leading = { Icon(Icons.Outlined.DocumentScanner, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            trailing = { SettingsValueTrailing(ocrPresetLabel) },
+                            divider = false,
+                            onClick = { onOpen(SettingsSubPage.OCR_PROVIDER) },
+                        )
+                    }
 
-                SettingsSectionHeader("关于")
-                SettingsCard {
-                    SettingsRow(
-                        title = "关于听写",
-                        leading = { Icon(Icons.Outlined.Info, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                        trailing = { SettingsChevronTrailing() },
-                        divider = false,
-                        onClick = { onOpen(SettingsSubPage.ABOUT) },
-                    )
+                    SettingsSectionHeader("关于")
+                    SettingsCard {
+                        SettingsRow(
+                            title = "关于听写",
+                            leading = { Icon(Icons.Outlined.Info, contentDescription = null, modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            trailing = { SettingsChevronTrailing() },
+                            divider = false,
+                            onClick = { onOpen(SettingsSubPage.ABOUT) },
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
                 }
-                Spacer(Modifier.height(8.dp))
             }
         }
     }

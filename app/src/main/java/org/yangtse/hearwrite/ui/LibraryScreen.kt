@@ -2,7 +2,9 @@ package org.yangtse.hearwrite.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -109,52 +111,61 @@ fun LibraryScreen(
             }
         },
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
+        // The search field has to line up with the rows below it, so field,
+        // hint and results share one capped, centred column instead of every
+        // element stretching to the window edges (AUDIT C6).
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.TopCenter,
         ) {
-            OutlinedTextField(
-                value = queryText,
-                onValueChange = viewModel::onQueryChange,
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("搜索词表或单词") },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (queryText.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.onQueryChange("") }) {
-                            Icon(Icons.Filled.Clear, contentDescription = "清空搜索")
+                    .fillMaxHeight()
+                    .contentWidth()
+                    .padding(innerPadding),
+            ) {
+                OutlinedTextField(
+                    value = queryText,
+                    onValueChange = viewModel::onQueryChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    placeholder = { Text("搜索词表或单词") },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (queryText.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.onQueryChange("") }) {
+                                Icon(Icons.Filled.Clear, contentDescription = "清空搜索")
+                            }
                         }
-                    }
-                },
-                singleLine = true,
-            )
-            val state = searchState
-            when {
-                state is LibrarySearchState.Idle -> Column {
-                    if (selecting) {
-                        Text(
-                            "多选词表：进入分类勾选（可跨分类）",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    },
+                    singleLine = true,
+                )
+                val state = searchState
+                when {
+                    state is LibrarySearchState.Idle -> Column {
+                        if (selecting) {
+                            Text(
+                                "多选词表：进入分类勾选（可跨分类）",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                            )
+                        }
+                        CategoryList(
+                            categories = categories,
+                            onOpenCategory = onOpenCategory,
                         )
                     }
-                    CategoryList(
-                        categories = categories,
-                        onOpenCategory = onOpenCategory,
+                    state is LibrarySearchState.Loading -> CenterProgress()
+                    state is LibrarySearchState.Done -> SearchResults(
+                        state = state,
+                        selecting = selecting,
+                        selectedIds = selectedIds,
+                        onToggle = selection::toggle,
+                        onOpenList = onOpenList,
                     )
                 }
-                state is LibrarySearchState.Loading -> CenterProgress()
-                state is LibrarySearchState.Done -> SearchResults(
-                    state = state,
-                    selecting = selecting,
-                    selectedIds = selectedIds,
-                    onToggle = selection::toggle,
-                    onOpenList = onOpenList,
-                )
             }
         }
     }
@@ -168,8 +179,20 @@ private fun CategoryList(
     when {
         categories == null -> CenterProgress()
         else -> LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            modifier = Modifier.fillMaxSize(),
+            // A hard-coded two columns drew two very wide cards on a tablet,
+            // so the count follows the window instead. 180.dp is the floor a
+            // card needs: the 分类名 (up to 8 CJK characters) has to keep two
+            // readable lines above the `N 个词表` pill, and the pill plus the
+            // card's own 32.dp of side padding is what sets that floor.
+            // Compose derives the count from the card's cross-axis room,
+            // floor((available + 12dp gap) / (180dp + 12dp gap)): a 411dp phone
+            // window − 32dp grid padding = 379dp ⇒ 2 columns, unchanged from
+            // the old Fixed(2); 600dp ⇒ 3. The raw arithmetic would reach 4 at
+            // 840dp, but the 720dp reading cap below binds first (720 − 32 =
+            // 688dp ⇒ 3 columns of ~221dp), so nothing wider than a 3-up grid
+            // is ever drawn.
+            columns = GridCells.Adaptive(minSize = 180.dp),
+            modifier = Modifier.fillMaxHeight().contentWidth(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -226,8 +249,11 @@ private fun SearchResults(
     val labelIds = result.labelHits.mapTo(mutableSetOf<String>()) { it.id }
     val wordHits = result.wordHits.filterNot { it.list.id in labelIds }
     if (result.labelHits.isEmpty() && wordHits.isEmpty()) {
+        // The hint is centred in the reading measure rather than the window
+        // (AUDIT C6): on a tablet the message would otherwise float in the
+        // middle of a very wide empty band.
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxHeight().contentWidth(),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -235,7 +261,9 @@ private fun SearchResults(
         }
         return
     }
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
+    // Same cap as the browse grid above it, so a hit row and a category card
+    // share one left edge on a wide window.
+    LazyColumn(modifier = Modifier.fillMaxHeight().contentWidth()) {
         if (result.labelHits.isNotEmpty()) {
             item { SectionHeader("词表") }
             items(result.labelHits, key = { "l_${it.id}" }) { list ->

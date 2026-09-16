@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -289,20 +290,29 @@ fun SettingsSubPage(
         snackbarHost = { MessageHost(messages) },
     ) { innerPadding ->
         CompositionLocalProvider(LocalMessages provides messages) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .verticalScroll(rememberScrollState())
-                    // Edge-to-edge and the window is not resized by the IME, so a
-                    // sub-page with text fields (both provider forms) must yield
-                    // the keyboard space itself — otherwise 保存并启用 and the
-                    // lower fields sit behind the keyboard and scroll-to-focus
-                    // cannot lift them clear.
-                    .imePadding()
-                    .padding(bottom = 32.dp),
-                content = content,
-            )
+            // The sub-page body is capped to a reading measure and centred,
+            // so the form does not stretch edge to edge on a tablet, foldable
+            // or desktop window.
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .contentWidth()
+                        .padding(innerPadding)
+                        .verticalScroll(rememberScrollState())
+                        // Edge-to-edge and the window is not resized by the IME, so a
+                        // sub-page with text fields (both provider forms) must yield
+                        // the keyboard space itself — otherwise 保存并启用 and the
+                        // lower fields sit behind the keyboard and scroll-to-focus
+                        // cannot lift them clear.
+                        .imePadding()
+                        .padding(bottom = 32.dp),
+                    content = content,
+                )
+            }
         }
     }
 }

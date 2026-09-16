@@ -2,7 +2,9 @@ package org.yangtse.hearwrite.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -94,79 +96,90 @@ fun LibraryListsScreen(
         },
     ) { innerPadding ->
         val current = lists
-        when {
-            current == null -> Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(32.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                CircularProgressIndicator()
-            }
-            // An empty asset scan would otherwise be a blank screen with no
-            // explanation (every sibling list has an EmptyHint).
-            current.isEmpty() -> Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(32.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                EmptyHint("该分类暂无词表")
-            }
-            else -> LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-            ) {
-                items(current, key = { it.id }) { list ->
-                    val favorited = list.id in favoriteIds
-                    val ticked = list.id in selectedIds
-                    ListRow(
-                        title = list.label,
-                        // List labels run to 11–12 CJK characters, so a
-                        // single line ellipsises them away.
-                        titleMaxLines = 2,
-                        // The count arrives per list, asynchronously: the
-                        // placeholder keeps the row height from popping in
-                        // (same treatment as the preview's —— meta line).
-                        subtitle = wordCounts[list.id]?.let { "$it 词" } ?: "——",
-                        // 多选 flips the row's meaning: it ticks instead of
-                        // opening the preview. The toggle owns the state and
-                        // the hit target — see [RowToggle].
-                        onClick = if (selecting) null else ({ onOpenList(list.label) }),
-                        toggle = if (selecting) {
-                            RowToggle(
-                                checked = ticked,
-                                role = Role.Checkbox,
-                                onToggle = { selection.toggle(list.id) },
-                            )
-                        } else {
-                            null
-                        },
-                        trailing = {
-                            if (selecting) {
-                                Checkbox(checked = ticked, onCheckedChange = null)
+        // One capped, centred reading column shared by every state, so rows do
+        // not stretch edge to edge on a tablet (AUDIT C6). The Box only
+        // centres; each state still fills the viewport's height.
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            when {
+                current == null -> Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .contentWidth()
+                        .padding(innerPadding)
+                        .padding(32.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    CircularProgressIndicator()
+                }
+                // An empty asset scan would otherwise be a blank screen with no
+                // explanation (every sibling list has an EmptyHint).
+                current.isEmpty() -> Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .contentWidth()
+                        .padding(innerPadding)
+                        .padding(32.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    EmptyHint("该分类暂无词表")
+                }
+                else -> LazyColumn(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .contentWidth()
+                        .padding(innerPadding),
+                ) {
+                    items(current, key = { it.id }) { list ->
+                        val favorited = list.id in favoriteIds
+                        val ticked = list.id in selectedIds
+                        ListRow(
+                            title = list.label,
+                            // List labels run to 11–12 CJK characters, so a
+                            // single line ellipsises them away.
+                            titleMaxLines = 2,
+                            // The count arrives per list, asynchronously: the
+                            // placeholder keeps the row height from popping in
+                            // (same treatment as the preview's —— meta line).
+                            subtitle = wordCounts[list.id]?.let { "$it 词" } ?: "——",
+                            // 多选 flips the row's meaning: it ticks instead of
+                            // opening the preview. The toggle owns the state and
+                            // the hit target — see [RowToggle].
+                            onClick = if (selecting) null else ({ onOpenList(list.label) }),
+                            toggle = if (selecting) {
+                                RowToggle(
+                                    checked = ticked,
+                                    role = Role.Checkbox,
+                                    onToggle = { selection.toggle(list.id) },
+                                )
                             } else {
-                                IconButton(onClick = { viewModel.toggleFavorite(list.id) }) {
-                                    Icon(
-                                        if (favorited) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                        contentDescription = if (favorited) "取消收藏" else "收藏",
-                                        tint = if (favorited) {
-                                            hearWriteSemantics.star
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                    )
+                                null
+                            },
+                            trailing = {
+                                if (selecting) {
+                                    Checkbox(checked = ticked, onCheckedChange = null)
+                                } else {
+                                    IconButton(onClick = { viewModel.toggleFavorite(list.id) }) {
+                                        Icon(
+                                            if (favorited) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                            contentDescription = if (favorited) "取消收藏" else "收藏",
+                                            tint = if (favorited) {
+                                                hearWriteSemantics.star
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                        )
+                                    }
+                                    RowChevron()
                                 }
-                                RowChevron()
-                            }
-                        },
-                    )
-                    HorizontalDivider()
+                            },
+                        )
+                        HorizontalDivider()
+                    }
                 }
             }
         }

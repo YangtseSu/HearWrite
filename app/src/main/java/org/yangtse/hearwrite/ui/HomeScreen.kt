@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -123,15 +124,19 @@ fun HomeScreen(
     val ocrCropBitmap by viewModel.cropBitmap.collectAsStateWithLifecycle()
     val ocrCropLoading by viewModel.cropLoading.collectAsStateWithLifecycle()
 
-    var showMenu by remember { mutableStateOf(false) }
-    var showHistory by remember { mutableStateOf(false) }
-    var showFavorites by remember { mutableStateOf(false) }
-    var clearHistoryConfirm by remember { mutableStateOf(false) }
-    var showWrongWords by remember { mutableStateOf(false) }
-    var clearWrongConfirm by remember { mutableStateOf(false) }
+    // Every one of these is a surface the user opened on purpose, and two of
+    // them are destructive questions mid-answer: rotating the phone — or
+    // resizing the window on a foldable — used to close the sheet and dismiss
+    // 清空历史记录？ / 清空错词本？ without an answer (AUDIT C6).
+    var showMenu by rememberSaveable { mutableStateOf(false) }
+    var showHistory by rememberSaveable { mutableStateOf(false) }
+    var showFavorites by rememberSaveable { mutableStateOf(false) }
+    var clearHistoryConfirm by rememberSaveable { mutableStateOf(false) }
+    var showWrongWords by rememberSaveable { mutableStateOf(false) }
+    var clearWrongConfirm by rememberSaveable { mutableStateOf(false) }
 
     // ---- 拍照识词 (OCR) state ----------------------------------------------
-    var showOcrSheet by remember { mutableStateOf(false) }
+    var showOcrSheet by rememberSaveable { mutableStateOf(false) }
     // Saved across configuration changes: the crop step must survive a
     // rotation mid-selection (the overlay comes back from the VM's bitmap).
     var showOcrCrop by rememberSaveable { mutableStateOf(false) }
@@ -286,20 +291,38 @@ fun HomeScreen(
 
                 // ---- 拍照识词 progress: full width, with its way out ------
                 if (ocrBusy) {
-                    OcrProgressStrip(
-                        phase = ocrPhase,
-                        onCancel = viewModel::cancelOcr,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 4.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        OcrProgressStrip(
+                            phase = ocrPhase,
+                            onCancel = viewModel::cancelOcr,
+                            modifier = Modifier.contentWidth(),
+                        )
+                    }
                 }
 
                 // ---- Main: OCR error card + word-list section ---------
+                // A Box centred on the top, so the word-list column can cap
+                // itself to a reading measure: Chinese body copy at 27sp line
+                // height runs past a comfortable line length once the window is
+                // unfolded, and the editor used to stretch edge to edge there
+                // (AUDIT C6). Phone widths are below the cap, so nothing moves.
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 20.dp),
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.TopCenter,
                 ) {
-                    Column(modifier = Modifier.fillMaxSize()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .contentWidth()
+                            .padding(horizontal = 20.dp),
+                    ) {
                         ocrError?.let { message ->
                             OcrErrorCard(
                                 message = message,
@@ -365,6 +388,10 @@ fun HomeScreen(
                 },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    // Capped like the content above it: on a tablet the panel is
+                    // a control group, not a full-width slab, and its measure
+                    // should match the text it sits under (AUDIT C6).
+                    .contentWidth()
                     .onSizeChanged { panelHeightPx = it.height }
                     .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 12.dp)
                     .navigationBarsPadding(),
@@ -383,6 +410,7 @@ fun HomeScreen(
                 messages,
                 Modifier
                     .align(Alignment.BottomCenter)
+                    .contentWidth()
                     .padding(bottom = contentPad),
             )
         }

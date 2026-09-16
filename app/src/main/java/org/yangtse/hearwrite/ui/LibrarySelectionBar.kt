@@ -48,11 +48,15 @@ fun LibrarySelectionBar(
             // navigation-bar and keyboard space so its buttons stay tappable.
             .navigationBarsPadding()
             .imePadding(),
+        // The bar surface and its divider stay full width; only the content is
+        // capped to a reading measure and centred, so the buttons do not drift
+        // apart across a tablet window (AUDIT C6).
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         HorizontalDivider()
         Row(
             modifier = Modifier
-                .fillMaxWidth()
+                .contentWidth()
                 .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
