@@ -1,12 +1,25 @@
 # CodeQL static analysis — currently PAUSED.
 #
 # The repo tracks latest-stable Kotlin (no-pin policy, AGENTS.md). CodeQL's
-# Kotlin extractor rejects Kotlin 2.4.20 with
+# Kotlin extractor rejects the current Kotlin 2.4.20 with
 #   KotlinVersionTooRecentError: CodeQL currently supports versions below 2.4.20
-# (verified against the latest codeql-action bundle v2.27.0, 2026-09-10).
-# Honoring latest-stable Kotlin takes precedence over CodeQL coverage, so
-# this workflow is disabled until the extractor supports the current Kotlin.
-# Re-enable by restoring `on:` and deleting the `if: false` guard.
+#
+# Verified 2026-09-16 against both bundles available that day:
+#   - codeql-bundle-v2.27.0 (the latest *stable*, 2026-09-09): Autobuild fails
+#     with the error above — the support PR (github/codeql#22404, "Kotlin:
+#     support 2.4.20") merged 2026-09-08 and missed the 2.27.0 release cut.
+#   - codeql-bundle-20260915 (nightly, CLI 2.27.1+20260914): Autobuild compiles
+#     the Kotlin sources and the analysis completes with no KotlinVersionTooRecent
+#     error. Upstream says 2.27.1 ships the fix, ~2026-09-24.
+# The same workflow body was used for both runs (only `tools:` differed), so the
+# Kotlin version alone decides it.
+#
+# Honoring latest-stable Kotlin takes precedence over CodeQL coverage, so this
+# workflow stays off until a *stable* bundle carries #22404. Re-enable = restore
+# `on:` (push to main, pull_request, weekly schedule), delete the `if: false`
+# guard, and re-run; no other change is required — the Set up Android SDK step
+# was already narrowed to `packages: platform-tools` (the standalone `tools`
+# package no longer exists and would fail the job before any repo code ran).
 # Tracked in: https://github.com/YangtseSu/HearWrite/issues/7
 #
 # Secret scanning + push protection are enabled repo-wide (independent of
@@ -41,8 +54,15 @@ jobs:
         with:
           distribution: temurin
           java-version: "26"
+      # `packages: platform-tools` is required, not cosmetic: the action's
+      # default is `tools platform-tools`, but Google retired the standalone
+      # `tools` package (folded into `cmdline-tools`), so `sdkmanager tools`
+      # exits 1 with "Failed to find package 'tools'" and fails the job before
+      # any repo code runs. Same narrowing as build.yml / release.yml.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
       - name: Perform CodeQL Analysis
