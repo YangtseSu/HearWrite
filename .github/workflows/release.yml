@@ -33,7 +33,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
 
       # Accepts SDK licenses; AGP auto-downloads platforms;android-37 + build-tools.
+      #
+      # `packages: platform-tools` is required, not cosmetic: the action's
+      # default is `tools platform-tools`, but Google retired the standalone
+      # `tools` package (it is folded into `cmdline-tools`), so `sdkmanager
+      # tools` now exits 1 with "Failed to find package 'tools'" and fails the
+      # job before any repo code runs. Same narrowing as build.yml.
       - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
 
       # Without this guard a missing secret silently yields an *unsigned* APK
       # (app/build.gradle.kts degrades by design) — here it must be a hard error.
