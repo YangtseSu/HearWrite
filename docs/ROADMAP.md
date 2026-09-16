@@ -374,5 +374,8 @@
 ### 工程质量
 
 - **词库质检脚本（`scripts/check-assets.py`）+ CI** — ✅ 已落地（见正文 16）：651 表 / 21769 行，校验每行可解析、无重复词、拼音格式合法、组词含本字、多字中文行不带列、生成资产（`ecdict-meta.json` / `hanzi-meta.json` / `compounds.json`）结构完整；CI 先于 Gradle 执行。词库名/分类名的排序漂移仍由 `LabelOrderTest` 守住。
+- **CI 模拟器无法启动 API 37 镜像**（2026-09-17） — instrumented job 目前停在 API 36。两个稳定通道的 API 37 镜像都试过，都在 GitHub runner 上启动失败：`android-37.1;google_apis_ps16k`（16 KB 页）与 `android-37.0;google_apis`（普通）。两次运行都是模拟器打印完 `Userspace boot properties` 后再无任何输出，直到 action 的 600 s `emulator-boot-timeout` 把它杀掉（`Timeout waiting for emulator to boot`）；安装与 AVD 创建均成功。37.0 那次排除了页大小因素——它与正在用的 API 36 镜像是**同一类型**（普通 `google_apis`），而 36 在 ~41 s 内启动成功。两个 37 镜像在**本地**用相同 emulator 版本（37.1.11）与相同参数均能启动（37.1 约 33 s），所以这是 API 37 镜像与 runner 环境的兼容问题，不是 workflow 配置错误。
+  另外记录一个已修的坑：`api-level: 37.0` 不加引号时 YAML 会解析成数字，action 字符串化后尾随 `.0` 丢失（`String(37.0)` 是 `"37"`），拼出不存在的 `platforms;android-37` 导致 job 在 27 s 内失败——`37.1` 只是运气好没触发；现已加引号。
+  建议：**低**，非阻塞。等 runner 镜像或 API 37 系统镜像更新后重试；重试前先本地验证镜像能否启动，再改 workflow。同时监控是否值得改用 `google_apis_ps16k`（新应用上架 Play 后 16 KB 页对齐会成为硬性要求，届时 16 KB 镜像的 CI 覆盖会更有价值）。
 - **多孩子档案** — 独立档案 + 数据隔离；需要给所有用户数据加 `profileId` 并迁移。
   建议：**低**（先确认真有多孩使用场景）。

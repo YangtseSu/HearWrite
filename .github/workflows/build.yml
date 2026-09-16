@@ -66,15 +66,16 @@ jobs:
   # (app/src/androidTest) — they need a real Android runtime, so they run on
   # a GitHub-hosted emulator. Previously they only ever ran locally.
   #
-  # API 37.0, not 37.1/37.2. API 37 ships three ways: 37.0 has a plain
-  # `google_apis` image, while 37.1 and 37.2 publish ONLY as
-  # `google_apis_ps16k` — the 16 KB page-size variant. A CI run on the 37.1
-  # ps16k image never came up: the emulator logged its userspace boot
-  # properties and then produced no further output until the action's 600 s
-  # boot timeout killed it, while the same image with the same emulator
-  # flags booted in ~33 s locally. Until that is re-tested, 37.0 is the
-  # newest API 37 line with a plain image — still newer than the 36 this job
-  # used before.
+  # API 36, not 37. Two API 37 images were tried and neither booted here:
+  # `android-37.1;google_apis_ps16k` (16 KB pages) and `android-37.0;
+  # google_apis` (plain), both stable-channel. In each run the emulator
+  # printed its userspace boot properties and then produced no further
+  # output until the action's 600 s boot timeout killed it. The 37.0 attempt
+  # rules out page size — it is the same plain `google_apis` type as the 36
+  # image this job runs, which boots in ~41 s. Both API 37 images also boot
+  # fine locally (the 37.1 one in ~33 s, with the identical emulator version
+  # and flags), so this is an API 37-image/runner incompatibility, not a
+  # workflow misconfiguration. See docs/ROADMAP.md.
   #
   # 37.2 has no stable image at all (its stable-channel entries are `-betaN`
   # builds; the plain 37.2 image is dev-channel). The app's own compileSdk
@@ -113,12 +114,12 @@ jobs:
       - name: Run instrumentation tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          # Quoted on purpose: YAML reads a bare 37.0 as the *number* 37.0, and
-          # the action stringifies it, which drops the trailing `.0` ("37") —
-          # the SDK install then asks for the non-existent `platforms;android-37`
-          # and the job dies before the emulator starts. The quotes keep the
-          # minor version. (37.1 happened to survive this: String(37.1) = "37.1".)
-          api-level: "37.0"
+          # Quoted: the action stringifies this value, and an unquoted YAML
+          # number would lose a trailing `.0` (String(37.0) is "37", which
+          # turns into the non-existent `platforms;android-37`). Harmless for
+          # the current value, kept so a future minor-versioned API level does
+          # not silently break the SDK install.
+          api-level: "36"
           arch: x86_64
           target: google_apis
           force-avd-creation: false
