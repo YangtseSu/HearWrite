@@ -372,9 +372,9 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 - `DictationScreen.kt:116-118` 的 `showWord`/`metaExpanded`/`exitDialogVisible` 是普通 `remember`：旋转会重置词语显示态，并**无回答地关掉** `结束听写？` 确认框（首页同类状态做对了，`HomeScreen.kt:128-129` 用 `rememberSaveable`）。
 - Manifest 无 `android:configChanges`（合规），也没有 `windowSoftInputMode`——后者**刻意不加**，IME 收边由各屏 `imePadding()` 负责（见 §5 C6）。
 
-### C7 · 文案与术语 —— ✅ 已完成（见 §5 阶段 D；第 2 行按作者决定排除）
+### C7 · 文案与术语 —— ✅ 已完成（见 §5 阶段 D）
 - 三种叫法指同一功能：`多选词库`（`LibrarySelectionStore.kt:9`、ROADMAP）、`多选词表`（入口图标 `LibraryScreen.kt:90`）、`多选模式`（页内提示 `LibraryScreen.kt:133`）。
-- 面向学生/家长的界面出现工程术语：`OCR`、`API Key`、`Base URL`、`Key`、`/audio/speech 返回的音频格式（mp3/wav…）`（`SettingsProviderPages.kt:330` 等 9 处）。——**不改**（作者决定，2026-09-17：配置 OpenAI 兼容接口的必要术语，通俗化会让普通用户与专业用户都读不懂）。
+- 面向学生/家长的界面出现工程术语：`OCR`、`API Key`、`Base URL`、`Key`、`/audio/speech 返回的音频格式（mp3/wav…）`（`SettingsProviderPages.kt:330` 等 9 处）。——**按"是否要拿它跟服务商对齐"分层收口**（2026-09-17）：`API Key` / `Base URL` / 协议名 / `mp3`·`wav` 保留（用户要在服务商控制台里对上号），只把**应用内已有中文名的第二个叫法**收掉——`OCR 服务` → `识别服务`（设置 hub 早就叫 `识别服务`）、裸 `Key` → `API Key`（服务商口径，且不再与同句的 `密钥` 并存），另精简 1 处冗余路径。详见 §5 阶段 D。
 - `已合并 N 个跨表重复词`（`LibraryDrawScreen.kt:197-203`）读起来像用户做过的动作，实为自动去重。
 - `连续天数` 是裸数字（`StatsScreen.kt:245`），无法区分"连续 3 天（今天还没听写）"与"今天已打卡"——domain 层已能区分（`domain/Stats.kt:114-115`）。
 - 首页 `更多` sheet 的 KDoc（`HomeScreen.kt:70`）写的是 收藏/历史记录/**词库/设置**，代码里是 收藏/历史记录/**错词本/听写统计**。
@@ -772,17 +772,25 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 
 #### C7（文案与术语）—— ✅ 已完成
 
-范围：`C7` 全表 7 行，**第 2 行（面向学生的界面里的工程术语）按作者决定整行排除**；其余 6 行里 5 行已由 `B5` / `C1c` 顺带落地，本阶段做第 1 行的收尾 + 一处同维度补漏 + 一处由此暴露的窄屏回归。
+范围：`C7` 全表 7 行。第 2 行（工程术语）**按"是否要拿它跟服务商对齐"分层收口**（见下）；其余 6 行里 5 行已由 `B5` / `C1c` 顺带落地，本阶段做第 1 行的收尾 + 一处同维度补漏 + 一处由此暴露的窄屏回归。
 
 | 项 | 做法 |
 |---|---|
 | 三种叫法指同一功能 | 定名 **多选词表**。页内提示 `多选模式：…` 已由 C1c 改为 `多选词表：进入分类勾选（可跨分类）`；本阶段把 `退出多选` 统一为 `退出多选词表`（词库浏览页 / 分类页顶栏、底栏、确认框标题），并把 `多选词库` / `多选模式` 从 KDoc（`HearWriteApplication.kt`、`domain/DrawWords.kt`、`ui/LibraryDrawViewModel.kt`、`ui/HomeScreen.kt`）与 `AGENTS.md`、`README.md`、`ROADMAP.md`（索引行 + 第 9 条标题与正文）改齐 |
-| 面向学生/家长的界面出现工程术语 | **不改**（作者决定）：`OCR` / `API Key` / `Base URL` / `Key` / `/audio/speech 返回的音频格式` 是配置 OpenAI 兼容接口的必要术语，通俗化后普通用户与专业用户都读不懂；9 处原样保留 |
+| 面向学生/家长的界面出现工程术语 | **分层收口**：面向外部对齐的术语保留（`API Key`、`接口地址（Base URL）`、`OpenAI 兼容…`、`Chat Completions`、`mp3`/`wav`），应用内已有中文名的第二个叫法收掉（`OCR 服务` → `识别服务`、裸 `Key` → `API Key`），1 处冗余路径精简（`/audio/speech 返回的音频格式` → `返回的音频格式`）。明细见下 |
 | `已合并 N 个跨表重复词` 像用户动作 | C1c 已改为 `已自动合并 N 个跨表重复词`（把动作归给应用） |
 | `连续天数` 是裸数字 | C1c 已改为 `N 天`，并在今天已有记录时补 `今日已打卡`（domain 早已能区分，`domain/Stats.kt`） |
 | `更多` sheet 的 KDoc 与代码不符 | C1c 已改齐（KDoc 写 收藏 / 历史记录 / 错词本 / 听写统计，与代码一致） |
 | 同一个 ✕ 图标两义 | C1c 已拆开：`错词本` 用 `Outlined.Spellcheck`，词表行删除用 `Filled.Cancel` |
 | 全角标点 / 单位一致，`7.0s` 例外 | B5 已把间隔读数并入 `ui/Format.kt` `formatInterval`（`7 秒` / `7.5 秒`）；本阶段复核全角标点扫描仍通过 |
+
+**工程术语：按"是否要拿它跟服务商对齐"分层（2026-09-17，作者复核后定的口径）**：审计把 5 个词一并归为"工程术语"，但它们不是一类东西——判据是**用户是否需要拿它和服务商控制台/文档对上号**。
+
+- **保留**（对上号必需）：`API Key`（字段标签、显隐按钮、`免费无需 API Key` ×2、`需自备 API Key` ×3、扫描 sheet 的说明）、`接口地址（Base URL）`（中文在前、术语在括号里，两种读者各取所需）、`OpenAI 兼容语音` / `OpenAI 兼容视觉接口` / `标准 OpenAI TTS 兼容接口` / `Chat Completions` / `接口类型`、`mp3` / `wav`，以及只在排障文案里出现的 `URL` 与 `404`。
+- **收口**——不是通俗化，而是**同一个东西的第二个名字**（与第 1 行同一类病）：
+  - `OCR 服务` → `识别服务`（6 处）：设置 hub 的行标题早就是 `识别服务`，扫描 sheet 同一块里写的是 `识别模型`——同一个配置却有两个名字。改动点：`ui/OcrScanSheet.kt`（`尚未配置识别服务`）、`data/OcrService.kt`、`ui/DictationViewModel.kt`（`gradeNotice` 与 `gradeError` 两条）、`ui/HomeViewModel.kt`（`请先在设置中配置识别服务（需自备 API Key）`）、`ui/SettingsViewModel.kt`（`已保存识别服务配置`）。`OCR` 从此只存在于代码标识符与 logcat。
+  - 裸 `Key` → `API Key`（5 处）：原句 `…但密钥未能加密保存（本机安全存储不可用），Key 将以明文保存在本机` 里 `密钥` 与 `Key` 并存，而服务商控制台只叫 `API Key`——统一成单一 `API Key` 是**精确性**，不是通俗化。改动点：`ui/SettingsProviderForms.kt`（保存提示 ×2、`DEFAULT_CLEAR_BODY`）、`ui/SettingsViewModel.kt`（两条 `*_KEY_UNSEALED_MESSAGE`）、`README.md`（`自备 Key` → `自备 API Key`）。
+- **精简**（1 处）：`响应格式` 字段说明 `/audio/speech 返回的音频格式（mp3/wav…）` → `返回的音频格式（mp3/wav…）`——同一表单上方的 `接口类型` 选择器已经展示过 `/audio/speech`（`chat` 形态在代码里固定 `wav`，不靠这行提示）。
 
 **同维度补漏（审计未列）**：统计页概览行 `正式 N 场 · 复习错词 N 场` 与其下记录行的 `… · 正式听写` 是同一事物的两种叫法——概览行改为 `正式听写 N 场 · 复习错词 N 场`（一屏之内同一实体只有一个名字）。
 
@@ -801,6 +809,13 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 | 411dp 无回归 | `已选 12 个词表` 单行；底栏右缘 1027 = 1080−53，与左留白对称 | ✅ 设备 + 像素 |
 | 统计页叫法统一 | 概览行 `正式听写 1 场 · 复习错词 0 场`；同屏记录行 `9月17日 23:23 · 正式听写` | ✅ 设备 |
 | 残留 | 全仓 `多选词库` / `多选模式` / `退出多选`（非 `退出多选词表`）0 命中，除 `CHANGELOG.md` 已发布节与 `UI-AUDIT.md` 基线文本 | ✅ 源码 |
+| `识别服务` 收口 | 清空应用数据后：扫描 sheet `尚未配置识别服务`（同块在场：`识别模型：…`、`拍照识词使用 OpenAI 兼容视觉接口…`）；跑完 5 词点 `拍照批改` → 屏幕消息 `请先在设置中配置识别服务（需自备 API Key）`；填 Key 保存 → `已保存识别服务配置` | ✅ 设备 |
+| `API Key` 收口 | OCR 表单 `API Key 仅保存在本机，仅用于拍照识词请求`；保存后 `已保存 ••••1234（输入即替换）· API Key 仅保存在本机`；`清除配置` 对话框 `将删除已保存的接口地址、API Key 与模型，草稿恢复为预设默认值。`；发音来源（自定义）表单 `API Key 仅保存在本机，仅用于发音请求` | ✅ 设备 |
+| `响应格式` 说明精简 | 发音来源 → `自定义`（`接口类型` = `/audio/speech`）→ `响应格式` 的说明为 `返回的音频格式（mp3/wav…）`，无路径前缀 | ✅ 设备 |
+| 保留项未动 | `接口地址（Base URL）`、`API Key` 标签、`显示 API Key`、扫描 sheet 的 `…填写自己的 API Key` 原样在场 | ✅ 设备 |
+| 术语残留 | 面向学生的界面里 `OCR`、裸 `Key`、`/audio/speech 返回…` 0 命中（`OCR` 只在代码标识符与 logcat） | ✅ 源码 |
+
+**未能闭环项（如实记录）**：`API Key 未能加密保存（本机安全存储不可用），将以明文保存在本机`（`SettingsViewModel.TTS_KEY_UNSEALED_MESSAGE` / `OCR_KEY_UNSEALED_MESSAGE`）只在 Keystore 封印失败时出现，设备上无注入点，仅源码确认——与 `C1c` 记录的同一条提示同一条件。
 
 **门禁**：`testDebugUnitTest` **383/383** 绿（无新增用例——纯文案与内边距改动，无行为契约变更）；`lintDebug` 无告警；未触及数据层与 schema。
 

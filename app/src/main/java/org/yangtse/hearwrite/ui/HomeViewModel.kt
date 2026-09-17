@@ -994,7 +994,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      * where to go and left them there with only 关闭).
      */
     private fun failOcrConfig() {
-        _ocrError.value = "请先在设置中配置 OCR 服务（需自备 API Key）"
+        _ocrError.value = "请先在设置中配置识别服务（需自备 API Key）"
         _ocrNeedsSettings.value = true
     }
 

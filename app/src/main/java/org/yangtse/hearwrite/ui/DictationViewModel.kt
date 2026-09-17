@@ -754,13 +754,13 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
      *
      * Pre-check: with no stored OCR provider config the pane would only fail
      * after a photo had been taken and cropped, so the card's 拍照批改 press
-     * shows "请先在设置中配置 OCR 服务（需自备 API Key）" through the screen's
+     * shows "请先在设置中配置识别服务（需自备 API Key）" through the screen's
      * message host ([gradeNotice]) and leaves the score card up. The pane's
      * own empty state stays reachable for a config cleared while it is open.
      */
     fun openGradePane() {
         if (!_ocrConfigured.value) {
-            _gradeNotice.value = "请先在设置中配置 OCR 服务（需自备 API Key）"
+            _gradeNotice.value = "请先在设置中配置识别服务（需自备 API Key）"
             return
         }
         _gradePane.value = true
@@ -854,7 +854,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
                 _gradeError.value = null
                 _gradeRetryable.value = false
                 if (app.ocrService.config() == null) {
-                    _gradeError.value = "请先在设置中配置 OCR 服务（需自备 API Key）"
+                    _gradeError.value = "请先在设置中配置识别服务（需自备 API Key）"
                     return@launch
                 }
                 val lines = _activeLines.value

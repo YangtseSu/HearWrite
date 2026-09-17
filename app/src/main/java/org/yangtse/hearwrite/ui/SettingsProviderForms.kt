@@ -181,9 +181,9 @@ fun ProviderApiKeyField(
         label = { Text("API Key") },
         supportingText = {
             if (!dirty && savedHint.isNotEmpty()) {
-                Text("已保存 ••••$savedHint（输入即替换）· Key 仅保存在本机")
+                Text("已保存 ••••$savedHint（输入即替换）· API Key 仅保存在本机")
             } else {
-                Text("Key 仅保存在本机，仅用于$purpose")
+                Text("API Key 仅保存在本机，仅用于$purpose")
             }
         },
         visualTransformation = if (visible) {
@@ -377,7 +377,7 @@ fun ProviderActionRow(
  * 发音来源 consequence to it instead of restating the sentences.
  */
 internal const val DEFAULT_CLEAR_BODY =
-    "将删除已保存的接口地址、Key 与模型，草稿恢复为预设默认值。"
+    "将删除已保存的接口地址、API Key 与模型，草稿恢复为预设默认值。"
 
 /**
  * The 清除配置 confirmation, shared by both forms (it used to exist twice,

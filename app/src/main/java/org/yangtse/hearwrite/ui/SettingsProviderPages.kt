@@ -280,7 +280,7 @@ fun VoiceSourceSettingsPage(
                         onValueChange = viewModel::onTtsResponseFormatChange,
                         label = { Text("响应格式") },
                         placeholder = { Text("mp3") },
-                        supportingText = { Text("/audio/speech 返回的音频格式（mp3/wav…）") },
+                        supportingText = { Text("返回的音频格式（mp3/wav…）") },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -359,7 +359,7 @@ fun OcrProviderSettingsPage(
 
     SettingsSubPage(title = "拍照识词", onBack = onBack) {
         val messages = LocalMessages.current
-        // Same consume-once save message as 发音来源: 已保存 OCR 服务配置 is
+        // Same consume-once save message as 发音来源: 已保存识别服务配置 is
         // only announced for a write that landed, 保存失败 otherwise.
         LaunchedEffect(saveMessage) {
             val message = saveMessage ?: return@LaunchedEffect

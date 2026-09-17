@@ -706,7 +706,7 @@ private fun OcrErrorCard(
                 horizontalArrangement = Arrangement.End,
             ) {
                 // A configuration failure is not retryable — the card used to
-                // answer "请先在设置中配置 OCR 服务" with a lone 关闭, naming a
+                // answer "请先在设置中配置识别服务" with a lone 关闭, naming a
                 // destination it gave no way to reach (the scan sheet has 去设置;
                 // the error card did not).
                 if (needsSettings) {

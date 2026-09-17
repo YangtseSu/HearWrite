@@ -925,7 +925,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
      *
      * Same shape as the TTS save: a scheme-less base URL puts the reason on
      * the form's status line and writes nothing, and the write's own outcome
-     * arrives as a one-shot [ocrSaveMessage] — 已保存 OCR 服务配置 only
+     * arrives as a one-shot [ocrSaveMessage] — 已保存识别服务配置 only
      * for a save that landed. The old Boolean could not see that far: it
      * returned true before the write settled.
      */
@@ -1043,12 +1043,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
         /** 保存并启用 confirmations — one per provider form, never interchangeable. */
         const val TTS_SAVED_MESSAGE = "已保存发音配置"
-        const val OCR_SAVED_MESSAGE = "已保存 OCR 服务配置"
+        const val OCR_SAVED_MESSAGE = "已保存识别服务配置"
 
         /** Saved plaintext (keystore seal failed) — surfaced by the hub as a toast. */
         const val TTS_KEY_UNSEALED_MESSAGE =
-            "发音配置已保存，但密钥未能加密保存（本机安全存储不可用），Key 将以明文保存在本机"
+            "发音配置已保存，但 API Key 未能加密保存（本机安全存储不可用），将以明文保存在本机"
         const val OCR_KEY_UNSEALED_MESSAGE =
-            "OCR 服务配置已保存，但密钥未能加密保存（本机安全存储不可用），Key 将以明文保存在本机"
+            "识别服务配置已保存，但 API Key 未能加密保存（本机安全存储不可用），将以明文保存在本机"
     }
 }

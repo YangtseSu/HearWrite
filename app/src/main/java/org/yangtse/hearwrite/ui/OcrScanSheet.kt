@@ -106,7 +106,7 @@ fun OcrScanSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    if (configured) "识别模型：$modelName" else "尚未配置 OCR 服务",
+                    if (configured) "识别模型：$modelName" else "尚未配置识别服务",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),

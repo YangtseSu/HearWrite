@@ -372,7 +372,7 @@ class OcrService(
     ): OcrOutcome {
         val cfg = config()
         if (cfg == null) {
-            return OcrOutcome.Error("请先在设置中配置 OCR 服务（需自备 API Key）")
+            return OcrOutcome.Error("请先在设置中配置识别服务（需自备 API Key）")
         }
         val body = buildJsonObject {
             put("model", cfg.model.trim())
