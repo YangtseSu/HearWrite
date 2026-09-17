@@ -396,7 +396,7 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 
 **已正确**：两处动画走的是标准 Compose API，会读平台的 `MotionDurationScale`，因此**遵循"移除动画"的无障碍设置**；唯一例外是 `DictationViewModel.kt:473` 的 `delay(MARKED_FLASH_MS)`——但它配合的是震动反馈，不是动效缺陷。
 
-**本节的处置见 §5 阶段 D · `D1`**（📋 规划 2026-09-18）：四条里做 3 条 + 1 条收窄到词库列表，只淡入淡出、不加缩放，验收以"稳态 dump 逐字相等 + 录屏抽帧的定量测量"为准。
+**本节的处置见 §5 阶段 D · `D1`**（2026-09-18 完成）：四条里做了 3 条（动-3 弧线插值、动-1 舞台淡入淡出、动-2 编辑/展示淡入淡出），第 4 条「列表增删」**经录屏实测否决并还原**——这些列表是被整体替换的，`animateItem()` 无处可动。只淡入淡出、不加缩放；验收以"稳态 dump 逐字相等 + 录屏抽帧的定量测量"为准。
 
 ---
 
@@ -770,7 +770,7 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 **要不要引入 Compose 预览截图测试（`com.android.compose.screenshot` ≥ 0.0.1-alpha16）**：它是 `adaptive` skill 与 Google 推荐的形态化验收手段，但本阶段的每条结论都能用 `bounds`/像素直接证伪，故未在 `C6` 内顺带引入。若引入，代价是：新的 `screenshotTest` 源集 + `gradle.properties` 的实验开关 + 参考图（`app/src/screenshotTestDebug/reference/`）入库，且 `alpha16` 是 alpha 依赖——按仓库"track the latest stable"的版本政策，alpha 需要显式豁免。**建议**：等 `Compose` 1.11 的 `Grid`/`FlexBox` 转正、截图插件出 stable 后一次性接入，届时把 `C6` 的四档形态（手机/横屏/平板/1.5× 字号）固化为参考图。
 
 ### 阶段 D — 打磨（按喜好）
-动效（§4，规划见 `D1`）、术语统一（C7）、系统栏图标随自选主题、动态取色（Material You）。（原列表中的 `launchSingleTop`、结束页 → 本次统计入口、死代码清理已随 `C1c` / `C5` 落地。）
+动效（§4，`D1` ✅ 3 条 / 1 条经实测否决）、术语统一（C7）、系统栏图标随自选主题、动态取色（Material You）。（原列表中的 `launchSingleTop`、结束页 → 本次统计入口、死代码清理已随 `C1c` / `C5` 落地。）
 
 #### C7（文案与术语）—— ✅ 已完成
 
@@ -821,16 +821,18 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 
 **门禁**：`testDebugUnitTest` **383/383** 绿（无新增用例——纯文案与内边距改动，无行为契约变更）；`lintDebug` 无告警；未触及数据层与 schema。
 
-#### D1 · 动效（§4）—— 📋 规划（2026-09-18）
+**后续文案调整（2026-09-18，作者点名）**：`关于 → 开源许可` 行的 supporting 由 `GPL-3.0-or-later · 应用内全文` 改为 **`GPL-3.0-or-later`**——"应用内全文"是打包方式的说明（工程痕迹），而该行点入就是全文，副标题在回答点击已经回答的问题。上表 C7 那一行记录的是当时的文本；设备复核：关于页该行为 `GPL-3.0-or-later`，点入仍渲染 GPL 全文（正文区暗像素占比 4.9%）。
 
-§4 四条逐条复核后的取舍：**做 3 条 + 1 条收窄**，不建"动效体系"。基线仅有的两处动画（`HomeScreen` 的 `animateDpAsState`、`DictationScreen` 的 `animateColorAsState`）走的是标准 API，本阶段同样只用标准 API——全部读 `MotionDurationScale`，系统"关闭动画"时退化为瞬切，即今天的基线行为。
+#### D1 · 动效（§4）—— ✅ 已完成（3 做 / 1 否决，2026-09-18）
+
+§4 四条逐条复核后的取舍（2026-09-18 结项）：**规划为"做 3 条 + 1 条收窄"，实测后第 4 条整条否决**（详见文末"结果"），不建"动效体系"。基线仅有的两处动画（`HomeScreen` 的 `animateDpAsState`、`DictationScreen` 的 `animateColorAsState`）走的是标准 API，本阶段同样只用标准 API——全部读 `MotionDurationScale`，系统"关闭动画"时退化为瞬切，即今天的基线行为。
 
 | # | 项 | 判据 | 决定 |
 |---|---|---|---|
 | 动-1 | 舞台硬切（听写中 ↔ 成绩卡 ↔ 批改页） | 全场唯一的大面积状态转换，恰在结束音之后；三块面板信息密度差极大，硬切读作闪坏 | **做** |
 | 动-2 | 编辑/展示硬切（`WordListSection`） | 两个表面被刻意做成同一张卡（KDoc 明写），切换是全 app 最频繁的结构变化 | **做** |
 | 动-3 | 倒计时弧线（≈20 fps 重绘） | 表盘是学生全程注视的焦点；默认 7 秒间隔下每步 2.6°、最小 1 秒间隔下每步 18°，阶梯可见 | **做** |
-| 动-4 | 列表增删 | 词库有稳定 key（可做）；首页展示列表**故意按位置做 key** 且可含重复词（做不了）；成绩卡 chips 在非惰性 `FlowRow`（做不了） | **收窄到词库** |
+| 动-4 | 列表增删 | 词库有稳定 key（可做）；首页展示列表**故意按位置做 key** 且可含重复词（做不了）；成绩卡 chips 在非惰性 `FlowRow`（做不了） | ~~收窄到词库~~ → **整条否决**（实测无效，见文末） |
 
 **动-1 · 舞台切换**：`DictationContent` 的 stage `Box(Modifier.weight(1f).fillMaxWidth())` 里的三选一 → `Crossfade(targetState = stageKind, animationSpec = tween(STAGE_FADE_MS = 200), label = "stage")`，`stageKind` 为文件内 enum（`!finished` → 听写中；`gradePane` → 批改页；否则 → 成绩卡）。**只淡入淡出、不加缩放**：三块面板都是 `fillMaxSize()`，缩放只会让表盘的 Canvas 圆弧与已求解字号被重采样发虚，200 ms 内也几乎不可辨。
 
@@ -877,6 +879,30 @@ LaunchedEffect(target) { lastTarget = target }
 | 5 | 门禁 | `./gradlew :app:testDebugUnitTest :app:lintDebug` 全绿、无新增告警。**预计不加单测**：三个动效都不含 domain 判据（不为了可测性把 snap 规则抽成函数） |
 
 **顺序与提交**：动-3（独立、可量化）→ 动-1 → 动-2 → 动-4（抄尾一行级）；一个动效一个提交（`feat: …` + 🤖），提交正文记录本次的 dump / 录屏证据。
+
+**结果（2026-09-18）：3 条已做，第 4 条经实测否决。** 三个提交：`feat: smooth the countdown arc to the frame rate`（`f2a8b8d`）、`feat: crossfade the dictation stage's panes`（`f8edd88`）、`feat: crossfade the 编辑/展示 switch on the home section`（`d05c143`）；动-4 的三处 `Modifier.animateItem()` 落下去、逐处采样后被**还原**（理由见下），未进代码库。
+
+**验收证据（2026-09-18，模拟器 `pixel10_37.2` 1080×2424 @420dpi；手段 = `screenrecord` → `ffmpeg -fps_mode passthrough` 抽帧 → PIL 程序化取样，脚本为一次性 /tmp 工具不入库）**：
+
+| 项 | 断言 | 结果 |
+|---|---|---|
+| 动-3 弧线连续 | 1 秒间隔下，盘环环带的显示更新率 **20.7/s（帧间 48 ms）→ 50.1/s（20 ms）**；每次更新的弧线推进**中位数 18°（min 0 = 有一帧完全没动）→ 8°（min 4 / max 11）**；每 1 秒倒计时的不同弧位 **~17 → ~50** | ✅ 设备 |
+| 动-3 重启不回扫 | 每条倒计时序列的 sweep 单调不增；上升沿只出现在重启（下一词 / 改间隔），且是**单帧跳变**（`… 0 0 360 267 …` 之间无中间值） | ✅ 设备 |
+| 动-1 舞台切换 | 环带均值：基线 `(212.4,207.4,194.1)@5.930 → (212.9,218.7,221.7)@6.030`——一帧硬切、**0 中间帧**；改后 `(212.4,207.4,194.0)@21.497 → (212.9,218.7,221.8)@21.697`——**200 ms 跨 11 个中间帧**，且终值与基线逐通道相同 | ✅ 设备 |
+| 动-1 布局不变 | 听写中面板 dump 与改前 **19/19 节点逐字相同**（`bounds` + clickable/checkable/checked）；成绩卡稳态每控件一个节点（无跨过渡残留的双份语义） | ✅ 设备 |
+| 动-2 编辑/展示 | 底栏探针：基线 `(231.8,234.4,233.3)@2.514 → (253.8,253.5,252.7)@3.047`——一帧硬切、**0 中间帧**；改后同起点在 **150 ms 内走过 9 个中间帧**（0.98→0.08），终值同为 `(253.8,253.5,252.7)` | ✅ 设备 |
+| 动-2 布局/焦点不变 | 编辑态 **24/24**、展示态 **40/40** 节点与改前逐字相同；点 `编辑` 后立刻注入字符落在文本框内（首字符未丢） | ✅ 设备 |
+| 无障碍退化 | `animator_duration_scale 0`：舞台切换回到**单帧硬切**（卡面颜色一帧到位、0 中间帧）；弧线退回 tick 节奏（中位 18°、min 0），即本次改动前的行为 | ✅ 设备 |
+| 动-4 列表增删 | **否决并还原**（见下） | ❌ 已还原 |
+| 门禁 | `testDebugUnitTest` **383/383** 绿（无新增用例——三个动效都不含 domain 判据）；`lintDebug` `No issues found.`；未触及数据层 | ✅ |
+
+**动-4 为何被否决（实测记录）**：计划把 `animateItem()` 收窄到 key 稳定的三处词库列表。落下去后逐处录屏采样，**没有任何一处产生中间帧**：
+
+- **搜索结果**（`LibraryScreen` 的 `l_`/`w_` 前缀 key）：`LibraryViewModel` 的去抖之后先发 `LibrarySearchState.Loading`（`LibraryScreen` 该分支渲染 `CenterProgress()`），于是 **LazyColumn 在两次查询之间被整个换掉**，新结果的 item 全是首次组合——`animateItem` 没有可动画的前态。实测：查询 `e → es` 时结果区均值 `234.2 → 247.0（空背景）→ 227.4（新集合）`，两次都是单帧跳变。
+- **分类网格**：网格只在资产扫描落定时**首次组合**（之前是 loading），同理。开屏到网格的录屏只有一个台阶。
+- **词表行**（`LibraryListsScreen`）：内容在进屏时一次性确定，不存在"列表已在屏上、item 增删"的时刻。
+
+结论：这些"弹变"的**成因不是 item 动画缺失，而是列表被整体替换**（查询态 teardown / 首次组合），`animateItem()` 是错的工具。加上首页展示列表按位置做 key（可含重复词，动画会指向错误的行）与成绩卡 chips 在非惰性 `FlowRow`（无 `animateItem`），§4 的"列表增删"整条被否决——**没有真实收益的动画不进代码库**。要真正解决"搜索结果弹变"，得让结果列表跨 `Loading` 存活（或给搜索区做一次整面板淡入淡出），那是另一件事，不与本节捆绑。
 
 ### 依赖与顺序
 - `A2` 已按 §0.1 D-1 拍板为"恢复表盘点按"，**不再是待决项**；`AGENTS.md:94` 契约不需要改。
