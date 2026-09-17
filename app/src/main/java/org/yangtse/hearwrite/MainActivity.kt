@@ -5,7 +5,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.yangtse.hearwrite.domain.ThemeMode
 import org.yangtse.hearwrite.ui.HearWriteApp
@@ -24,6 +27,19 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.SYSTEM -> isSystemInDarkTheme()
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK -> true
+            }
+            // System bar icons follow the app's own mode, not the system uiMode:
+            // enableEdgeToEdge()'s default SystemBarStyle.auto resolves the icon
+            // tint from `resources` once in onCreate, so 主题=深色 on a light
+            // system painted dark icons onto the app's dark bars (invisible).
+            // Edge-to-edge leaves both bars transparent, so the icons are the
+            // only thing that has to track the theme.
+            val view = LocalView.current
+            SideEffect {
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = !darkTheme
+                    isAppearanceLightNavigationBars = !darkTheme
+                }
             }
             HearWriteTheme(darkTheme = darkTheme) {
                 HearWriteApp()

@@ -770,7 +770,7 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 **要不要引入 Compose 预览截图测试（`com.android.compose.screenshot` ≥ 0.0.1-alpha16）**：它是 `adaptive` skill 与 Google 推荐的形态化验收手段，但本阶段的每条结论都能用 `bounds`/像素直接证伪，故未在 `C6` 内顺带引入。若引入，代价是：新的 `screenshotTest` 源集 + `gradle.properties` 的实验开关 + 参考图（`app/src/screenshotTestDebug/reference/`）入库，且 `alpha16` 是 alpha 依赖——按仓库"track the latest stable"的版本政策，alpha 需要显式豁免。**建议**：等 `Compose` 1.11 的 `Grid`/`FlexBox` 转正、截图插件出 stable 后一次性接入，届时把 `C6` 的四档形态（手机/横屏/平板/1.5× 字号）固化为参考图。
 
 ### 阶段 D — 打磨（按喜好）
-动效（§4，`D1` ✅）与术语统一（C7 ✅）两项已完成；系统栏图标随自选主题与动态取色（Material You）经作者 2026-09-18 拍板**不做**（其中系统栏图标一项登记为已知未修，见"阶段 D 收尾"）。（原列表中的 `launchSingleTop`、结束页 → 本次统计入口、死代码清理已随 `C1c` / `C5` 落地。）
+动效（§4，`D1` ✅）与术语统一（C7 ✅）两项已完成；系统栏图标随自选主题与动态取色（Material You）经作者 2026-09-18 拍板**不做**后又改判为**分别实施**——系统栏图标已完成（见"阶段 D 收尾"），动态取色在下一提交。（原列表中的 `launchSingleTop`、结束页 → 本次统计入口、死代码清理已随 `C1c` / `C5` 落地。）
 
 #### C7（文案与术语）—— ✅ 已完成
 
@@ -904,18 +904,49 @@ LaunchedEffect(target) { lastTarget = target }
 
 结论：这些"弹变"的**成因不是 item 动画缺失，而是列表被整体替换**（查询态 teardown / 首次组合），`animateItem()` 是错的工具。加上首页展示列表按位置做 key（可含重复词，动画会指向错误的行）与成绩卡 chips 在非惰性 `FlowRow`（无 `animateItem`），§4 的"列表增删"整条被否决——**没有真实收益的动画不进代码库**。要真正解决"搜索结果弹变"，得让结果列表跨 `Loading` 存活（或给搜索区做一次整面板淡入淡出），那是另一件事，不与本节捆绑。
 
-#### 阶段 D 收尾 —— ✅ 已收口（2026-09-18，作者决定）
+#### 阶段 D 收尾 —— ✅ 已收口（2026-09-18，作者改判后）
 
-阶段 D 原列表四项：两项已完成（动效 `D1`、术语 `C7`），另两项经作者 2026-09-18 决定**不做**，本节就此收口。
+阶段 D 原列表四项：动效 `D1`、术语 `C7` 已完成。系统栏图标随自选主题与动态取色（Material You）两项曾在 2026-09-18 拍板**不做**，同日作者改判为**分别实施、各自提交**——本节记录改判后的结果。
 
-| 项 | 决定 | 记录 |
-|---|---|---|
-| 系统栏图标随自选主题 | **不做**（登记为已知未修） | 这一项不是口味问题：`MainActivity.kt` 只有裸 `enableEdgeToEdge()`，其默认 `SystemBarStyle.auto` 按**系统** uiMode 取状态栏图标明暗，而 `主题` 设置可以强制深色/浅色——"系统浅色 + 应用深色"时状态栏图标是深色压在深色背景上。修法已评估（`HearWriteTheme` 内按 `darkTheme` 设 `WindowInsetsControllerCompat(window, view).isAppearanceLightStatusBars = !darkTheme`，约 10 行），本次未实施；**后续视觉/无障碍走查请把它当"已知未修"而不是遗漏** |
-| 动态取色（Material You） | **不做** | 设计层取舍：`dynamicLight/DarkColorScheme()` 会覆盖 `Color.kt` 的纸质/墨色策展色板（`hearWriteSemantics` 的朱砂/收藏金/成功色是独立 CompositionLocal，不受影响）。作者选择保留策展色板，与 `ROADMAP.md` 候选池里同一项的记录一致 |
+##### 系统栏图标随自选主题 —— ✅ 已完成（2026-09-18）
+
+**改判理由**：这一项本来就登记为"不是口味问题"——`MainActivity.kt` 只有裸 `enableEdgeToEdge()`，其默认 `SystemBarStyle.auto` 在 onCreate 时按**系统** uiMode 取图标明暗，而 `主题` 可以强制浅/深，于是"系统浅色 + 应用深色"下深色图标压在深色栏上（不可见）。
+
+**做法**（`MainActivity.kt`，约 10 行）：解析出 `darkTheme` 之后、`HearWriteTheme` 之前同步窗口的图标明暗：
+
+```kotlin
+val view = LocalView.current
+SideEffect {
+    WindowCompat.getInsetsController(window, view).apply {
+        isAppearanceLightStatusBars = !darkTheme
+        isAppearanceLightNavigationBars = !darkTheme
+    }
+}
+```
+
+- edge-to-edge 下两条栏**都是透明的**（`enableEdgeToEdge` 在 API 29+ 关掉导航栏对比度强制），所以图标是唯一需要跟随主题的东西，不碰任何栏底色。
+- 放在 `setContent` 的组合里（而非 `HearWriteTheme` 内——那里拿不到 `window`；Activity 是唯一宿主），`SideEffect` 使 `主题` 切换**即时生效**，不必重建 Activity。
+- 不处理 `Dialog` / `ModalBottomSheet` 的独立窗口：它们自带整屏遮罩，系统按默认（浅色图标）渲染，与遮罩底色一致。
+
+**验收证据（2026-09-18，模拟器 `pixel10_37.2` 1080×2424 @420dpi；两个采样点之间系统 night mode 恒为 `no`，只切应用 `主题`）**：
+
+| 断言 | 结果 |
+|---|---|
+| `主题=深色`（系统浅色）状态栏带（1080×120）：`mean=27.5`、亮像素（L>200）**3716**、暗像素（L<60）**0** → 图标为浅色 | ✅ 设备 |
+| 同场导航条带（底部 140px）：`mean=26.5`、亮像素 **2816** → 手势条随主题变浅 | ✅ 设备 |
+| `主题=浅色`（系统浅色）状态栏带：`mean=239.8`、暗像素 **3669**、亮像素即背景 → 图标为深色 | ✅ 设备 |
+| 切换即时生效：改 `主题` 后未重启 Activity 即采样（DataStore → 组合 → `SideEffect`） | ✅ 设备 |
+| 门禁 | `testDebugUnitTest` **383/383** 绿（无新增用例——窗口外观无 domain 判据）；`lintDebug` `No issues found.` |
+
+判据说明：系统 uiMode 全程为浅色，故图标由深变浅只能由应用 `主题` 造成——基线实现下深色主题不可能出现亮图标。分带计数脚本是一次性 `/tmp/bars.py`，不入库。
+
+##### 动态取色（Material You）—— 待做（下一提交）
+
+原**不做**的理由（设计层取舍）：`dynamicLight/DarkColorScheme()` 会覆盖 `Color.kt` 的纸质/墨色策展色板（`hearWriteSemantics` 的朱砂/收藏金/成功色是独立 CompositionLocal，不受影响）。作者同日改判为实施，接入方式与验收见下一提交的补记。
 
 **`C6` 遗留的独立决定（Compose 预览截图测试）——维持现状，等插件 stable**：`com.android.compose.screenshot` 仍是 alpha，按仓库"track the latest stable"的版本政策需要显式豁免，而 `C6` 的几何结论已由 `bounds` 三元组与像素取样闭环；待其 stable 后一次性把 `C6` 的四档形态（手机/横屏/平板/1.5× 字号）固化为参考图。
 
-至此本审计的全部条目都有终态：**A / B / C 三个阶段全部完成；D 阶段 4 项完成 2 项、另 2 项经作者决定不做（其中系统栏图标一项登记为已知未修缺陷）；`C6` 的截图测试决定维持现状。** 各阶段末尾的"未能闭环项"是**验收手段的缺口**（无注入点 / 窗口短于 dump 延迟等），不是未完成的修复。
+至此本审计的条目状态：**A / B / C 三个阶段全部完成；D 阶段 4 项完成 3 项（动效 `D1`、术语 `C7`、系统栏图标），动态取色在下一提交；`C6` 的截图测试决定维持现状。** 各阶段末尾的"未能闭环项"是**验收手段的缺口**（无注入点 / 窗口短于 dump 延迟等），不是未完成的修复。
 
 ### 依赖与顺序
 - `A2` 已按 §0.1 D-1 拍板为"恢复表盘点按"，**不再是待决项**；`AGENTS.md:94` 契约不需要改。
