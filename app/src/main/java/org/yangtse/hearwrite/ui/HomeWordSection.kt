@@ -1,5 +1,7 @@
 package org.yangtse.hearwrite.ui
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -65,6 +68,12 @@ private const val SAMPLE_CJK = "香蕉\n学校\n苹果\n月亮\n生日"
 /** 示例 labels — also the keys the pending-sample confirm is saved under. */
 private const val SAMPLE_EN_LABEL = "英文示例"
 private const val SAMPLE_CJK_LABEL = "汉字示例"
+
+/**
+ * Length of the 编辑/展示 fade (AUDIT D1 动-2), matched to the dictation
+ * stage's pane fade so the app has one motion temper rather than two.
+ */
+private const val SURFACE_FADE_MS = 200
 
 /**
  * 单词列表 section (alice's WordInputSection + section header): the header row
@@ -197,93 +206,113 @@ fun WordListSection(
             }
             return@Column
         }
-        if (displayMode && wordCount > 0) {
-            WordDisplayList(
-                draft = draft,
-                startIndex = startIndex,
-                onStartIndexChange = onStartIndexChange,
-                onDeleteWord = onDeleteWord,
-                modifier = Modifier.weight(1f),
-            )
-        } else {
-            // Editing surface: the real 编辑态, or 展示态 whose list is empty
-            // — an empty list keeps the editor's look (textarea + 示例/清空
-            // footer) so it is indistinguishable from editing. The first
-            // change made on that empty 展示态 flips the mode first: the
-            // header becomes 完成 and the parsed list never snaps in
-            // mid-keystroke; entering via the 编辑 button changes nothing but
-            // the header and focus (smooth by construction).
-            // One-shot empty→edit flip: burst keystrokes (IME commits, fast
-            // typing, injected text) can all arrive before the recomposition,
-            // each re-running this old lambda — an unguarded toggle would
-            // flip 展示态 back and forth and land the word in the display
-            // list mid-entry. Flip at most once per empty-展示态 session.
-            var flippedFromEmpty by remember { mutableStateOf(false) }
-            LaunchedEffect(displayMode, wordCount) {
-                if (displayMode && wordCount == 0) flippedFromEmpty = false
-            }
-            // Skinned to match the display list's card: same 16dp roundness,
-            // same surfaceContainerLow fill and outlineVariant hairline, so
-            // the editing surface reads as the same container as the rows
-            // it becomes once 完成.
-            val cardBorder = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
-            OutlinedTextField(
-                value = draft,
-                onValueChange = { value ->
-                    if (emptyDisplay && !flippedFromEmpty) {
-                        flippedFromEmpty = true
-                        onToggleDisplayMode()
+        // The display list and the editor are deliberately the same card —
+        // the editor is skinned with the list's fill, hairline and 16 dp
+        // roundness so the two read as one container — so the mode switch
+        // fades between them instead of cutting, which made it look like a
+        // different surface arriving rather than the same one changing
+        // shape (AUDIT D1 动-2). The header above and the confirms below
+        // stay outside the fade; the editor brings its own footer inside
+        // it so the card keeps its height on both sides.
+        Crossfade(
+            targetState = displayMode && wordCount > 0,
+            animationSpec = tween(SURFACE_FADE_MS),
+            label = "wordSectionBody",
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+        ) { showList ->
+            if (showList) {
+                // The list fills the faded slot (the crossfade's box owns the
+                // weight now); the editor below fills it too, so the card keeps
+                // its height across the switch.
+                WordDisplayList(
+                    draft = draft,
+                    startIndex = startIndex,
+                    onStartIndexChange = onStartIndexChange,
+                    onDeleteWord = onDeleteWord,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Editing surface: the real 编辑态, or 展示态 whose list is empty
+                    // — an empty list keeps the editor's look (textarea + 示例/清空
+                    // footer) so it is indistinguishable from editing. The first
+                    // change made on that empty 展示态 flips the mode first: the
+                    // header becomes 完成 and the parsed list never snaps in
+                    // mid-keystroke; entering via the 编辑 button changes nothing but
+                    // the header and focus (smooth by construction).
+                    // One-shot empty→edit flip: burst keystrokes (IME commits, fast
+                    // typing, injected text) can all arrive before the recomposition,
+                    // each re-running this old lambda — an unguarded toggle would
+                    // flip 展示态 back and forth and land the word in the display
+                    // list mid-entry. Flip at most once per empty-展示态 session.
+                    var flippedFromEmpty by remember { mutableStateOf(false) }
+                    LaunchedEffect(displayMode, wordCount) {
+                        if (displayMode && wordCount == 0) flippedFromEmpty = false
                     }
-                    onDraftChange(value)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // The editor is the whole section body: it stretches to
-                    // fill the leftover column height (like the display list
-                    // does), so a large pasted list is visible at once and
-                    // no space below the card goes to waste.
-                    .weight(1f)
-                    .focusRequester(fieldFocus),
-                shape = MaterialTheme.shapes.medium,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    focusedBorderColor = cardBorder,
-                    unfocusedBorderColor = cardBorder,
-                    cursorColor = MaterialTheme.colorScheme.primary,
-                ),
-                textStyle = MaterialTheme.typography.bodyLarge.copy(
-                    color = MaterialTheme.colorScheme.onSurface,
-                ),
-                placeholder = {
-                    Text(
-                        "在此粘贴或输入词表，每行一个词\n支持：词 | 词性 | 释义",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    // Skinned to match the display list's card: same 16dp roundness,
+                    // same surfaceContainerLow fill and outlineVariant hairline, so
+                    // the editing surface reads as the same container as the rows
+                    // it becomes once 完成.
+                    val cardBorder = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = { value ->
+                            if (emptyDisplay && !flippedFromEmpty) {
+                                flippedFromEmpty = true
+                                onToggleDisplayMode()
+                            }
+                            onDraftChange(value)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // The editor is the whole section body: it stretches to
+                            // fill the leftover column height (like the display list
+                            // does), so a large pasted list is visible at once and
+                            // no space below the card goes to waste.
+                            .weight(1f)
+                            .focusRequester(fieldFocus),
+                        shape = MaterialTheme.shapes.medium,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                            focusedBorderColor = cardBorder,
+                            unfocusedBorderColor = cardBorder,
+                            cursorColor = MaterialTheme.colorScheme.primary,
+                        ),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        placeholder = {
+                            Text(
+                                "在此粘贴或输入词表，每行一个词\n支持：词 | 词性 | 释义",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
                     )
-                },
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Alignment spacer only: 共 N 词 already sits in the header's
-                // CountBadge right above this row, so repeating it here would
-                // state the same number twice in one view.
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = { requestSample(SAMPLE_EN_LABEL, SAMPLE_EN) }) {
-                    Text("英文示例")
-                }
-                TextButton(onClick = { requestSample(SAMPLE_CJK_LABEL, SAMPLE_CJK) }) {
-                    Text("汉字示例")
-                }
-                // Pressable at 0 words this button only opened a confirm dialog
-                // for an already-empty draft — nothing to clear.
-                TextButton(onClick = { confirmClear = true }, enabled = wordCount > 0) {
-                    Text("清空")
-                }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        // Alignment spacer only: 共 N 词 already sits in the header's
+                        // CountBadge right above this row, so repeating it here would
+                        // state the same number twice in one view.
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { requestSample(SAMPLE_EN_LABEL, SAMPLE_EN) }) {
+                            Text("英文示例")
+                        }
+                        TextButton(onClick = { requestSample(SAMPLE_CJK_LABEL, SAMPLE_CJK) }) {
+                            Text("汉字示例")
+                        }
+                        // Pressable at 0 words this button only opened a confirm dialog
+                        // for an already-empty draft — nothing to clear.
+                        TextButton(onClick = { confirmClear = true }, enabled = wordCount > 0) {
+                            Text("清空")
+                        }
+                    }
+                    }
             }
         }
 
