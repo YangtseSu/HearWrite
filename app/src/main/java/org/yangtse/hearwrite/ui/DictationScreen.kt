@@ -1,6 +1,7 @@
 package org.yangtse.hearwrite.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -175,7 +176,18 @@ private const val WRONG_CHIP_CAP = 24
 /** Width the countdown slot reserves: the widest readout it ever shows. */
 private val COUNTDOWN_SLOT_TEXT = "${MAX_INTERVAL_SEC.toInt()} 秒"
 
+/**
+ * Length of the stage's pane fade (AUDIT D1 动-1). Short enough that a student
+ * glancing up mid-transition never waits for the surface to settle, and long
+ * enough to read as one surface replacing another rather than a cut.
+ */
+private const val STAGE_FADE_MS = 200
 
+/**
+ * Which of the three stage panes is showing — the Crossfade's state. A separate
+ * type rather than two booleans, so a pane can only be one of the three.
+ */
+private enum class StagePane { ACTIVE, FINISH, GRADE }
 
 /**
  * The dictation surface: countdown ring with the current word hidden by
@@ -481,12 +493,34 @@ private fun DictationContent(
         }
 
         // ---- stage -------------------------------------------------------
-        Box(
+        // The three panes are the app's biggest surface change: the dial gives
+        // way to the score card the moment the run ends — right after the
+        // chime, with the student looking at the screen — and again to the
+        // grade pane. They used to cut hard (AUDIT D1 动-1), which reads as a
+        // glitch rather than a state change.
+        //
+        // Fading is safe by construction: all three panes fill this slot, so
+        // the stage's size — and therefore the box DialStage solves the dial's
+        // geometry from — never changes mid-transition (scale is refused for
+        // the same reason plus resampling: it would blur the ring's canvas arc
+        // and the already-solved font size). Both panes are composed for the
+        // ~200 ms of the fade, and the entering one is composed last, so it is
+        // drawn — and hit-tested — above the outgoing one; the dial the run is
+        // leaving behind is already inactive (ui.isActive == false) anyway. A
+        // standard animation API, so "remove animations" degrades the fade to
+        // the hard cut it used to be.
+        Crossfade(
+            targetState = when {
+                !ui.finished -> StagePane.ACTIVE
+                gradePane -> StagePane.GRADE
+                else -> StagePane.FINISH
+            },
+            animationSpec = tween(STAGE_FADE_MS),
+            label = "stagePane",
             modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (ui.finished) {
-                if (gradePane) {
+        ) { pane ->
+            when (pane) {
+                StagePane.GRADE -> {
                     DictationGradePane(
                         result = gradeResult,
                         selected = gradeSelected,
@@ -511,31 +545,33 @@ private fun DictationContent(
                             onDismiss = { viewModel.cancelCrop() },
                         )
                     }
-                } else {
-                    FinishCard(
+                }
+
+                StagePane.FINISH -> FinishCard(
+                    ui = ui,
+                    onReplay = viewModel::replayRun,
+                    onReviewWrong = viewModel::reviewWrongWords,
+                    onExportWrong = viewModel::exportWrongWords,
+                    onClearWrong = viewModel::clearWrongWords,
+                    onRemoveWrong = viewModel::removeWrongWord,
+                    onGrade = viewModel::openGradePane,
+                    onOpenStats = onOpenStats,
+                    onClose = onClose,
+                )
+
+                StagePane.ACTIVE -> {
+                    val headword = remember(runLines, ui.index) {
+                        runLines.getOrNull(ui.index)?.let(::speakTextFromEntry).orEmpty()
+                    }
+                    DictationStage(
                         ui = ui,
-                        onReplay = viewModel::replayRun,
-                        onReviewWrong = viewModel::reviewWrongWords,
-                        onExportWrong = viewModel::exportWrongWords,
-                        onClearWrong = viewModel::clearWrongWords,
-                        onRemoveWrong = viewModel::removeWrongWord,
-                        onGrade = viewModel::openGradePane,
-                        onOpenStats = onOpenStats,
-                        onClose = onClose,
+                        line = runLines.getOrNull(ui.index),
+                        showWord = showWord,
+                        marked = headword in ui.runMarks,
+                        onToggleWord = onToggleWord,
+                        onToggleMark = viewModel::toggleCurrentWrong,
                     )
                 }
-            } else {
-                val headword = remember(runLines, ui.index) {
-                    runLines.getOrNull(ui.index)?.let(::speakTextFromEntry).orEmpty()
-                }
-                DictationStage(
-                    ui = ui,
-                    line = runLines.getOrNull(ui.index),
-                    showWord = showWord,
-                    marked = headword in ui.runMarks,
-                    onToggleWord = onToggleWord,
-                    onToggleMark = viewModel::toggleCurrentWrong,
-                )
             }
         }
 
