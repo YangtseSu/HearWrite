@@ -2,6 +2,10 @@ package org.yangtse.hearwrite.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -64,6 +68,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,6 +94,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import org.yangtse.hearwrite.domain.COUNTDOWN_TICK_MS
 import org.yangtse.hearwrite.domain.DialHiddenMetrics
 import org.yangtse.hearwrite.domain.DialMetrics
 import org.yangtse.hearwrite.domain.DialStageLayout
@@ -1091,12 +1097,39 @@ private fun DialRing(
     metrics: DialMetrics,
     onToggleWord: () -> Unit,
 ) {
-    val fraction = ui.remainingMs?.let {
+    // Progress the ring depletes with. The engine drives the countdown in
+    // 50 ms ticks (domain.COUNTDOWN_TICK_MS), so a raw read redrew the arc only
+    // ~20 times a second — a staircase on a 248 dp ring (2.6° per step at the
+    // default 7 s interval, 18° at the 1 s minimum, AUDIT D1 动-3). The UI
+    // interpolates *towards* the engine's value over exactly one tick, so the
+    // sweep is continuous at the display frame rate while the engine stays the
+    // single source of truth: nothing here computes a deadline, and turning the
+    // system animations off (`MotionDurationScale` 0) snaps every step back to
+    // the tick cadence, i.e. exactly the old behaviour.
+    val target = ui.remainingMs?.let {
         val totalMs = (ui.intervalSec * 1000).coerceAtLeast(1.0)
         (it / totalMs).coerceIn(0.0, 1.0).toFloat()
-    }
+    } ?: 0f
+    // A *rising* target is a restart — the next word's countdown, or
+    // `setIntervalSec` rewriting the deadline mid-countdown — not the countdown
+    // advancing. Interpolating that would sweep the whole ring back to full
+    // within one tick, so only the descending ticks are smoothed.
+    var lastTarget by remember { mutableFloatStateOf(target) }
+    val arc by animateFloatAsState(
+        targetValue = target,
+        animationSpec = if (target > lastTarget) {
+            snap()
+        } else {
+            tween(COUNTDOWN_TICK_MS.toInt(), easing = LinearEasing)
+        },
+        label = "countdownArc",
+    )
+    LaunchedEffect(target) { lastTarget = target }
     CountdownRing(
-        progressFraction = fraction,
+        // null (the static track) only once there is no countdown *and* the arc
+        // has run out: a pause or stop mid-countdown lets the arc finish its
+        // last step instead of vanishing in a single frame.
+        progressFraction = if (ui.remainingMs == null && arc <= 0f) null else arc,
         modifier = Modifier
             .size(ringDp)
             // Tap-to-reveal (AGENTS.md:94 "tap to reveal, the core
