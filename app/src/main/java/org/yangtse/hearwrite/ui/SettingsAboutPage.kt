@@ -154,7 +154,11 @@ fun AboutSettingsPage(
             )
             SettingsRow(
                 title = "开源许可",
-                supporting = "GPL-3.0-or-later · 应用内全文",
+                // Just the license: where the text lives ("应用内全文") is
+                // packaging, and the row opens the text anyway — the subtitle
+                // answering a question the tap already answers reads as
+                // engineering residue (2026-09-18).
+                supporting = "GPL-3.0-or-later",
                 leading = {
                     Icon(
                         Icons.Outlined.Description,
