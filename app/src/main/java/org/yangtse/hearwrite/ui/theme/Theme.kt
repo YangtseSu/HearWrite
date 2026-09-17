@@ -5,11 +5,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 
 private val LightColors = lightColorScheme(
@@ -154,17 +157,35 @@ val hearWriteSemantics: HearWriteSemantics
  * Material 3 theme: full light/dark color schemes plus the shared shape scale.
  * [darkTheme] resolves the 主题 setting (see MainActivity); defaults to the
  * system night mode.
+ *
+ * [dynamicColor] (设置 → 外观, 动态取色) replaces the curated paper/ink palette
+ * with Material You's wallpaper-derived scheme. The semantic accents in
+ * [HearWriteSemantics] stay curated either way: their values are pinned to
+ * contrast rules a wallpaper cannot promise (朱砂 sits ΔE₀₀ ≥ 11.6 from the
+ * error red, the favorite star ≥ 14.8), and the countdown ring's track — which
+ * in the curated light scheme simply *is* the scheme's highest container tone —
+ * follows the active scheme so it never clashes with a dynamic surface.
  */
 @Composable
 fun HearWriteTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+    val context = LocalContext.current
+    val scheme = when {
+        !dynamicColor && darkTheme -> DarkColors
+        !dynamicColor -> LightColors
+        darkTheme -> dynamicDarkColorScheme(context)
+        else -> dynamicLightColorScheme(context)
+    }
+    val curated = if (darkTheme) DarkSemantics else LightSemantics
     androidx.compose.runtime.CompositionLocalProvider(
-        LocalHearWriteSemantics provides if (darkTheme) DarkSemantics else LightSemantics,
+        LocalHearWriteSemantics provides
+            if (dynamicColor) curated.copy(ringTrack = scheme.surfaceContainerHighest) else curated,
     ) {
         MaterialTheme(
-            colorScheme = if (darkTheme) DarkColors else LightColors,
+            colorScheme = scheme,
             typography = AppTypography,
             shapes = AppShapes,
             content = content,

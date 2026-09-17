@@ -119,6 +119,13 @@ class SettingsRepository(
     }
 
     /**
+     * 动态取色 (Material You): derive the color scheme from the wallpaper
+     * instead of the curated paper/ink palette. Default off — the curated
+     * palette is the app's identity and the fallback stays reachable.
+     */
+    val dynamicColor: Flow<Boolean> = safePrefs.map { it[KEY_DYNAMIC_COLOR] ?: false }
+
+    /**
      * 识别语言 of 拍照识词 (the 词表类型 tab: 英文单词 vs 中文生字/词语), or null
      * when the user has never picked one. Null is meaningful — the screen then
      * infers the language from the current draft instead of forcing English on
@@ -264,6 +271,10 @@ class SettingsRepository(
         dataStore.edit { it[KEY_THEME] = mode.name.lowercase() }
     }
 
+    suspend fun setDynamicColor(enabled: Boolean) {
+        dataStore.edit { it[KEY_DYNAMIC_COLOR] = enabled }
+    }
+
     /** Persist the 识别语言 picked in the 拍照识词 sheet (C4: the one setting
      *  of the OCR flow that used to reset to ENGLISH on every cold start). */
     suspend fun setOcrLang(lang: OcrLang) {
@@ -375,6 +386,7 @@ class SettingsRepository(
         val KEY_SYSTEM_USE_DEFAULT_EN = booleanPreferencesKey("system_use_default_en")
         val KEY_SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         val KEY_THEME = stringPreferencesKey("theme")
+        val KEY_DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val KEY_OCR_LANG = stringPreferencesKey("ocr_lang")
         val KEY_OCR_PROVIDER_CONFIG = stringPreferencesKey("ocr_provider_config")
         val KEY_TTS_PROVIDER_CONFIG = stringPreferencesKey("tts_provider_config")

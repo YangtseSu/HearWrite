@@ -122,6 +122,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _theme = MutableStateFlow(ThemeMode.SYSTEM)
     val theme: StateFlow<ThemeMode> = _theme.asStateFlow()
 
+    private val _dynamicColor = MutableStateFlow(false)
+    val dynamicColor: StateFlow<Boolean> = _dynamicColor.asStateFlow()
+
     // ---- OCR 识别 (拍照识词) BYOK config fields ----------------------------
     // One draft + one stored config per 服务商 preset; the chip switch loads
     // the target provider's own state instead of reusing typed values.
@@ -533,6 +536,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { _ttsSource.value = settings.ttsSource.first() }
         viewModelScope.launch { _soundEnabled.value = settings.soundEnabled.first() }
         viewModelScope.launch { _theme.value = settings.theme.first() }
+        viewModelScope.launch { _dynamicColor.value = settings.dynamicColor.first() }
         // Per-provider storage: mirror the stored configs and the active
         // preset; the selected chip starts on the active provider (preset
         // defaults with a blank key when none is saved yet — BYOK only).
@@ -595,6 +599,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun onThemeChange(mode: ThemeMode) {
         _theme.value = mode
         viewModelScope.launch { settings.setTheme(mode) }
+    }
+
+    fun onDynamicColorChange(enabled: Boolean) {
+        _dynamicColor.value = enabled
+        viewModelScope.launch { settings.setDynamicColor(enabled) }
     }
 
     fun onTtsSourceChange(source: TtsSource) {

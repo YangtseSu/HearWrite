@@ -770,7 +770,7 @@ item(key = "src_${group.sourceTitle.orEmpty()}_${group.jumpCategory.orEmpty()}")
 **要不要引入 Compose 预览截图测试（`com.android.compose.screenshot` ≥ 0.0.1-alpha16）**：它是 `adaptive` skill 与 Google 推荐的形态化验收手段，但本阶段的每条结论都能用 `bounds`/像素直接证伪，故未在 `C6` 内顺带引入。若引入，代价是：新的 `screenshotTest` 源集 + `gradle.properties` 的实验开关 + 参考图（`app/src/screenshotTestDebug/reference/`）入库，且 `alpha16` 是 alpha 依赖——按仓库"track the latest stable"的版本政策，alpha 需要显式豁免。**建议**：等 `Compose` 1.11 的 `Grid`/`FlexBox` 转正、截图插件出 stable 后一次性接入，届时把 `C6` 的四档形态（手机/横屏/平板/1.5× 字号）固化为参考图。
 
 ### 阶段 D — 打磨（按喜好）
-动效（§4，`D1` ✅）与术语统一（C7 ✅）两项已完成；系统栏图标随自选主题与动态取色（Material You）经作者 2026-09-18 拍板**不做**后又改判为**分别实施**——系统栏图标已完成（见"阶段 D 收尾"），动态取色在下一提交。（原列表中的 `launchSingleTop`、结束页 → 本次统计入口、死代码清理已随 `C1c` / `C5` 落地。）
+动效（§4，`D1` ✅）与术语统一（C7 ✅）两项已完成；系统栏图标随自选主题与动态取色（Material You）经作者 2026-09-18 拍板**不做**后又改判为**分别实施**——两项均已完成（见"阶段 D 收尾"）。（原列表中的 `launchSingleTop`、结束页 → 本次统计入口、死代码清理已随 `C1c` / `C5` 落地。）
 
 #### C7（文案与术语）—— ✅ 已完成
 
@@ -940,13 +940,35 @@ SideEffect {
 
 判据说明：系统 uiMode 全程为浅色，故图标由深变浅只能由应用 `主题` 造成——基线实现下深色主题不可能出现亮图标。分带计数脚本是一次性 `/tmp/bars.py`，不入库。
 
-##### 动态取色（Material You）—— 待做（下一提交）
+##### 动态取色（Material You）—— ✅ 已完成（2026-09-18，作者改判为开关）
 
-原**不做**的理由（设计层取舍）：`dynamicLight/DarkColorScheme()` 会覆盖 `Color.kt` 的纸质/墨色策展色板（`hearWriteSemantics` 的朱砂/收藏金/成功色是独立 CompositionLocal，不受影响）。作者同日改判为实施，接入方式与验收见下一提交的补记。
+原**不做**的理由（设计层取舍）：`dynamicLight/DarkColorScheme()` 会覆盖 `Color.kt` 的纸质/墨色策展色板（`hearWriteSemantics` 的朱砂/收藏金/成功色是独立 CompositionLocal，不受影响）。作者同日改判为实施，形态由作者定为**开关、默认关**：想跟随壁纸的人可开，策展色板仍是默认身份，且两个方向都可逆。
+
+| 层 | 接入点 |
+|---|---|
+| 设置 | `SettingsRepository` 新键 `dynamic_color`（默认 `false`）+ `setDynamicColor`；`SettingsViewModel.dynamicColor` / `onDynamicColorChange`（镜像 `theme` 的既有写法）；外观卡片内新增 `动态取色` 行（`RowToggle`，整行即开关，支撑文案 `跟随壁纸取色，替换纸墨配色`） |
+| 主题 | `HearWriteTheme(darkTheme, dynamicColor)`：开启时用 `dynamicLight/DarkColorScheme(context)` 取代 `LightColors`/`DarkColors`。`minSdk 33` 已 ≥ 31，按 AGENTS.md 的 minSdk 政策不加版本判断 |
+| 语义色 | 朱砂/收藏金/成功色**保持策展**：取值被钉在对比度约束上（朱砂 vs 错误红 ΔE₀₀ ≥ 11.6、收藏金 ≥ 14.8），壁纸给不出这个保证。唯一跟随动态方案的是 `ringTrack`——策展浅色方案里它本来就**是** `surfaceContainerHighest`，动态下取当前方案的同名色，环槽才不会与壁纸底色打架 |
+| 预览卡 | `ThemePreviewCard` 的 浅色/深色 色块同样按 `dynamicColor` 解析（该组件 KDoc 承诺"所见即所得"），否则开着动态取色时预览的仍是被替换掉的策展色 |
+| 系统栏 | 上一条的图标明暗只看 `darkTheme`，动态取色不改变深浅归属，无需改动 |
+
+**验收证据（2026-09-18，模拟器 `pixel10_37.2`；整屏精确色值直方图，一次性脚本 `/tmp/palette.py`，不入库）**：
+
+| 断言 | 结果 |
+|---|---|
+| 关（`主题=浅色`）：`#FAF7F1` 背景 29.34%、`#1B5FAA` 主色 4.68%、白卡 56.57% | ✅ 设备 |
+| 开（同主题）：背景 `#FAF8FE` 36.05%、主色 `#4C5E8B` 1.87% → 整套方案换成壁纸取色 | ✅ 设备 |
+| **同源交叉验证**：系统 设置（Material You）背景 `#FAF8FE`，与应用动态背景逐字节相同——证明取自系统 Monet 调色板，而不是另一套固定色 | ✅ 设备 |
+| 深色 + 动态：背景 `#121318`、卡片 `#0D0E12`、主色 `#B8C6EE`（对照策展深色 `#10151B` / `#1A212B` / `#8FC3F5`） | ✅ 设备 |
+| 关回去：`#FAF7F1` / `#10151B` 等策展色回到直方图（往返可逆） | ✅ 设备 |
+| 开关语义：`动态取色` 行 `checkable=true`、开启后 `checked=true`（整行一个焦点停靠点，B3 惯例） | ✅ 设备 |
+| 持久化：`force-stop` 后重启，`动态取色` 与 `主题` 双双保持 | ✅ 设备 |
+| 预览卡跟随：开着动态取色时外观卡片内 `#FAF7F1` / `#10151B` 像素 **0**，两个色块取到动态方案的 primary（`#4C5E8B` / `#B8C6EE`） | ✅ 设备 |
+| 门禁 | `testDebugUnitTest` **383/383** 绿（无新增用例——开关只驱动既有 `StateFlow` 与方案选择，无 domain 判据）；`lintDebug` `No issues found.` |
 
 **`C6` 遗留的独立决定（Compose 预览截图测试）——维持现状，等插件 stable**：`com.android.compose.screenshot` 仍是 alpha，按仓库"track the latest stable"的版本政策需要显式豁免，而 `C6` 的几何结论已由 `bounds` 三元组与像素取样闭环；待其 stable 后一次性把 `C6` 的四档形态（手机/横屏/平板/1.5× 字号）固化为参考图。
 
-至此本审计的条目状态：**A / B / C 三个阶段全部完成；D 阶段 4 项完成 3 项（动效 `D1`、术语 `C7`、系统栏图标），动态取色在下一提交；`C6` 的截图测试决定维持现状。** 各阶段末尾的"未能闭环项"是**验收手段的缺口**（无注入点 / 窗口短于 dump 延迟等），不是未完成的修复。
+至此本审计的条目状态：**A / B / C 三个阶段全部完成；D 阶段 4 项全部完成（动效 `D1`、术语 `C7`、系统栏图标、动态取色）；`C6` 的截图测试决定维持现状。** 各阶段末尾的"未能闭环项"是**验收手段的缺口**（无注入点 / 窗口短于 dump 延迟等），不是未完成的修复。
 
 ### 依赖与顺序
 - `A2` 已按 §0.1 D-1 拍板为"恢复表盘点按"，**不再是待决项**；`AGENTS.md:94` 契约不需要改。

@@ -28,6 +28,10 @@ class MainActivity : ComponentActivity() {
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK -> true
             }
+            // 动态取色 (Material You): off by default, so the curated palette
+            // only gives way when the user asks for it (设置 → 外观).
+            val dynamicColor by app.settingsRepository.dynamicColor
+                .collectAsStateWithLifecycle(initialValue = false)
             // System bar icons follow the app's own mode, not the system uiMode:
             // enableEdgeToEdge()'s default SystemBarStyle.auto resolves the icon
             // tint from `resources` once in onCreate, so 主题=深色 on a light
@@ -41,7 +45,7 @@ class MainActivity : ComponentActivity() {
                     isAppearanceLightNavigationBars = !darkTheme
                 }
             }
-            HearWriteTheme(darkTheme = darkTheme) {
+            HearWriteTheme(darkTheme = darkTheme, dynamicColor = dynamicColor) {
                 HearWriteApp()
             }
         }

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material.icons.outlined.DocumentScanner
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.AlertDialog
@@ -134,6 +135,7 @@ private fun SettingsHub(
 ) {
     val messages = rememberMessageController()
     val theme by viewModel.theme.collectAsStateWithLifecycle()
+    val dynamicColor by viewModel.dynamicColor.collectAsStateWithLifecycle()
     val speechRate by viewModel.speechRate.collectAsStateWithLifecycle()
     val readTranslation by viewModel.readTranslation.collectAsStateWithLifecycle()
     val ttsSource by viewModel.ttsSource.collectAsStateWithLifecycle()
@@ -255,20 +257,43 @@ private fun SettingsHub(
                                 selected = theme == ThemeMode.LIGHT,
                                 onClick = { viewModel.onThemeChange(ThemeMode.LIGHT) },
                                 modifier = Modifier.weight(1f),
+                                dynamicColor = dynamicColor,
                             )
                             ThemePreviewCard(
                                 label = "深色",
                                 selected = theme == ThemeMode.DARK,
                                 onClick = { viewModel.onThemeChange(ThemeMode.DARK) },
                                 modifier = Modifier.weight(1f),
+                                dynamicColor = dynamicColor,
                             )
                             ThemePreviewCard(
                                 label = "跟随系统",
                                 selected = theme == ThemeMode.SYSTEM,
                                 onClick = { viewModel.onThemeChange(ThemeMode.SYSTEM) },
                                 modifier = Modifier.weight(1f),
+                                dynamicColor = dynamicColor,
                             )
                         }
+                        HorizontalDivider(modifier = Modifier.padding(start = 16.dp))
+                        SettingsRow(
+                            title = "动态取色",
+                            supporting = "跟随壁纸取色，替换纸墨配色",
+                            leading = {
+                                Icon(
+                                    Icons.Outlined.Palette,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(24.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            },
+                            trailing = { Switch(checked = dynamicColor, onCheckedChange = null) },
+                            divider = false,
+                            toggle = RowToggle(
+                                checked = dynamicColor,
+                                role = Role.Switch,
+                                onToggle = { viewModel.onDynamicColorChange(!dynamicColor) },
+                            ),
+                        )
                     }
 
                     SettingsSectionHeader("听写")

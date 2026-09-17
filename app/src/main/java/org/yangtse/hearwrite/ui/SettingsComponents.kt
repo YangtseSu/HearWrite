@@ -33,10 +33,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -321,6 +324,10 @@ fun SettingsSubPage(
  * Theme preview card for the 外观 setting: a miniature paper/ink swatch over
  * the label. 所见即所得 — the swatch shows the actual background + primary
  * of each mode instead of a text-only chip.
+ *
+ * [dynamicColor] is 动态取色: with it on, the 浅色/深色 modes render the
+ * wallpaper-derived scheme, so their swatches resolve the same way instead of
+ * promising the curated palette the app no longer uses.
  */
 @Composable
 fun ThemePreviewCard(
@@ -328,6 +335,7 @@ fun ThemePreviewCard(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    dynamicColor: Boolean = false,
 ) {
     Surface(
         shape = MaterialTheme.shapes.medium,
@@ -354,7 +362,7 @@ fun ThemePreviewCard(
             modifier = Modifier.padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            ThemeSwatch(label = label)
+            ThemeSwatch(label = label, dynamicColor = dynamicColor)
             Text(
                 label,
                 style = MaterialTheme.typography.labelLarge,
@@ -365,14 +373,19 @@ fun ThemePreviewCard(
 }
 
 @Composable
-private fun ThemeSwatch(label: String) {
+private fun ThemeSwatch(label: String, dynamicColor: Boolean) {
+    val context = LocalContext.current
+    val light = if (dynamicColor) dynamicLightColorScheme(context) else null
+    val dark = if (dynamicColor) dynamicDarkColorScheme(context) else null
     val (background, primary) = when (label) {
-        "深色" -> org.yangtse.hearwrite.ui.theme.BackgroundDark to
-            org.yangtse.hearwrite.ui.theme.PrimaryDark
+        "深色" -> dark?.let { it.background to it.primary }
+            ?: (org.yangtse.hearwrite.ui.theme.BackgroundDark to
+                org.yangtse.hearwrite.ui.theme.PrimaryDark)
         "跟随系统" -> MaterialTheme.colorScheme.background to
             MaterialTheme.colorScheme.primary
-        else -> org.yangtse.hearwrite.ui.theme.BackgroundLight to
-            org.yangtse.hearwrite.ui.theme.PrimaryLight
+        else -> light?.let { it.background to it.primary }
+            ?: (org.yangtse.hearwrite.ui.theme.BackgroundLight to
+                org.yangtse.hearwrite.ui.theme.PrimaryLight)
     }
     Surface(
         shape = MaterialTheme.shapes.small,
