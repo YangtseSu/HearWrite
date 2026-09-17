@@ -3,7 +3,7 @@ package org.yangtse.hearwrite.domain
 import kotlin.random.Random
 
 /**
- * 多选词库 → 抽词听写 (Roadmap #9) pool logic — pure, so the draw contract is
+ * 多选词表 → 抽词听写 (Roadmap #9) pool logic — pure, so the draw contract is
  * unit-testable without assets.
  */
 

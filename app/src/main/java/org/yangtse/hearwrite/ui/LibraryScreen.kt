@@ -71,8 +71,8 @@ fun LibraryScreen(
     val selectedIds by selection.selectedIds.collectAsState()
 
     // One guarded exit for every affordance in selection mode — system back,
-    // the app-bar arrow and 完成 all funnel through it, so they cannot mean
-    // three different things (and a non-empty tick set is never dropped
+    // the app-bar arrow and 退出多选词表 all funnel through it, so they cannot
+    // mean three different things (and a non-empty tick set is never dropped
     // silently). The arrow leaves the 词库 when not selecting.
     val exitSelection = rememberSelectionExitGuard(selectedIds.size) { selection.setActive(false) }
     val onBackOrExit: () -> Unit = { if (selecting) exitSelection() else onBack() }
@@ -91,8 +91,9 @@ fun LibraryScreen(
                 actions = {
                     if (selecting) {
                         // 完成 read as "confirm", but it discards the tick set;
-                        // name it what it does.
-                        TextButton(onClick = exitSelection) { Text("退出多选") }
+                        // name it what it does — one name for the mode, the
+                        // same one the entry icon and the bar carry.
+                        TextButton(onClick = exitSelection) { Text("退出多选词表") }
                     } else {
                         IconButton(onClick = { selection.setActive(true) }) {
                             Icon(Icons.Filled.Checklist, contentDescription = "多选词表")

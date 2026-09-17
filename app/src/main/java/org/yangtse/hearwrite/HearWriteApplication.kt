@@ -125,7 +125,7 @@ class HearWriteApplication : Application() {
     /** Word-list handoff for starting a dictation session. */
     val dictationSession: DictationSessionStore by lazy { DictationSessionStore() }
 
-    /** Cross-screen 多选词库 selection for 抽词听写 (Roadmap #9). */
+    /** Cross-screen 多选词表 selection for 抽词听写 (Roadmap #9). */
     val librarySelection: LibrarySelectionStore by lazy { LibrarySelectionStore() }
 
     // ---- Room persistence (wrong words / history / favorites) -------------

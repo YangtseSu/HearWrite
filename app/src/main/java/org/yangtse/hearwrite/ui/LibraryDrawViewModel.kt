@@ -41,7 +41,7 @@ data class DrawPoolState(
 data class DrawSession(val lines: List<String>, val sourceLabel: String)
 
 /**
- * 抽词听写 (Roadmap #9): the 多选词库 selection is loaded as one candidate pool
+ * 抽词听写 (Roadmap #9): the 多选词表 selection is loaded as one candidate pool
  * — lists in selection order, cross-list duplicates merged by speakable
  * headword, bare English headwords enriched with the offline ECDICT meta —
  * then X lines are drawn without replacement. The pool is assembled before

@@ -382,7 +382,7 @@ private fun OverviewCard(ui: StatsUiState) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("共听写 ${summary.runs} 场", style = MaterialTheme.typography.titleMedium)
             Text(
-                "正式 ${summary.dictationRuns} 场 · 复习错词 ${summary.reviewRuns} 场",
+                "正式听写 ${summary.dictationRuns} 场 · 复习错词 ${summary.reviewRuns} 场",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 4.dp),
             )

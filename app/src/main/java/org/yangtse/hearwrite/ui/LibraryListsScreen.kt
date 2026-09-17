@@ -58,7 +58,7 @@ fun LibraryListsScreen(
     val selectedIds by selection.selectedIds.collectAsState()
 
     // Mirrors the browse screen: one guarded exit behind system back, the
-    // app-bar arrow and 退出多选 (a ticked selection is never dropped
+    // app-bar arrow and 退出多选词表 (a ticked selection is never dropped
     // silently, and the three affordances cannot disagree).
     val exitSelection = rememberSelectionExitGuard(selectedIds.size) { selection.setActive(false) }
     val onBackOrExit: () -> Unit = { if (selecting) exitSelection() else onBack() }
@@ -76,7 +76,7 @@ fun LibraryListsScreen(
                 },
                 actions = {
                     if (selecting) {
-                        TextButton(onClick = exitSelection) { Text("退出多选") }
+                        TextButton(onClick = exitSelection) { Text("退出多选词表") }
                     } else {
                         IconButton(onClick = { selection.setActive(true) }) {
                             Icon(Icons.Filled.Checklist, contentDescription = "多选词表")

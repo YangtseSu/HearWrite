@@ -2,6 +2,7 @@ package org.yangtse.hearwrite.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -24,10 +25,10 @@ import androidx.compose.ui.unit.dp
 
 /**
  * 多选词表 action bar for 抽词听写 (Roadmap #9), pinned to the bottom of both
- * library screens while selection mode is on: the ticked-list count, 退出多选
- * and the 抽词听写 entry (disabled with nothing ticked). The two screens are
- * separate destinations, so the bar is shared — the selection itself lives in
- * the process-scoped store both screens observe.
+ * library screens while selection mode is on: the ticked-list count,
+ * 退出多选词表 and the 抽词听写 entry (disabled with nothing ticked). The two
+ * screens are separate destinations, so the bar is shared — the selection
+ * itself lives in the process-scoped store both screens observe.
  *
  * [selectedCount] counts *lists*, and the label says so (已选 N 个词表): the
  * user cares about words, but a cross-category word total would mean loading
@@ -66,8 +67,21 @@ fun LibrarySelectionBar(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f),
             )
-            TextButton(onClick = onExit) { Text("退出多选") }
-            Button(onClick = onStartDraw, enabled = selectedCount > 0) { Text("抽词听写") }
+            TextButton(
+                onClick = onExit,
+                // Two compact controls and one flexible label share a single
+                // row; the count label is the flexible one and must never wrap
+                // (a two-line 已选 12 个 / 词表 is the first thing to look
+                // broken) — it grows with the digit count, so the fixed labels
+                // yield their default padding instead. Touch targets are
+                // unchanged (M3 minimumInteractiveComponentSize keeps 48dp).
+                contentPadding = PaddingValues(horizontal = 8.dp),
+            ) { Text("退出多选词表") }
+            Button(
+                onClick = onStartDraw,
+                enabled = selectedCount > 0,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            ) { Text("抽词听写") }
         }
     }
 }
@@ -89,7 +103,7 @@ fun rememberSelectionExitGuard(
     if (pending) {
         AlertDialog(
             onDismissRequest = { pending = false },
-            title = { Text("退出多选？") },
+            title = { Text("退出多选词表？") },
             text = { Text("已选 $selectedCount 个词表，退出后将清空选择。") },
             confirmButton = {
                 TextButton(onClick = {
