@@ -31,5 +31,15 @@ keystore.properties
 # Python bytecode
 __pycache__/
 
-# Agent skills (personal tooling, not part of the project)
+# Agent tooling state (personal, not part of the project)
 .agents/
+.omp/
+.claude/
+.codex/
+.dsh/
+.opencode/
+.planning/
+.pi/
+
+# Scratch
+tmp/
