@@ -225,14 +225,12 @@
 
 ### 平台与打磨
 
-- **冷启动与内存预算** — AGENTS.md 自记的"唯一真实弱点"：词典 3.3 MB → 约 15–25 MB 堆 + 数百 ms 解析，Phase 10 阈值是 500 ms；Android 17 又引入按设备 RAM 的内存上限。
-  建议：**中高**。先测量（`am start -W` / Macrobenchmark），超阈值再把词典迁到 `Room.createFromAsset`，不要提前优化。
-- **大屏 / 横屏 / 折叠屏适配** — 现状无任何 `WindowSizeClass`，全部单列固定布局；manifest 未锁方向（合规无风险），但平板/横屏观感差。
-  建议：**中**。先保证旋转与分屏不崩，再考虑双栏。
+- **冷启动预算的真机复核** — 词典仍是惰性加载（`DictionaryRepository` 首次查询时才解析 3.3 MB → 约 15–25 MB 堆），Phase 10 已按"先测量"决策：**真机 release 稳态 173 ms** < 500 ms 阈值，不迁 `Room.createFromAsset`（记录见 `implemented/2026-09-04-PHASES.md`）。**现状（2026-09-18 复测）**：本机只有软件渲染模拟器可用，release `am start -W` 稳态 **700–727 ms**，同一模拟器上的系统设置基线 243–292 ms——模拟器不作阈值判据；0.2–0.8 的功能增量之后**尚未在真机复测**。
+  建议：**低**。下次有真机时跑 3 次 release `am start -W` 确认仍在 500 ms 内；超了再评估迁 SQLite，不要提前优化。
 - **快捷方式 / 桌面小组件** — 静态 shortcuts（开始听写 / 复习错词）成本低；Glance 小组件建议等"今日复习"落地后再做。
   建议：**中低**。
-- **无障碍与大字号走查** — TalkBack 全流程 + 大字号走查；Android 17 新增 CJKV 输入的无障碍事件/TextAttribute API。
-  建议：**中**。
+- **大字号 2.0× 走查与固定高度文本容器** — TalkBack 面已闭环（33 处图标按钮全带中文 `contentDescription`，角色 / `liveRegion` / `heading` / `clearAndSetSemantics` 到位；1.5× 字号已在拨盘、横屏舞台、统计图上走查），故本条只余字号侧：**2.0× 未走查**，而若干文本容器是固定 dp 高度（`ui/DictationScreen.kt:139`/`:149` 的 40 / 52 dp、`ui/HomeDrawers.kt:267` 的 36 dp、`ui/HomePlaybackPanel.kt:214` 的 52 dp——舞台只把倒计时那一行按 `fontScale` 计入高度），文字随系统放大时会裁切；`ui/Wordmark.kt:52`/`:64`/`:72` 的标题 `maxLines = 1` + Ellipsis 会先行省略；`ui/HomeDrawers.kt:267` 的「查看词表」36 dp 还低于 48 dp 触达最小。Android 17 的 CJKV 无障碍事件 / `TextAttribute` API 未接（全仓无 `textInputSession`）。
+  建议：**中低**。跑一遍 2.0× 走查，把固定高度改成 `heightIn(min = …)` + 内容自适应，并把那个 36 dp 按钮提到 48 dp。
 - **应用内更新检查** — GitHub Releases 分发没有自动更新通道；可查 GitHub API 提示新版本。
   建议：**中低**。注意这会新增一个网络出口，需同步更新 AGENTS.md 的"四个出网点"清单。
 - **预测性返回手势** — 打磨项，成本低。建议：**低**，可顺手做。

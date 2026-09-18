@@ -56,6 +56,8 @@
 
 - **动态取色（Material You）** — ✅ 已做（2026-09-18）：设置 → 外观 的 `动态取色` 开关，默认关（策展纸墨配色仍是默认身份），开时换成壁纸取色；朱砂/收藏金/成功语义色保持策展。见 `2026-09-12-UI-AUDIT.md` 阶段 D 收尾。
 
+- ✅ **大屏 / 横屏 / 折叠屏适配** — 已落地（2026-09-16，UI 审计 C6）：`ui/Adaptive.kt` 给出窗口尺寸接缝（`currentWindowAdaptiveInfoV2().windowSizeClass`、`WIDTH_DP_MEDIUM`）与 720 dp 阅读宽度上限（`Modifier.contentWidth`，约 40 处调用点覆盖各页面与两条底栏，内容居中而不再拉满）；听写舞台由 `domain/DialStage.kt` 从实测框解算 STACKED / BESIDE，双栏以 WindowSizeClass 为门（`ui/DictationScreen.kt:893`/`:910`）；词库页用 `GridCells.Adaptive(180.dp)`；旋转敏感状态进 `rememberSaveable`，manifest 不锁方向。**未采样（如实记录）**：折叠屏铰链姿态与分屏（freeform）——可用硬件里没有这两种形态（审计 §未能闭环项）。
+- ✅ **无障碍（TalkBack）走查** — 已闭环：Phase 10 的首轮走查（`2026-09-04-PHASES.md` 第 10 阶段）加审计 A1–A12 / B3 全部关闭；现状 33 处 `IconButton` 全带中文 `contentDescription`，switch / radio / checkbox 行有角色，倒计时读数 `clearAndSetSemantics` + `liveRegion`，裁剪层 10 个 `CustomAccessibilityAction`，分节标题 `heading()`；大字号 1.5× 已在拨盘 / 横屏舞台 / 统计图上走查。**残留**（留在 `../ROADMAP.md`）：2.0× 字号、固定 dp 高度的文本容器、36 dp 触达、CJKV 无障碍 API。
 ### 工程质量
 
 - **词库质检脚本（`scripts/check-assets.py`）+ CI** — ✅ 已落地（见 [`../ROADMAP.md`](../ROADMAP.md) 条目 16）：651 表 / 21769 行，校验每行可解析、无重复词、拼音格式合法、组词含本字、多字中文行不带列、生成资产（`ecdict-meta.json` / `hanzi-meta.json` / `compounds.json`）结构完整；CI 先于 Gradle 执行。词库名/分类名的排序漂移仍由 `LabelOrderTest` 守住。
