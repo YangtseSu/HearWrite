@@ -13,7 +13,11 @@ import org.junit.Test
  */
 class AnswerGradingTest {
 
-    private fun lines(vararg values: String) = values.toList()
+    /** The run's rows: the cases are written as raw list lines. */
+    private fun rows(vararg lines: String): List<WordRow> = lines.map(::parseWordLine)
+
+    /** The student's answer lines, as the vision model read them off the paper. */
+    private fun answers(vararg lines: String): List<String> = lines.toList()
 
     private fun GradeResult.bySlot() = items.filter { it.verdict != AnswerVerdict.EXTRA }
         .associateBy { it.slot }
@@ -21,8 +25,8 @@ class AnswerGradingTest {
     @Test
     fun perfectSheet_allCorrect() {
         val result = gradeAnswers(
-            lines("apple", "banana", "cat"),
-            lines("apple", "banana", "cat"),
+            rows("apple", "banana", "cat"),
+            answers("apple", "banana", "cat"),
         )
         assertEquals(3, result.expectedTotal)
         assertEquals(3, result.correctCount)
@@ -39,29 +43,29 @@ class AnswerGradingTest {
         // Case, edge punctuation, spacing and fullwidth letters are not
         // spelling errors — OCR and handwriting produce all of them.
         val result = gradeAnswers(
-            lines("apple | n. | 苹果", "banana"),
-            lines("APPLE.", "  ba na na  "),
+            rows("apple | n. | 苹果", "banana"),
+            answers("APPLE.", "  ba na na  "),
         )
         assertEquals(2, result.correctCount)
-        val fullwidth = gradeAnswers(lines("banana"), lines("ＢＡＮＡＮＡ"))
+        val fullwidth = gradeAnswers(rows("banana"), answers("ＢＡＮＡＮＡ"))
         assertEquals(1, fullwidth.correctCount)
     }
 
     @Test
     fun apostropheVariants_areOneSpelling() {
         val result = gradeAnswers(
-            lines("don't", "you're = you are"),
-            lines("don’t", "you are"),
+            rows("don't", "you're = you are"),
+            answers("don’t", "you are"),
         )
         assertEquals(2, result.correctCount)
     }
 
     @Test
     fun expansionLine_acceptsBothSides() {
-        assertEquals(1, gradeAnswers(lines("you're = you are"), lines("you're")).correctCount)
-        assertEquals(1, gradeAnswers(lines("you're = you are"), lines("you are")).correctCount)
+        assertEquals(1, gradeAnswers(rows("you're = you are"), answers("you're")).correctCount)
+        assertEquals(1, gradeAnswers(rows("you're = you are"), answers("you are")).correctCount)
         // …but not a different spelling of it.
-        assertEquals(1, gradeAnswers(lines("you're = you are"), lines("youre")).wrongCount)
+        assertEquals(1, gradeAnswers(rows("you're = you are"), answers("youre")).wrongCount)
     }
 
     @Test
@@ -70,8 +74,8 @@ class AnswerGradingTest {
         // its own number. Without 题号 handling every answer after the blank
         // would be graded against the wrong word.
         val result = gradeAnswers(
-            lines("apple", "banana", "cat", "dog"),
-            lines("1. apple", "3. cat", "4. dog"),
+            rows("apple", "banana", "cat", "dog"),
+            answers("1. apple", "3. cat", "4. dog"),
         )
         assertEquals(3, result.correctCount)
         assertEquals(AnswerVerdict.MISSING, result.bySlot()[2]!!.verdict)
@@ -80,7 +84,7 @@ class AnswerGradingTest {
 
     @Test
     fun numberedBlankWithoutText_isMissing() {
-        val result = gradeAnswers(lines("apple", "banana", "cat"), lines("1.apple", "2.", "3.cat"))
+        val result = gradeAnswers(rows("apple", "banana", "cat"), answers("1.apple", "2.", "3.cat"))
         assertEquals(AnswerVerdict.MISSING, result.bySlot()[2]!!.verdict)
         assertEquals(2, result.correctCount)
     }
@@ -88,8 +92,8 @@ class AnswerGradingTest {
     @Test
     fun numberedOutOfOrder_placedByNumber() {
         val result = gradeAnswers(
-            lines("apple", "banana", "cat"),
-            lines("3、cat", "（1）apple", "2） banana"),
+            rows("apple", "banana", "cat"),
+            answers("3、cat", "（1）apple", "2） banana"),
         )
         assertEquals(3, result.correctCount)
         assertEquals(0, result.extraCount)
@@ -100,11 +104,11 @@ class AnswerGradingTest {
     fun implausibleOrDuplicateNumbers_fallBackToSequence() {
         // 7 is not a slot of this run and "1" repeats: the numbers are noise,
         // the answers still align in the order they were written.
-        val result = gradeAnswers(lines("apple", "banana"), lines("7. apple", "banana"))
+        val result = gradeAnswers(rows("apple", "banana"), answers("7. apple", "banana"))
         assertEquals(2, result.correctCount)
         assertEquals(0, result.missingCount)
 
-        val duplicate = gradeAnswers(lines("apple", "banana"), lines("1. apple", "1. banana"))
+        val duplicate = gradeAnswers(rows("apple", "banana"), answers("1. apple", "1. banana"))
         assertEquals(2, duplicate.correctCount)
     }
 
@@ -113,8 +117,8 @@ class AnswerGradingTest {
         // The student answered every word, in a different order: nothing is
         // missing and nothing is stray — the recovery pass re-assigns them.
         val result = gradeAnswers(
-            lines("apple", "banana", "cat"),
-            lines("cat", "apple", "banana"),
+            rows("apple", "banana", "cat"),
+            answers("cat", "apple", "banana"),
         )
         assertEquals(3, result.correctCount)
         assertEquals(0, result.missingCount)
@@ -127,7 +131,7 @@ class AnswerGradingTest {
     fun misspelling_isWrongButFlagged() {
         // "aple" is off by one — a spelling error, or the model misreading
         // the paper. Doubt asks the human to look before it is booked.
-        val result = gradeAnswers(lines("apple"), lines("aple"))
+        val result = gradeAnswers(rows("apple"), answers("aple"))
         val item = result.items.single()
         assertEquals(AnswerVerdict.WRONG, item.verdict)
         assertTrue(item.doubt)
@@ -139,8 +143,8 @@ class AnswerGradingTest {
     @Test
     fun greedySheet_isWrongWithoutDoubtAndWarnsAboutMismatch() {
         val result = gradeAnswers(
-            lines("apple", "banana", "cat", "dog"),
-            lines("zzz", "yyy", "xxx", "www"),
+            rows("apple", "banana", "cat", "dog"),
+            answers("zzz", "yyy", "xxx", "www"),
         )
         assertEquals(4, result.wrongCount)
         assertEquals(0, result.doubtCount)
@@ -149,7 +153,7 @@ class AnswerGradingTest {
 
     @Test
     fun oneStrayLine_isExtraAndNeverBooked() {
-        val result = gradeAnswers(lines("apple", "banana"), lines("apple", "banana", "姓名"))
+        val result = gradeAnswers(rows("apple", "banana"), answers("apple", "banana", "姓名"))
         assertEquals(2, result.correctCount)
         val extra = result.items.single { it.verdict == AnswerVerdict.EXTRA }
         assertEquals("姓名", extra.answer)
@@ -161,14 +165,14 @@ class AnswerGradingTest {
 
     @Test
     fun duplicateWords_stayPositional() {
-        val result = gradeAnswers(lines("the", "the"), lines("the", "the"))
+        val result = gradeAnswers(rows("the", "the"), answers("the", "the"))
         assertEquals(2, result.correctCount)
         assertEquals(2, result.items.size)
     }
 
     @Test
     fun blankSheet_everySlotMissing() {
-        val result = gradeAnswers(lines("apple", "banana", "cat"), emptyList())
+        val result = gradeAnswers(rows("apple", "banana", "cat"), emptyList())
         assertEquals(3, result.missingCount)
         assertEquals(3, result.expectedTotal)
         assertEquals(3, result.doubtCount)
@@ -179,8 +183,8 @@ class AnswerGradingTest {
     @Test
     fun cjkSheet_punctuationAndSpacingFolded() {
         val result = gradeAnswers(
-            lines("月 | yuè | 月亮", "香蕉"),
-            lines("1、 月。", "（2）香 蕉"),
+            rows("月 | yuè | 月亮", "香蕉"),
+            answers("1、 月。", "（2）香 蕉"),
         )
         assertEquals(2, result.correctCount)
         assertEquals(0, result.doubtCount)
@@ -191,12 +195,12 @@ class AnswerGradingTest {
         // The model echoed the textbook's pinyin next to the 汉字. A 汉字
         // answer cannot legitimately contain Latin, so the annotation is
         // dropped instead of turning a correct answer into a wrong one.
-        val result = gradeAnswers(lines("月 | yuè | 月亮", "香蕉"), lines("月(yuè)", "香蕉 xiāngjiāo"))
+        val result = gradeAnswers(rows("月 | yuè | 月亮", "香蕉"), answers("月(yuè)", "香蕉 xiāngjiāo"))
         assertEquals(2, result.correctCount)
         assertEquals(0, result.doubtCount)
         // …but the reverse is not done: a stray 汉字 must not pass an English
         // answer.
-        val english = gradeAnswers(lines("apple"), lines("apple 苹果")).items.single()
+        val english = gradeAnswers(rows("apple"), answers("apple 苹果")).items.single()
         assertEquals(AnswerVerdict.WRONG, english.verdict)
     }
 
@@ -204,11 +208,11 @@ class AnswerGradingTest {
     fun wrongChar_isNearMissButPinyinIsNot() {
         // 日 for 月 is one character off — doubtful. A pinyin answer is a
         // different kind of mistake and graded confidently.
-        val near = gradeAnswers(lines("月"), lines("日")).items.single()
+        val near = gradeAnswers(rows("月"), answers("日")).items.single()
         assertEquals(AnswerVerdict.WRONG, near.verdict)
         assertTrue(near.doubt)
 
-        val pinyin = gradeAnswers(lines("月"), lines("yue")).items.single()
+        val pinyin = gradeAnswers(rows("月"), answers("yue")).items.single()
         assertEquals(AnswerVerdict.WRONG, pinyin.verdict)
         assertFalse(pinyin.doubt)
     }
@@ -216,17 +220,17 @@ class AnswerGradingTest {
     @Test
     fun headwordKey_isTheBookKey_notTheAnswer() {
         // 错词本 keys on the dictated word, not on what the student wrote.
-        val result = gradeAnswers(lines("apple | n. | 苹果"), lines("aple"))
+        val result = gradeAnswers(rows("apple | n. | 苹果"), answers("aple"))
         assertEquals("apple", result.items.single().expected)
     }
 
     @Test
     fun isCjkRun_majorityOfSpeakableHeadwords() {
-        assertTrue(isCjkRun(lines("月 | yuè | 月亮", "香蕉")))
-        assertTrue(isCjkRun(lines("月", "香蕉", "apple")))
-        assertFalse(isCjkRun(lines("apple", "banana")))
-        assertFalse(isCjkRun(lines("apple", "月")))
-        assertFalse(isCjkRun(lines("", "  ")))
+        assertTrue(isCjkRun(rows("月 | yuè | 月亮", "香蕉")))
+        assertTrue(isCjkRun(rows("月", "香蕉", "apple")))
+        assertFalse(isCjkRun(rows("apple", "banana")))
+        assertFalse(isCjkRun(rows("apple", "月")))
+        assertFalse(isCjkRun(rows("", "  ")))
     }
 
     @Test
@@ -247,7 +251,7 @@ class AnswerGradingTest {
 
     @Test
     fun emptyRun_isEmptyResult() {
-        val result = gradeAnswers(emptyList(), lines("apple"))
+        val result = gradeAnswers(emptyList(), answers("apple"))
         assertEquals(0, result.expectedTotal)
         assertTrue(result.items.isEmpty())
         assertFalse(result.mismatched)

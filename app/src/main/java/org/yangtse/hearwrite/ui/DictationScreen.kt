@@ -102,14 +102,12 @@ import org.yangtse.hearwrite.domain.DialStageLayout
 import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.PlayState
-import org.yangtse.hearwrite.domain.WordEntry
+import org.yangtse.hearwrite.domain.WordKind
+import org.yangtse.hearwrite.domain.WordRow
 import org.yangtse.hearwrite.domain.dialFit
 import org.yangtse.hearwrite.domain.dialHiddenStack
 import org.yangtse.hearwrite.domain.dialStageGeometry
 import org.yangtse.hearwrite.domain.displayWidth
-import org.yangtse.hearwrite.domain.isCjkEntry
-import org.yangtse.hearwrite.domain.parseWordLine
-import org.yangtse.hearwrite.domain.speakTextFromEntry
 import kotlin.math.ceil
 
 /**
@@ -206,7 +204,7 @@ fun DictationScreen(
     viewModel: DictationViewModel = viewModel(),
 ) {
     val ui by viewModel.uiState.collectAsStateWithLifecycle()
-    val runLines by viewModel.activeLines.collectAsStateWithLifecycle()
+    val runRows by viewModel.activeRows.collectAsStateWithLifecycle()
     // Saved across configuration changes (AUDIT C6): both are answers the user
     // is in the middle of giving, and rotating the phone — or resizing the
     // window on a foldable — used to re-hide a word the student had just
@@ -325,7 +323,7 @@ fun DictationScreen(
 
                 else -> DictationContent(
                     ui = ui,
-                    runLines = runLines,
+                    runRows = runRows,
                     viewModel = viewModel,
                     showWord = showWord,
                     onToggleWord = { showWord = !showWord },
@@ -364,7 +362,7 @@ private fun StatusPill(ui: DictationUiState) {
 @Composable
 private fun DictationContent(
     ui: DictationUiState,
-    runLines: List<String>,
+    runRows: List<WordRow>,
     viewModel: DictationViewModel,
     showWord: Boolean,
     onToggleWord: () -> Unit,
@@ -560,12 +558,10 @@ private fun DictationContent(
                 )
 
                 StagePane.ACTIVE -> {
-                    val headword = remember(runLines, ui.index) {
-                        runLines.getOrNull(ui.index)?.let(::speakTextFromEntry).orEmpty()
-                    }
+                    val headword = runRows.getOrNull(ui.index)?.speak.orEmpty()
                     DictationStage(
                         ui = ui,
-                        line = runLines.getOrNull(ui.index),
+                        row = runRows.getOrNull(ui.index),
                         showWord = showWord,
                         marked = headword in ui.runMarks,
                         onToggleWord = onToggleWord,
@@ -857,17 +853,16 @@ private fun FinishCard(
 @Composable
 private fun DictationStage(
     ui: DictationUiState,
-    line: String?,
+    row: WordRow?,
     showWord: Boolean,
     marked: Boolean,
     onToggleWord: () -> Unit,
     onToggleMark: () -> Unit,
 ) {
-    val entry = remember(line) { line?.let(::parseWordLine) }
-    val isCjk = remember(line) { line?.let(::isCjkEntry) ?: false }
+    val isCjk = row != null && row.kind != WordKind.EN
     // Reading the full word is an answer in progress too: keep the card open
     // across a rotation (same reasoning as the screen's reveal flag).
-    var detailOpen by rememberSaveable(entry?.word) { mutableStateOf(false) }
+    var detailOpen by rememberSaveable(row?.display) { mutableStateOf(false) }
     val density = LocalDensity.current
     val fontScale = density.fontScale.toDouble()
     // What the readouts cost, in the same units the renderer will use: the
@@ -915,13 +910,13 @@ private fun DictationStage(
         val metrics = remember(geometry.discDp, fontScale) {
             dialMetrics(geometry.discDp, fontScale)
         }
-        val needsDetail = showWord && entry != null &&
-            dialFit(entry.word, entry.meaning, entry.pos != null, metrics).needsDetail
+        val needsDetail = showWord && row != null &&
+            dialFit(row.display, row.gloss, row.pos != null, metrics).needsDetail
 
         val dial: @Composable () -> Unit = {
             DialRing(
                 ui = ui,
-                entry = entry,
+                row = row,
                 isCjk = isCjk,
                 showWord = showWord,
                 ringDp = geometry.ringDp.dp,
@@ -1106,9 +1101,9 @@ private fun DictationStage(
         }
     }
 
-    if (detailOpen && entry != null) {
+    if (detailOpen && row != null) {
         DialDetailDialog(
-            entry = entry,
+            row = row,
             isCjk = isCjk,
             onDismiss = { detailOpen = false },
         )
@@ -1126,7 +1121,7 @@ private val DIAL_STAGE_BESIDE_GAP = 16.dp
 @Composable
 private fun DialRing(
     ui: DictationUiState,
-    entry: WordEntry?,
+    row: WordRow?,
     isCjk: Boolean,
     showWord: Boolean,
     ringDp: Dp,
@@ -1184,7 +1179,7 @@ private fun DialRing(
         trackColor = hearWriteSemantics.ringTrack,
     ) {
         DialCenter(
-            entry = entry,
+            row = row,
             isCjk = isCjk,
             markedFlash = ui.markedFlash,
             showWord = showWord,
@@ -1204,7 +1199,7 @@ private fun DialRing(
  */
 @Composable
 private fun DialCenter(
-    entry: WordEntry?,
+    row: WordRow?,
     isCjk: Boolean,
     markedFlash: Boolean,
     showWord: Boolean,
@@ -1216,7 +1211,7 @@ private fun DialCenter(
         label = "markFlash",
     )
     // The vermilion marks Chinese-script identity only (Color.kt): a Chinese
-    // single char's `pos` line is its pinyin and its `meaning` line is the
+    // single char's `pos` line is its pinyin and its `gloss` line is the
     // 组词, so both carry the accent; an English entry's POS/释义 stay
     // onSurfaceVariant — the accent is never a part-of-speech label.
     val hintColor = if (isCjk) {
@@ -1224,7 +1219,7 @@ private fun DialCenter(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
-    val fit = dialFit(entry?.word, entry?.meaning, entry?.pos != null, metrics)
+    val fit = dialFit(row?.display, row?.gloss, row?.pos != null, metrics)
     val stateText = if (playing) "听写中" else "已暂停"
 
     Surface(
@@ -1242,7 +1237,7 @@ private fun DialCenter(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center,
         ) {
-            if (showWord && entry != null) {
+            if (showWord && row != null) {
                 Column(
                     modifier = Modifier.size(
                         width = fit.contentWidthDp.dp,
@@ -1257,7 +1252,7 @@ private fun DialCenter(
                     // AUDIT C2). Line height comes from the fit so the box the
                     // geometry assumed is the box the text occupies.
                     Text(
-                        entry.word,
+                        row.display,
                         style = MaterialTheme.typography.displayMedium.copy(
                             fontSize = fit.wordFontSizeSp.sp,
                             lineHeight = fit.wordLineHeightSp.sp,
@@ -1266,7 +1261,7 @@ private fun DialCenter(
                         maxLines = fit.wordLines,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    entry.pos?.let { pos ->
+                    row.pos?.let { pos ->
                         Text(
                             pos,
                             style = MaterialTheme.typography.bodyMedium,
@@ -1276,9 +1271,9 @@ private fun DialCenter(
                             modifier = Modifier.padding(top = metrics.wordPosGapDp.dp),
                         )
                     }
-                    if (!entry.meaning.isNullOrEmpty() && fit.glossLines > 0) {
+                    if (!row.gloss.isNullOrEmpty() && fit.glossLines > 0) {
                         Text(
-                            entry.meaning,
+                            row.gloss,
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
                             maxLines = fit.glossLines,
@@ -1374,7 +1369,7 @@ private const val DIAL_STATE_LINE_SP = 24.0
  */
 @Composable
 private fun DialDetailDialog(
-    entry: WordEntry,
+    row: WordRow,
     isCjk: Boolean,
     onDismiss: () -> Unit,
 ) {
@@ -1387,22 +1382,22 @@ private fun DialDetailDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                entry.word,
+                row.display,
                 style = MaterialTheme.typography.headlineSmall,
             )
         },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                entry.pos?.let { pos ->
+                row.pos?.let { pos ->
                     Text(
                         pos,
                         style = MaterialTheme.typography.bodyMedium,
                         color = hintColor,
                     )
                 }
-                if (!entry.meaning.isNullOrEmpty()) {
+                if (!row.gloss.isNullOrEmpty()) {
                     Text(
-                        entry.meaning,
+                        row.gloss,
                         style = MaterialTheme.typography.bodyLarge,
                         color = hintColor,
                         modifier = Modifier.padding(top = 6.dp),

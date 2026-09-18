@@ -3,6 +3,7 @@ package org.yangtse.hearwrite.data
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.yangtse.hearwrite.domain.parseWordLine
 
 /**
  * Pure OCR helpers: verbatim upstream prompts (AGENTS.md: keep verbatim from
@@ -319,12 +320,12 @@ class OcrServiceTest {
     fun inferOcrLang_followsTheMajorityOfSpeakableHeadwords() {
         // A 汉字 list opens the sheet on 中文 — the C4 fix: a user whose draft
         // is 生字 used to get the English prompt and 未识别到英文单词.
-        assertEquals(OcrLang.CHINESE, inferOcrLang(listOf("月亮", "生日", "school")))
+        assertEquals(OcrLang.CHINESE, inferOcrLang(listOf("月亮", "生日", "school").map(::parseWordLine)))
         // 2 汉字 against 1 English headword: Chinese — the columns of an
         // English row never count for it.
-        assertEquals(OcrLang.CHINESE, inferOcrLang(listOf("apple | n. | 苹果", "月", "生日")))
+        assertEquals(OcrLang.CHINESE, inferOcrLang(listOf("apple | n. | 苹果", "月", "生日").map(::parseWordLine)))
         // English columns never count as Chinese: the headword decides.
-        assertEquals(OcrLang.ENGLISH, inferOcrLang(listOf("apple | n. | 苹果", "banana | n. | 香蕉")))
+        assertEquals(OcrLang.ENGLISH, inferOcrLang(listOf("apple | n. | 苹果", "banana | n. | 香蕉").map(::parseWordLine)))
         // Nothing to go on → the sheet's historical default.
         assertEquals(OcrLang.ENGLISH, inferOcrLang(emptyList()))
     }

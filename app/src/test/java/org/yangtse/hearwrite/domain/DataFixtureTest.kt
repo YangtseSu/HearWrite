@@ -27,26 +27,26 @@ class DataFixtureTest {
         val entries = lines.map(::parseWordLine)
         assertEquals(
             listOf(
-                WordEntry("处", "chù", "到处"),
-                WordEntry("块", "kuài", "一块"),
-                WordEntry("座", "zuò", "座位"),
+                wordRowOf("处", "chù", "到处"),
+                wordRowOf("块", "kuài", "一块"),
+                wordRowOf("座", "zuò", "座位"),
             ),
             entries.take(3),
         )
 
         // Textbook 汉字 rows are CJK speakable entries: 处 -> zh-CN playback.
-        assertTrue(entries.all { isCjkEntry(entryToLine(it)) })
+        assertTrue(entries.all { it.kind != WordKind.EN })
         // Round-trip serialization is stable for every shipped row.
-        entries.forEach { assertEquals(it, parseWordLine(entryToLine(it))) }
+        entries.forEach { assertEquals(it, parseWordLine(rowToLine(it))) }
     }
 
     @Test
     fun `bare-word english lists parse to word-only entries`() {
         val file = listFile("中考1600/A.txt")
-        val entries = parseWordEntries(file.readText())
-        assertEquals(listOf("a/an", "ability", "able"), entries.take(3).map { it.word })
-        assertTrue(entries.all { it.pos == null && it.meaning == null })
-        assertTrue(entries.all { !isCjkEntry(it.word) })
+        val entries = parseWordRows(file.readText())
+        assertEquals(listOf("a/an", "ability", "able"), entries.take(3).map { it.display })
+        assertTrue(entries.all { it.pos == null && it.gloss == null })
+        assertTrue(entries.all { it.kind == WordKind.EN })
     }
 
     @Test
@@ -56,12 +56,12 @@ class DataFixtureTest {
         val entries = lines.map(::parseWordLine)
 
         assertEquals(
-            WordEntry("what", "pron.", "什么"),
+            wordRowOf("what", "pron.", "什么"),
             entries[0],
         )
         assertEquals(
             // Real row with an empty pos column between the pipes.
-            WordEntry("what's", null, "what is 的缩写形式"),
+            wordRowOf("what's", null, "what is 的缩写形式"),
             entries[2],
         )
 
@@ -70,17 +70,17 @@ class DataFixtureTest {
             if (entry.pos != null) {
                 assertEquals(entry.pos.trim().lowercase(), normalizePos(entry.pos))
             }
-            assertTrue(entry.word.isNotEmpty())
+            assertTrue(entry.display.isNotEmpty())
         }
     }
 
     @Test
     fun `meaning glosses speak as their first pos-stripped sense`() {
         val file = listFile("初中2182/第一册 常见.txt")
-        val entries = parseWordEntries(file.readText())
+        val entries = parseWordRows(file.readText())
         for (entry in entries) {
-            val speakable = speakableMeaning(entry.meaning)
-            assertTrue("${entry.word}: meaning ${entry.meaning}", speakable.isNotEmpty())
+            val speakable = speakableMeaning(entry.gloss)
+            assertTrue("${entry.display}: meaning ${entry.gloss}", speakable.isNotEmpty())
             // Spoken gloss never starts with a POS abbreviation.
             assertNull(POS_PREFIX_RE.matchAt(speakable, 0))
         }
@@ -93,20 +93,20 @@ class DataFixtureTest {
             .sortedBy { it.name }
         assertEquals(4, files.size)
 
-        val entries = files.flatMap { parseWordEntries(it.readText()) }
-        assertEquals(WordEntry("let", "v.", "让；允许"), entries.first())
+        val entries = files.flatMap { parseWordRows(it.readText()) }
+        assertEquals(wordRowOf("let", "v.", "让；允许"), entries.first())
         // A multi-POS textbook row keeps the dominant POS in column 2 and marks
         // the other senses inline — the convention the ECDICT-derived lists use.
-        val fine = entries.single { it.word == "fine" }
+        val fine = entries.single { it.display == "fine" }
         assertEquals("adj.", fine.pos)
-        assertEquals("身体好的，健康的；很好；v. 对……处以罚款；n. 罚款", fine.meaning)
-        assertEquals("身体好的，健康的", speakableMeaning(fine.meaning))
+        assertEquals("身体好的，健康的；很好；v. 对……处以罚款；n. 罚款", fine.gloss)
+        assertEquals("身体好的，健康的", speakableMeaning(fine.gloss))
 
         for (entry in entries) {
-            assertTrue("${entry.word} has no pos", entry.pos != null)
-            assertTrue("${entry.word} has no gloss", !entry.meaning.isNullOrBlank())
-            val speakable = speakableMeaning(entry.meaning)
-            assertNull("${entry.word}: ${entry.meaning}", POS_PREFIX_RE.matchAt(speakable, 0))
+            assertTrue("${entry.display} has no pos", entry.pos != null)
+            assertTrue("${entry.display} has no gloss", !entry.gloss.isNullOrBlank())
+            val speakable = speakableMeaning(entry.gloss)
+            assertNull("${entry.display}: ${entry.gloss}", POS_PREFIX_RE.matchAt(speakable, 0))
         }
 
         // The OCR source carried IPA transcriptions and page references; neither
@@ -118,9 +118,9 @@ class DataFixtureTest {
             .filter { it.isFile && it.extension == "txt" }
         assertEquals(78, all.size)
         for (file in all) {
-            for (entry in parseWordEntries(file.readText())) {
-                val where = "${file.name}: ${entry.word}"
-                val meaning = entry.meaning.orEmpty()
+            for (entry in parseWordRows(file.readText())) {
+                val where = "${file.name}: ${entry.display}"
+                val meaning = entry.gloss.orEmpty()
                 assertTrue("$where has no gloss", meaning.isNotEmpty())
                 assertTrue("$where leaks IPA: $meaning", IPA_RE.find(meaning) == null)
                 assertTrue("$where leaks a page ref: $meaning", PAGE_REF_RE.find(meaning) == null)

@@ -44,6 +44,9 @@ class FakeSpeaker(
     }
 }
 
+/** The engine takes parsed rows; the cases stay written in raw list lines. */
+private fun rows(vararg lines: String): List<WordRow> = lines.map(::parseWordLine)
+
 private val EN_WORD = "apple | n. | 苹果"
 private val BARE_EN = "banana"
 private val CJK_CHAR = "月 | yuè | 月亮"
@@ -88,7 +91,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker, readTranslation = true)
 
-        engine.start(listOf(EN_WORD))
+        engine.start(rows(EN_WORD))
         assertEquals(PlayState.PLAYING, engine.state.value)
         assertEquals(0, engine.index.value)
 
@@ -119,7 +122,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker)
 
-        engine.start(listOf(EN_WORD))
+        engine.start(rows(EN_WORD))
         advanceTimeBy(2000)
         assertEquals(
             listOf(
@@ -135,7 +138,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker, readTranslation = true)
 
-        engine.start(listOf(BARE_EN))
+        engine.start(rows(BARE_EN))
         advanceTimeBy(2000)
         assertEquals(2, speaker.utterances.size)
         assertEquals(BARE_EN, speaker.utterances[0].text)
@@ -149,7 +152,7 @@ class DictationEngineTest {
         val phrase = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker, phraseSpeaker = phrase) // 朗读释义 irrelevant for CJK
 
-        engine.start(listOf(CJK_CHAR)) // 月 | yuè | 月亮
+        engine.start(rows(CJK_CHAR)) // 月 | yuè | 月亮
         advanceTimeBy(2000)
         // 生字 → 组词 ("月亮的月", zh-CN, phrase speaker) → 生字.
         assertEquals(
@@ -171,7 +174,7 @@ class DictationEngineTest {
         val phrase = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker, phraseSpeaker = phrase)
 
-        engine.start(listOf("的 | de | 好的"))
+        engine.start(rows("的 | de | 好的"))
         advanceTimeBy(2000)
         // NO_COMPOUND_HEADS → cjkWordSpeech "" → the word speaks twice bare.
         assertEquals(2, speaker.utterances.size)
@@ -184,7 +187,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker)
 
-        engine.start(listOf(CJK_WORD))
+        engine.start(rows(CJK_WORD))
         advanceTimeBy(2000)
         assertEquals(2, speaker.utterances.size)
         assertTrue(speaker.utterances.all { it.lang == "zh-CN" && it.text == CJK_WORD })
@@ -195,7 +198,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime }, durationMs = 250)
         val engine = engine(speaker)
 
-        engine.start(listOf(BARE_EN))
+        engine.start(rows(BARE_EN))
         // speak1 ends at 250; the 700 ms gap runs from then on.
         advanceTimeBy(4000)
         assertEquals(2, speaker.utterances.size)
@@ -222,7 +225,7 @@ class DictationEngineTest {
         )
         val engine = engine(speaker, readTranslation = true)
 
-        engine.start(listOf(EN_WORD))
+        engine.start(rows(EN_WORD))
         advanceTimeBy(100_000)
         // speak1 fails at 0 → no gap → meaning at 0 → gap → speak2 at 700.
         assertEquals(
@@ -244,7 +247,7 @@ class DictationEngineTest {
         )
         val engine = engine(speaker, readTranslation = true)
 
-        engine.start(listOf(EN_WORD))
+        engine.start(rows(EN_WORD))
         advanceTimeBy(100_000)
         val spoken = speaker.utterances.filter { it.spoken }.map { it.text }
         assertEquals(listOf("apple", "apple"), spoken)
@@ -260,14 +263,14 @@ class DictationEngineTest {
         val engine = engine(speaker, readTranslation = true)
 
         assertEquals(0, engine.speechFailures.value)
-        engine.start(listOf(EN_WORD, "b"))
+        engine.start(rows(EN_WORD, "b"))
         advanceTimeBy(100_000)
         // 苹果 fails once (the meaning pass); "b" fails twice (both word passes).
         assertEquals(3, engine.speechFailures.value)
 
         // A new run reports only its own failures — the mute-run signal must
         // not leak across sessions (a fresh 再听一遍 elsewhere re-arms it).
-        engine.start(listOf("apple | n. | 苹果"))
+        engine.start(rows("apple | n. | 苹果"))
         advanceTimeBy(100_000)
         // 苹果's gloss still fails; this run's two word passes speak.
         assertEquals(1, engine.speechFailures.value)
@@ -278,7 +281,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker, readTranslation = true)
 
-        engine.start(listOf(EN_WORD, BARE_EN))
+        engine.start(rows(EN_WORD, BARE_EN))
         advanceTimeBy(100_000)
         assertTrue(engine.finished.value)
         assertEquals(0, engine.speechFailures.value)
@@ -291,7 +294,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker)
 
-        engine.start(listOf("a", "b", "c"))
+        engine.start(rows("a", "b", "c"))
         advanceTimeBy(1000) // a spoken twice, countdown running
         engine.stop()
         assertEquals(PlayState.IDLE, engine.state.value)
@@ -307,9 +310,9 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker)
 
-        engine.start(listOf("A", "A2"))
+        engine.start(rows("A", "A2"))
         advanceTimeBy(1500) // A@0, A2@700, A's countdown running
-        engine.start(listOf("B", "B2", "B3"))
+        engine.start(rows("B", "B2", "B3"))
         advanceTimeBy(100_000)
 
         val texts = speaker.utterances.map { it.text }
@@ -327,7 +330,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker)
 
-        engine.start(listOf("a", "b"))
+        engine.start(rows("a", "b"))
         advanceTimeBy(1000) // a@0, a@700, countdown running
         engine.pause()
         assertEquals(PlayState.PAUSED, engine.state.value)
@@ -350,7 +353,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker, autoNext = false)
 
-        engine.start(listOf("a", "b"))
+        engine.start(rows("a", "b"))
         advanceTimeBy(10_000) // a@0, a@700, then parked after speak2
         assertEquals(PlayState.PLAYING, engine.state.value)
         assertEquals(2, speaker.utterances.size)
@@ -369,7 +372,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker, autoNext = false)
 
-        engine.start(listOf("a", "b"))
+        engine.start(rows("a", "b"))
         advanceTimeBy(60_000)
         assertEquals(PlayState.PLAYING, engine.state.value) // parked, not idle
         assertEquals(0, engine.index.value)
@@ -391,7 +394,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker, autoNext = true)
 
-        engine.start(listOf("a", "b"))
+        engine.start(rows("a", "b"))
         advanceTimeBy(1700) // a@0, a@700; countdown to 7700, 6000 ms left
         engine.setAutoNext(false)
         assertEquals(null, engine.remainingMs.value)
@@ -415,7 +418,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker)
 
-        engine.start(listOf("a", "b", "c"))
+        engine.start(rows("a", "b", "c"))
         advanceTimeBy(1000)
         engine.skipToNext()
         advanceTimeBy(50)
@@ -434,7 +437,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker)
 
-        engine.start(listOf("a", "b"))
+        engine.start(rows("a", "b"))
         advanceTimeBy(1000)
         engine.pause()
         engine.skipToNext()
@@ -449,7 +452,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker)
 
-        engine.start(listOf("a"))
+        engine.start(rows("a"))
         advanceTimeBy(1000)
         engine.skipToNext()
         assertTrue(engine.finished.value)
@@ -476,7 +479,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker, intervalSec = 7.0)
 
-        engine.start(listOf("a", "b"))
+        engine.start(rows("a", "b"))
         advanceTimeBy(1700) // countdown to 7700 started at 700
         assertAt(7700, engine.remainingMs.value!! + testScheduler.currentTime)
 
@@ -502,7 +505,7 @@ class DictationEngineTest {
         val engine = engine(speaker, intervalSec = 7.0)
 
         engine.setIntervalSec(1.0) // before starting
-        engine.start(listOf("a", "b"))
+        engine.start(rows("a", "b"))
         advanceTimeBy(100_000)
         // a@0, a@700; countdown 700 + 1 s → b@1700, 2400; then finish at 3400.
         assertEquals(4, speaker.utterances.size)
@@ -519,7 +522,7 @@ class DictationEngineTest {
         val phrase = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker, phraseSpeaker = phrase)
 
-        engine.start(listOf("a", "b"))
+        engine.start(rows("a", "b"))
         advanceTimeBy(250) // speak1 of "a" in flight (0 → 500)
         engine.pause()
         assertEquals(PlayState.PAUSED, engine.state.value)
@@ -559,7 +562,7 @@ class DictationEngineTest {
         val phrase = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker, phraseSpeaker = phrase)
 
-        engine.start(listOf("a", "b", "c"))
+        engine.start(rows("a", "b", "c"))
         advanceTimeBy(1400) // "a" speak2 in flight (1200 → 1700)
         engine.skipToNext()
         assertEquals(1, engine.index.value)
@@ -602,7 +605,7 @@ class DictationEngineTest {
         val phrase = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker, phraseSpeaker = phrase)
 
-        engine.start(listOf("a", "b"))
+        engine.start(rows("a", "b"))
         advanceTimeBy(300) // speak1 of "a" in flight (0 → 500)
         engine.stop()
         assertEquals(PlayState.IDLE, engine.state.value)
@@ -616,7 +619,7 @@ class DictationEngineTest {
 
         // A fresh start speaks its own list from scratch.
         val restartedAt = testScheduler.currentTime
-        engine.start(listOf("x", "y"))
+        engine.start(rows("x", "y"))
         advanceTimeBy(100_000)
         assertEquals(3, speaker.stopCalls) // the fresh start() silences again
         assertEquals(
@@ -638,7 +641,7 @@ class DictationEngineTest {
         val phrase = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker, phraseSpeaker = phrase)
 
-        engine.start(listOf("a", "b"))
+        engine.start(rows("a", "b"))
         advanceTimeBy(300) // speak1 of "a" in flight (0 → 500)
         engine.dispose() // leaving the screen mid-utterance
         assertEquals(PlayState.IDLE, engine.state.value)
@@ -662,7 +665,7 @@ class DictationEngineTest {
 
         // The engine stays usable for a fresh run.
         val restartedAt = testScheduler.currentTime
-        engine.start(listOf("z"))
+        engine.start(rows("z"))
         advanceTimeBy(100_000)
         assertEquals(
             listOf(
@@ -680,9 +683,9 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime }, durationMs = 500)
         val engine = engine(speaker)
 
-        engine.start(listOf("a", "b"))
+        engine.start(rows("a", "b"))
         advanceTimeBy(300) // speak1 of "a" in flight (0 → 500)
-        engine.start(listOf("c", "d")) // immediate restart cancels the old run
+        engine.start(rows("c", "d")) // immediate restart cancels the old run
         advanceTimeBy(100_000)
         // The cancelled "a" is recorded once and never resumes; the old list's
         // "b" never speaks; the new first word starts exactly at the restart.
@@ -714,7 +717,7 @@ class DictationEngineTest {
         )
         val engine = engine(speaker)
 
-        engine.start(listOf("a", "b"))
+        engine.start(rows("a", "b"))
         advanceTimeBy(100_000)
         assertEquals(
             listOf(
@@ -734,7 +737,7 @@ class DictationEngineTest {
         val phrase = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker, phraseSpeaker = phrase)
 
-        engine.start(listOf("a"))
+        engine.start(rows("a"))
         advanceTimeBy(100_000) // natural end
         assertTrue(engine.finished.value)
         assertEquals(PlayState.IDLE, engine.state.value)
@@ -758,7 +761,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker)
 
-        engine.start(listOf("a", "b"))
+        engine.start(rows("a", "b"))
         advanceTimeBy(1000) // "a" done (0, 700); countdown running, index 0
         engine.goToPrevious()
         assertEquals(0, engine.index.value) // maxOf(0, -1) — never below the head
@@ -787,7 +790,7 @@ class DictationEngineTest {
         val phrase = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker, phraseSpeaker = phrase) // autoNext on
 
-        engine.start(listOf("a", "b"))
+        engine.start(rows("a", "b"))
         advanceTimeBy(200) // speak1 of "a" in flight (0 → 500)
         engine.setAutoNext(false) // mid-utterance: must not cut anything
         // Only start()'s own silence; the toggle cancels nothing mid-speech.
@@ -816,7 +819,7 @@ class DictationEngineTest {
         val speaker = FakeSpeaker(clock = { testScheduler.currentTime })
         val engine = engine(speaker, autoNext = false, intervalSec = 7.0)
 
-        engine.start(listOf("a", "b"))
+        engine.start(rows("a", "b"))
         advanceTimeBy(1000) // a@0, a@700 → parked after speak2
         assertEquals(null, engine.remainingMs.value)
         engine.setIntervalSec(1.0) // parked: applies to the next countdown

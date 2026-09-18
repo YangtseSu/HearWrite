@@ -91,8 +91,8 @@ data class GradeResult(
 
     companion object {
         /** No answers were read at all: every slot is MISSING. */
-        fun allMissing(runLines: List<String>): GradeResult {
-            val expected = runLines.mapNotNull(::expectedAnswer)
+        fun allMissing(rows: List<WordRow>): GradeResult {
+            val expected = rows.mapNotNull(::expectedAnswer)
             return GradeResult(
                 items = expected.mapIndexed { index, answer ->
                     GradedAnswer(
@@ -192,16 +192,15 @@ private data class Expected(
     val forms: Set<String>,
 )
 
-private fun expectedAnswer(line: String): Expected? {
-    val headword = speakTextFromEntry(line)
+private fun expectedAnswer(row: WordRow): Expected? {
+    val headword = row.speak
     if (headword.isEmpty()) return null
     val forms = linkedSetOf(normalizeAnswer(headword))
-    // `A = B` (the word column, pos/meaning columns already separate): the app
-    // dictates A, the student may write either spelling.
-    val wordColumn = parseWordLine(line).word
-    val eq = wordColumn.indexOfFirst { it == '=' || it == '＝' }
+    // `A = B` (the display headword): the app dictates A, the student may
+    // write either spelling. pos/gloss are separate columns already.
+    val eq = row.display.indexOfFirst { it == '=' || it == '＝' }
     if (eq != -1) {
-        val right = normalizeAnswer(jsEdgeTrim(wordColumn.substring(eq + 1)))
+        val right = normalizeAnswer(jsEdgeTrim(row.display.substring(eq + 1)))
         if (right.isNotEmpty()) forms += right
     }
     return Expected(headword, forms.filterTo(mutableSetOf()) { it.isNotEmpty() })
@@ -213,12 +212,12 @@ private fun expectedAnswer(line: String): Expected? {
  * pass. A tie resolves to English; only a truly mixed list is affected and
  * neither language's extractor could read that paper anyway.
  */
-fun isCjkRun(lines: List<String>): Boolean {
+fun isCjkRun(rows: List<WordRow>): Boolean {
     var cjk = 0
     var other = 0
-    for (line in lines) {
-        if (speakTextFromEntry(line).isEmpty()) continue
-        if (isCjkEntry(line)) cjk++ else other++
+    for (row in rows) {
+        if (row.speak.isEmpty()) continue
+        if (row.kind == WordKind.EN) other++ else cjk++
     }
     return cjk > other
 }
@@ -269,7 +268,7 @@ private fun pairScore(expected: Expected, answer: Set<String>): Int = when {
 }
 
 /**
- * Judge one answer sheet against the run's lines.
+ * Judge one answer sheet against the run's rows.
  *
  * Placement, in order:
  * 1. **题号** — an answer carrying a plausible, unique 题号 of this run is
@@ -286,10 +285,10 @@ private fun pairScore(expected: Expected, answer: Set<String>): Int = when {
  * Whatever is still unmatched is MISSING (no answer) or EXTRA (a line with no
  * word to sit against).
  */
-fun gradeAnswers(runLines: List<String>, recognized: List<String>): GradeResult {
-    val expected = runLines.mapNotNull(::expectedAnswer)
+fun gradeAnswers(rows: List<WordRow>, recognized: List<String>): GradeResult {
+    val expected = rows.mapNotNull(::expectedAnswer)
     if (expected.isEmpty()) return GradeResult(emptyList(), 0)
-    if (recognized.isEmpty()) return GradeResult.allMissing(runLines)
+    if (recognized.isEmpty()) return GradeResult.allMissing(rows)
 
     val slots = arrayOfNulls<GradedAnswer>(expected.size)
     val pool = mutableListOf<String>()

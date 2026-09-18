@@ -21,8 +21,9 @@ class CjkWordSpeechTest {
         )
     }
 
-    private fun speech(entry: String, learnedWords: List<String> = emptyList()): String =
-        cjkWordSpeech(entry, TABLES, learnedWords)
+    /** The row API takes parsed rows; the cases stay written in raw list lines. */
+    private fun speech(line: String, learnedLines: List<String> = emptyList()): String =
+        cjkWordSpeech(parseWordLine(line), TABLES, learnedLines.map(::parseWordLine))
 
     // ------------------------------------------------------ meaning column
 
@@ -62,13 +63,13 @@ class CjkWordSpeechTest {
     fun `list words join the learned pool in appearance order`() {
         // 花蕾/花茶 are not in the common table: unranked, so appearance order
         // decides (meaning → list → learned rows).
-        assertEquals("花蕾的花", speech("花 | huā", learnedWords = listOf("花蕾", "花茶")))
+        assertEquals("花蕾的花", speech("花 | huā", learnedLines = listOf("花蕾", "花茶")))
     }
 
     @Test
     fun `common-word rank beats appearance order inside the learned pool`() {
         // 棉花 (common rank 0) outranks the earlier list word 花茶 (unranked).
-        assertEquals("棉花的花", speech("花 | huā", learnedWords = listOf("花茶", "棉花")))
+        assertEquals("棉花的花", speech("花 | huā", learnedLines = listOf("花茶", "棉花")))
     }
 
     // ------------------------------------------------ polyphone walk (tier 3)

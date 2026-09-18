@@ -40,15 +40,15 @@ import org.yangtse.hearwrite.domain.PlayState
 import org.yangtse.hearwrite.domain.Speaker
 import org.yangtse.hearwrite.domain.SessionKind
 import org.yangtse.hearwrite.domain.TtsSource
+import org.yangtse.hearwrite.domain.WordKind
+import org.yangtse.hearwrite.domain.WordRow
 import org.yangtse.hearwrite.domain.cjkWordSpeech
-import org.yangtse.hearwrite.domain.findLineByHeadword
+import org.yangtse.hearwrite.domain.findRowByHeadword
 import org.yangtse.hearwrite.domain.gradeAnswers
-import org.yangtse.hearwrite.domain.isCjkEntry
 import org.yangtse.hearwrite.domain.isCjkRun
-import org.yangtse.hearwrite.domain.parseWordLine
 import org.yangtse.hearwrite.domain.parseWords
-import org.yangtse.hearwrite.domain.speakTextFromEntry
 import org.yangtse.hearwrite.domain.speakableMeaning
+import org.yangtse.hearwrite.domain.wordRowOf
 
 /** Everything the dictation screen renders. */
 data class DictationUiState(
@@ -103,7 +103,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     private val reviewGate = Mutex()
 
     /**
-     * Session handed over by the launching screen: the prepared lines (slice
+     * Session handed over by the launching screen: the prepared rows (slice
      * → shuffle applied) plus the provenance [DictationSessionStore.Session.sourceLabel]
      * for wrong-word marks (a `default_*` built-in list id or a history row
      * id; null for bare-word runs). Consumed once — a ViewModel recreated
@@ -111,8 +111,8 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
      */
     private val session: DictationSessionStore.Session = app.dictationSession.take()
 
-    /** Lines of the staged session (initial run; 复习错词 restarts with fewer). */
-    private val sessionLines: List<String> = session.lines
+    /** Rows of the staged session (initial run; 复习错词 restarts with fewer). */
+    private val sessionRows: List<WordRow> = session.rows
 
     /**
      * The 错词本 source of the current run: the staged session's provenance
@@ -213,16 +213,16 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     val ready: StateFlow<Boolean> = _ready.asStateFlow()
 
     /** Word count of the run in progress (a 复习错词 round restarts with fewer). */
-    private val _total = MutableStateFlow(sessionLines.size)
+    private val _total = MutableStateFlow(sessionRows.size)
     val total: StateFlow<Int> = _total.asStateFlow()
 
     private val _elapsedSec = MutableStateFlow<Long?>(null)
     /** Whole seconds of the finished run (score summary); null mid-run. */
     val elapsedSec: StateFlow<Long?> = _elapsedSec.asStateFlow()
 
-    /** Lines of the run in progress (initial session or a review round). */
-    private val _activeLines = MutableStateFlow(sessionLines)
-    val activeLines: StateFlow<List<String>> = _activeLines.asStateFlow()
+    /** Rows of the run in progress (initial session or a review round). */
+    private val _activeRows = MutableStateFlow(sessionRows)
+    val activeRows: StateFlow<List<WordRow>> = _activeRows.asStateFlow()
 
     /** Wall-clock start of the current run (init session or a review round). */
     private var runStartedAtMs = 0L
@@ -326,7 +326,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
                 emptyList()
             }
             _ready.value = true
-            beginRun(sessionLines, runSourceLabel)
+            beginRun(sessionRows, runSourceLabel)
         }
         // OCR provider config feeds [openGradePane]'s pre-check: the finish
         // card must be able to say "configure OCR first" without a photo.
@@ -410,30 +410,25 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
      * must never touch the network) or the English gloss when 朗读释义 is on.
      */
     private fun prefetchAround(index: Int) {
-        val lines = _activeLines.value
-        val current = lines.getOrNull(index) ?: return
+        val rows = _activeRows.value
+        val current = rows.getOrNull(index) ?: return
         prefetchEntry(current)
-        lines.getOrNull(index + 1)?.let(::prefetchEntry)
-        if (isCjkEntry(current)) {
-            val head = speakTextFromEntry(current)
-            if (head.length == 1) {
-                val phrase = cjkWordSpeech(current, tables, lines)
-                if (phrase.isNotEmpty() && app.ttsChain.currentSource() != TtsSource.YOUDAO) {
-                    prefetch(phrase, "zh-CN")
-                }
+        rows.getOrNull(index + 1)?.let(::prefetchEntry)
+        if (current.kind != WordKind.EN) {
+            val phrase = cjkWordSpeech(current, tables, rows)
+            if (phrase.isNotEmpty() && app.ttsChain.currentSource() != TtsSource.YOUDAO) {
+                prefetch(phrase, "zh-CN")
             }
         } else if (readTranslation) {
-            val gloss = speakableMeaning(parseWordLine(current).meaning)
+            val gloss = speakableMeaning(current.gloss)
             if (gloss.isNotEmpty()) prefetch(gloss, "zh-CN")
         }
     }
 
-    /** Speakable headword of [line] (strips `= you are` suffixes) → prefetch. */
-    private fun prefetchEntry(line: String) {
-        val head = speakTextFromEntry(line)
-        if (head.isNotEmpty()) {
-            val lang = if (isCjkEntry(line)) "zh-CN" else "en-US"
-            prefetch(head, lang)
+    /** Speakable headword of [row] (strips `= you are` suffixes) → prefetch. */
+    private fun prefetchEntry(row: WordRow) {
+        if (row.speak.isNotEmpty()) {
+            prefetch(row.speak, if (row.kind == WordKind.EN) "en-US" else "zh-CN")
         }
     }
 
@@ -454,7 +449,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
      * rounds — see [runSourceLabel]); [kind] labels the recorded stats row.
      */
     private fun beginRun(
-        runLines: List<String>,
+        runRows: List<WordRow>,
         sourceLabel: String?,
         kind: SessionKind = SessionKind.DICTATION,
     ) {
@@ -463,13 +458,13 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         _elapsedSec.value = null
         _runMarks.value = emptySet()
         bookState = BookWriteState()
-        _total.value = runLines.size
-        _activeLines.value = runLines
+        _total.value = runRows.size
+        _activeRows.value = runRows
         runSourceLabel = sourceLabel
         // A new run (再听一遍 / 复习错词) invalidates any 拍照批改 pending from
         // the previous finish card — including its crop overlay.
         closeGradePane()
-        engine.start(runLines)
+        engine.start(runRows)
     }
 
     fun togglePlay() {
@@ -507,7 +502,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     private fun markCurrentWrong() {
         val ui = uiState.value
         if (!ui.isActive || ui.index >= ui.total) return
-        val head = speakTextFromEntry(_activeLines.value.getOrNull(ui.index) ?: return)
+        val head = _activeRows.value.getOrNull(ui.index)?.speak ?: return
         if (head.isEmpty() || head in _runMarks.value) return
         _runMarks.value = _runMarks.value + head
         // The book row is written once per run even when the headword is
@@ -553,7 +548,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     private fun unmarkCurrentWrong() {
         val ui = uiState.value
         if (!ui.isActive || ui.index >= ui.total) return
-        val head = speakTextFromEntry(_activeLines.value.getOrNull(ui.index) ?: return)
+        val head = _activeRows.value.getOrNull(ui.index)?.speak ?: return
         if (head.isEmpty() || head !in _runMarks.value) return
         _runMarks.value = _runMarks.value - head
         val book = bookState
@@ -581,7 +576,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     fun toggleCurrentWrong() {
         val ui = uiState.value
         if (!ui.isActive || ui.index >= ui.total) return
-        val head = speakTextFromEntry(_activeLines.value.getOrNull(ui.index) ?: return)
+        val head = _activeRows.value.getOrNull(ui.index)?.speak ?: return
         if (head.isEmpty()) return
         if (head in _runMarks.value) unmarkCurrentWrong() else markCurrentWrong()
     }
@@ -663,9 +658,9 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
      * any other and the provenance of the run it replays is kept.
      */
     fun replayRun() {
-        val lines = _activeLines.value
-        if (lines.isEmpty()) return
-        beginRun(lines, runSourceLabel)
+        val rows = _activeRows.value
+        if (rows.isEmpty()) return
+        beginRun(rows, runSourceLabel)
     }
 
     // ----------------------------------------------------- 拍照批改 (grading)
@@ -857,8 +852,8 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
                     _gradeError.value = "请先在设置中配置识别服务（需自备 API Key）"
                     return@launch
                 }
-                val lines = _activeLines.value
-                if (lines.isEmpty()) {
+                val rows = _activeRows.value
+                if (rows.isEmpty()) {
                     _gradeError.value = "没有可批改的词表"
                     return@launch
                 }
@@ -872,7 +867,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
                 // own copy, so the decode can go now (owned tracks the recycle).
                 owned = null
                 source.recycle()
-                val lang = if (isCjkRun(lines)) OcrLang.CHINESE else OcrLang.ENGLISH
+                val lang = if (isCjkRun(rows)) OcrLang.CHINESE else OcrLang.ENGLISH
                 lastGradeRun = dataUrl to lang
                 _gradeRetryable.value = true
                 recognizeSheet(dataUrl, lang)
@@ -918,7 +913,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     private suspend fun recognizeSheet(dataUrl: String, lang: OcrLang) {
         when (val outcome = app.ocrService.recognizeAnswers(dataUrl, lang)) {
             is OcrOutcome.Success -> {
-                val result = gradeAnswers(_activeLines.value, parseWords(outcome.linesText))
+                val result = gradeAnswers(_activeRows.value, parseWords(outcome.linesText))
                 _gradeResult.value = result
                 _gradeSelected.value = result.defaultSelection()
             }
@@ -1000,18 +995,18 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             try {
                 // The run in progress is the best source for its own words; it
-                // covers bare-word sessions whose lines exist nowhere else.
-                val preferred = _activeLines.value
-                val lines = try {
-                    wrongWordLines.linesFor(wrongWordsRepository.observeMarks().first(), preferred)
+                // covers bare-word sessions whose rows exist nowhere else.
+                val preferred = _activeRows.value
+                val rows = try {
+                    wrongWordLines.rowsFor(wrongWordsRepository.observeMarks().first(), preferred)
                 } catch (e: Exception) {
                     // Room unavailable: degrade to the book held in memory,
-                    // resolved against this run's lines (the pre-sources
+                    // resolved against this run's rows (the pre-sources
                     // behavior) rather than losing the button.
-                    _wrongWords.value.map { word -> findLineByHeadword(preferred, word) ?: word }
+                    _wrongWords.value.map { word -> findRowByHeadword(preferred, word) ?: wordRowOf(word) }
                 }
-                if (lines.isEmpty()) return@launch
-                beginRun(lines, null, kind = SessionKind.REVIEW)
+                if (rows.isEmpty()) return@launch
+                beginRun(rows, null, kind = SessionKind.REVIEW)
             } finally {
                 reviewGate.unlock()
             }
@@ -1022,7 +1017,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
         state = engine.state.value,
         finished = false,
         index = 0,
-        total = sessionLines.size,
+        total = sessionRows.size,
         remainingMs = null,
         intervalSec = MIN_INTERVAL_SEC,
         autoNext = true,

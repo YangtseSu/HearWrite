@@ -35,12 +35,13 @@ import org.yangtse.hearwrite.data.OcrOutcome
 import org.yangtse.hearwrite.data.WrongWordMark
 import org.yangtse.hearwrite.domain.CJK_RE
 import org.yangtse.hearwrite.domain.DEFAULT_INTERVAL_SEC
-import org.yangtse.hearwrite.domain.entryToLine
 import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
-import org.yangtse.hearwrite.domain.parseWordEntries
+import org.yangtse.hearwrite.domain.WordRow
+import org.yangtse.hearwrite.domain.parseWordRows
 import org.yangtse.hearwrite.domain.parseWords
-import org.yangtse.hearwrite.domain.prepareStartLines
+import org.yangtse.hearwrite.domain.prepareStartRows
+import org.yangtse.hearwrite.domain.rowToLine
 
 /**
  * A removed history row kept for its 撤销: the exact stored row plus whether
@@ -67,13 +68,13 @@ data class FavoriteUiItem(
 )
 
 /**
- * A prepared dictation from Home: canonical lines (slice → shuffle applied)
- * plus the provenance of the recorded history row, which becomes the run's
- * 错词本 source label (Roadmap #1). A bare-word start (听写错词 over the book)
+ * A prepared dictation from Home: parsed rows (slice → shuffle applied) plus
+ * the provenance of the recorded history row, which becomes the run's 错词本
+ * source label (Roadmap #1). A bare-word start (听写错词 over the book)
  * carries a null source.
  */
 data class PreparedSession(
-    val lines: List<String>,
+    val rows: List<WordRow>,
     val historyId: String?,
 )
 
@@ -407,7 +408,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             settings.ocrLang.collect { stored ->
                 _ocrLangStored.value = stored
-                _ocrLang.value = stored ?: inferOcrLang(parseWords(_draft.value))
+                _ocrLang.value = stored ?: inferOcrLang(parseWordRows(_draft.value))
             }
         }
     }
@@ -426,7 +427,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun syncInferredLang() {
         if (_ocrLangStored.value == null) {
-            _ocrLang.value = inferOcrLang(parseWords(_draft.value))
+            _ocrLang.value = inferOcrLang(parseWordRows(_draft.value))
         }
     }
 
@@ -492,11 +493,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      * last. (The wordCount collector only backstops shrink-below-cursor.)
      */
     fun deleteWord(index: Int) {
-        val entries = parseWordEntries(_draft.value).toMutableList()
-        if (index !in entries.indices) return
-        entries.removeAt(index)
-        onDraftChange(entries.joinToString("\n") { entryToLine(it) })
-        val count = entries.size
+        val rows = parseWordRows(_draft.value).toMutableList()
+        if (index !in rows.indices) return
+        rows.removeAt(index)
+        onDraftChange(rows.joinToString("\n") { rowToLine(it) })
+        val count = rows.size
         _startIndex.value = when {
             index < _startIndex.value -> (_startIndex.value - 1).coerceIn(0, (count - 1).coerceAtLeast(0))
             index == _startIndex.value -> _startIndex.value.coerceIn(0, (count - 1).coerceAtLeast(0))
@@ -658,12 +659,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      * start is already in flight (the gate is claimed before the first
      * suspension, AGENTS.md).
      */
-    suspend fun prepareWrongWordRun(): List<String>? {
+    suspend fun prepareWrongWordRun(): List<WordRow>? {
         if (!wrongWordGate.tryLock()) return null
         try {
             val marks = wrongWordsRepository.observeMarks().first()
             if (marks.isEmpty()) return null
-            return wrongWordLines.linesFor(marks)
+            return wrongWordLines.rowsFor(marks)
         } catch (e: Exception) {
             // A failed read/gate must not start a half-resolved run; the
             // sheet simply stays as it was.
@@ -707,7 +708,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             id = id,
             title = list.label,
             subtitle = "${list.category} · ${entries.size} 词",
-            linesText = entries.joinToString("\n") { entryToLine(it) },
+            linesText = entries.joinToString("\n") { rowToLine(it) },
         )
     }
 
@@ -742,8 +743,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             // The row id becomes the run's wrong-word source (Roadmap #1) —
             // marks from this dictation point back to the recorded list.
             val historyId = historyRepository.add(text, enriched)
-            val lines = prepareStartLines(parseWords(enriched), _startIndex.value, _shuffle.value)
-            return PreparedSession(lines, historyId)
+            val rows = prepareStartRows(parseWordRows(enriched), _startIndex.value, _shuffle.value)
+            return PreparedSession(rows, historyId)
         } finally {
             _starting.value = false
         }
@@ -1000,9 +1001,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Success toast text: upstream OCR_OUTCOME_MESSAGES (生字/词语 split for CJK). */
     private fun ocrSuccessMessage(linesText: String, lang: OcrLang): String {
-        val entries = parseWordEntries(linesText)
+        val entries = parseWordRows(linesText)
         return if (lang == OcrLang.CHINESE) {
-            val chars = entries.count { it.word.length == 1 && CJK_RE.containsMatchIn(it.word) }
+            val chars = entries.count { it.display.length == 1 && CJK_RE.containsMatchIn(it.display) }
             val terms = entries.size - chars
             when {
                 terms == 0 -> "已识别 $chars 个生字"

@@ -56,7 +56,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.yangtse.hearwrite.domain.glossNeedsExpansion
-import org.yangtse.hearwrite.domain.parseWordEntries
+import org.yangtse.hearwrite.domain.parseWordRows
 import org.yangtse.hearwrite.ui.theme.wordHead
 
 /** 示例 content: English words with gloss columns (朗读释义 demo-able). */
@@ -394,7 +394,7 @@ private fun WordDisplayList(
     onDeleteWord: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val entries = remember(draft) { parseWordEntries(draft) }
+    val entries = remember(draft) { parseWordRows(draft) }
     // Expansion resets with the draft; index bookkeeping on delete is not
     // worth it (alice shifts the set — same user-visible effect).
     var expanded by remember(draft) { mutableStateOf(emptySet<Int>()) }
@@ -411,10 +411,10 @@ private fun WordDisplayList(
         LazyColumn(contentPadding = PaddingValues(bottom = 8.dp)) {
             itemsIndexed(entries) { index, entry ->
                 val isCursor = index == startIndex
-                val meta = listOfNotNull(entry.pos, entry.meaning).joinToString(" ")
+                val meta = listOfNotNull(entry.pos, entry.gloss).joinToString(" ")
                 // 2-line clamp: offer expansion for multi-sense glosses or
                 // long text that would visibly truncate.
-                val expandable = glossNeedsExpansion(entry.meaning)
+                val expandable = glossNeedsExpansion(entry.gloss)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -464,7 +464,7 @@ private fun WordDisplayList(
                             .padding(vertical = 8.dp),
                     ) {
                         Text(
-                            text = entry.word,
+                            text = entry.display,
                             style = MaterialTheme.typography.wordHead,
                             color = if (isCursor) {
                                 MaterialTheme.colorScheme.primary
@@ -513,7 +513,7 @@ private fun WordDisplayList(
                     IconButton(onClick = { onDeleteWord(index) }) {
                         Icon(
                             Icons.Filled.Cancel,
-                            contentDescription = "删除 ${entry.word}",
+                            contentDescription = "删除 ${entry.display}",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp),
                         )

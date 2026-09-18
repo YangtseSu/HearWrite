@@ -3,15 +3,19 @@ package org.yangtse.hearwrite.data
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.yangtse.hearwrite.domain.WordRow
 import org.yangtse.hearwrite.domain.multiSourceLabel
+import org.yangtse.hearwrite.domain.parseWordLine
 
 /**
- * Locks the 错词本 → original-line resolution (Roadmap #7): 复习错词 / 听写错词
- * must dictate the stored 词性/释义 or 拼音/组词 line, not a bare headword.
+ * Locks the 错词本 → original-row resolution (Roadmap #7): 复习错词 / 听写错词
+ * must dictate the stored 词性/释义 or 拼音/组词 row, not a bare headword.
  * The loaders are plain lambdas here — the asset/Room wiring lives in
  * HearWriteApplication and needs no test.
  */
 class WrongWordLineResolverTest {
+
+    private fun rowsOf(vararg lines: String): List<WordRow> = lines.map(::parseWordLine)
 
     private val builtinLines = mapOf(
         "default_人教版小学语文_识字表" to listOf(
@@ -39,8 +43,8 @@ class WrongWordLineResolverTest {
         WrongWordMark(word, errorCount = 1, lastWrongAt = 0L, sourceLabel = source)
 
     @Test
-    fun `built-in source restores the enriched line`() = runTest {
-        val lines = resolver().linesFor(
+    fun `built-in source restores the enriched row`() = runTest {
+        val lines = resolver().rowsFor(
             listOf(
                 mark("月", "default_人教版小学语文_识字表"),
                 mark("apple", "default_中考1600_核心词汇"),
@@ -48,34 +52,34 @@ class WrongWordLineResolverTest {
         )
         // Order follows the marks, and each word keeps its own columns
         // (拼音/组词 for 生字, 词性/释义 for English).
-        assertEquals(listOf("月 | yuè | 月亮", "apple | n. | 苹果"), lines)
+        assertEquals(rowsOf("月 | yuè | 月亮", "apple | n. | 苹果"), lines)
     }
 
     @Test
-    fun `history source restores the stored line`() = runTest {
+    fun `history source restores the stored row`() = runTest {
         val repo = resolver(
             history = mapOf("1712345678_abc123" to "apple | n. | 苹果\npear | n. | 梨"),
         )
         assertEquals(
-            listOf("pear | n. | 梨"),
-            repo.linesFor(listOf(mark("pear", "1712345678_abc123"))),
+            rowsOf("pear | n. | 梨"),
+            repo.rowsFor(listOf(mark("pear", "1712345678_abc123"))),
         )
     }
 
     @Test
-    fun `the run's own lines win over the mark's source`() = runTest {
+    fun `the run's own rows win over the mark's source`() = runTest {
         // A word dictated in this run must come back exactly as this run has
         // it, even when the book row points at another list.
-        val lines = resolver().linesFor(
+        val lines = resolver().rowsFor(
             marks = listOf(mark("apple", "default_中考1600_核心词汇")),
-            preferred = listOf("apple | n. | 苹果（本场）"),
+            preferred = rowsOf("apple | n. | 苹果（本场）"),
         )
-        assertEquals(listOf("apple | n. | 苹果（本场）"), lines)
+        assertEquals(rowsOf("apple | n. | 苹果（本场）"), lines)
     }
 
     @Test
     fun `manual marks stay bare headwords`() = runTest {
-        assertEquals(listOf("plum"), resolver().linesFor(listOf(mark("plum"))))
+        assertEquals(rowsOf("plum"), resolver().rowsFor(listOf(mark("plum"))))
     }
 
     @Test
@@ -83,23 +87,23 @@ class WrongWordLineResolverTest {
         // Deleted history row, renamed list, unreadable asset — the mark must
         // survive as a plain word, and one failure must not take the others
         // down with it.
-        val lines = resolver(failBuiltin = true).linesFor(
+        val lines = resolver(failBuiltin = true).rowsFor(
             listOf(
                 mark("apple", "default_中考1600_核心词汇"),
                 mark("pear", "1712345678_gone"),
                 mark("plum"),
             ),
         )
-        assertEquals(listOf("apple", "pear", "plum"), lines)
+        assertEquals(rowsOf("apple", "pear", "plum"), lines)
     }
 
     @Test
     fun `a headword missing from its source stays a bare word`() = runTest {
         // The list is still there but the word is not in it (list edited).
-        val lines = resolver().linesFor(
+        val lines = resolver().rowsFor(
             listOf(mark("grape", "default_中考1600_核心词汇")),
         )
-        assertEquals(listOf("grape"), lines)
+        assertEquals(rowsOf("grape"), lines)
     }
 
     @Test
@@ -108,8 +112,8 @@ class WrongWordLineResolverTest {
             history = mapOf("h1" to "you're = you are | v. | 你是"),
         )
         assertEquals(
-            listOf("you're = you are | v. | 你是"),
-            repo.linesFor(listOf(mark("you're", "h1"))),
+            rowsOf("you're = you are | v. | 你是"),
+            repo.rowsFor(listOf(mark("you're", "h1"))),
         )
     }
 
@@ -120,20 +124,20 @@ class WrongWordLineResolverTest {
         val source = multiSourceLabel(
             listOf("default_中考1600_核心词汇", "default_人教版小学语文_识字表"),
         )
-        val lines = resolver().linesFor(
+        val lines = resolver().rowsFor(
             listOf(
                 mark("apple", source),
                 mark("月", source),
             ),
         )
-        assertEquals(listOf("apple | n. | 苹果", "月 | yuè | 月亮"), lines)
+        assertEquals(rowsOf("apple | n. | 苹果", "月 | yuè | 月亮"), lines)
     }
 
     @Test
     fun `a multi-list source whose members are gone degrades to bare words`() = runTest {
-        val lines = resolver(failBuiltin = true).linesFor(
+        val lines = resolver(failBuiltin = true).rowsFor(
             listOf(mark("apple", multiSourceLabel(listOf("default_中考1600_核心词汇")))),
         )
-        assertEquals(listOf("apple"), lines)
+        assertEquals(rowsOf("apple"), lines)
     }
 }

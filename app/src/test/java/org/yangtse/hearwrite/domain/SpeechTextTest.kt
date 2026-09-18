@@ -7,93 +7,6 @@ import org.junit.Test
 
 class SpeechTextTest {
 
-    // --- speakTextFromEntry ---
-
-    @Test
-    fun `plain entry speaks itself trimmed`() {
-        assertEquals("apple", speakTextFromEntry(" apple "))
-        assertEquals("", speakTextFromEntry(""))
-        assertEquals("", speakTextFromEntry("   "))
-    }
-
-    @Test
-    fun `pos and meaning columns are stripped before speaking`() {
-        assertEquals("apple", speakTextFromEntry("apple | n. | 苹果"))
-        assertEquals("处", speakTextFromEntry("处 | chù | 到处"))
-    }
-
-    @Test
-    fun `fullwidth pipe strips pos and meaning before speaking`() {
-        // The parser accepts fullwidth `｜`; the spoken headword must not
-        // read pinyin/组词/meaning columns (upstream only stripped ASCII).
-        assertEquals("月", speakTextFromEntry("月｜yuè｜月亮"))
-        assertEquals("apple", speakTextFromEntry("apple｜n.｜苹果"))
-    }
-
-    @Test
-    fun `entry starting with pipe speaks nothing`() {
-        assertEquals("", speakTextFromEntry("| n. | 苹果"))
-    }
-
-    @Test
-    fun `you are expansion speaks the left side`() {
-        assertEquals("you're", speakTextFromEntry("you're = you are"))
-        assertEquals("you're", speakTextFromEntry("you're = you are | v."))
-    }
-
-    @Test
-    fun `fullwidth equals also splits`() {
-        assertEquals("you are", speakTextFromEntry("you are＝你是"))
-    }
-
-    @Test
-    fun `empty left side falls back to whole text`() {
-        assertEquals("= you are", speakTextFromEntry("= you are"))
-    }
-
-    @Test
-    fun `only the first equals splits`() {
-        assertEquals("a", speakTextFromEntry("a = b = c"))
-    }
-
-    // --- isCjkEntry ---
-
-    @Test
-    fun `cjk detection is based on the speakable headword only`() {
-        assertTrue(isCjkEntry("月"))
-        assertTrue(isCjkEntry("月 | yuè | 月亮"))
-        assertTrue(isCjkEntry("月亮"))
-        assertFalse(isCjkEntry("apple"))
-        // Chinese meaning column does not make an English entry CJK.
-        assertFalse(isCjkEntry("apple | n. | 苹果"))
-        // Chinese left side of an expansion does.
-        assertTrue(isCjkEntry("你 = you"))
-    }
-
-    // --- findLineByHeadword ---
-
-    @Test
-    fun `headword lookup returns the enriched line, not the bare word`() {
-        val lines = listOf("apple | n. | 苹果", "月 | yuè | 月亮", "pear")
-        assertEquals("apple | n. | 苹果", findLineByHeadword(lines, "apple"))
-        assertEquals("月 | yuè | 月亮", findLineByHeadword(lines, "月"))
-        // A line without columns comes back as-is.
-        assertEquals("pear", findLineByHeadword(lines, "pear"))
-    }
-
-    @Test
-    fun `headword lookup matches the spoken side of an expansion`() {
-        // The book keys on the speakable headword, so `you're` must find its
-        // expansion line rather than the raw text.
-        assertEquals("you're = you are", findLineByHeadword(listOf("you're = you are"), "you're"))
-    }
-
-    @Test
-    fun `unknown headword has no line`() {
-        assertEquals(null, findLineByHeadword(listOf("apple", "pear"), "plum"))
-        assertEquals(null, findLineByHeadword(emptyList(), "apple"))
-    }
-
     // --- speakableMeaning ---
 
     @Test
@@ -191,8 +104,6 @@ class SpeechTextTest {
 
     @Test
     fun `BOM at the head of a pasted list never reaches the headword`() {
-        assertEquals("月", speakTextFromEntry("\uFEFF月 | yuè | 月亮"))
-        assertEquals("apple", speakTextFromEntry("\uFEFFapple | n. | 苹果"))
         assertEquals("使高兴", speakableMeaning("\uFEFFvt. 使高兴；n. 高兴"))
     }
 

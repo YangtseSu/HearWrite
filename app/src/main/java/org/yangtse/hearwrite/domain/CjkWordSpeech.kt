@@ -90,7 +90,7 @@ fun parseCompoundTables(json: String): CompoundTables {
  * Candidate tiers, first (frequency-)best match wins:
  *  1. 条目释义列：按「；」再「，,、」拆分、去括注与边缘标点，保留含该字的二字词，
  *     不按读音过滤（课本释义权威）；
- *  2. 已学词池：[learnedWords]（当前词表其他含该字的二字词，按出现顺序、不过滤）
+ *  2. 已学词池：[learnedRows]（当前词表其他含该字的二字词，按出现顺序、不过滤）
  *     + [tables.learned]（按读音过滤），整体按常用词表频级排序，未收录词按出现顺序排后；
  *  3. [tables.common] 常用词池兜底（按读音过滤，频级升序取第一个通过的）。
  *
@@ -103,16 +103,15 @@ fun parseCompoundTables(json: String): CompoundTables {
  * and 朝阳 chao2 side by side).
  */
 fun cjkWordSpeech(
-    entry: String,
+    row: WordRow,
     tables: CompoundTables,
-    learnedWords: List<String> = emptyList(),
+    learnedRows: List<WordRow> = emptyList(),
 ): String {
-    val head = speakTextFromEntry(entry)
+    val head = row.speak
     if (head.length != 1 || !CJK_RE.containsMatchIn(head)) return ""
     if (head in NO_COMPOUND_HEADS) return ""
 
-    val parsed = parseWordLine(entry)
-    val headPinyin = parsed.pos?.let(::toneToDigit) ?: ""
+    val headPinyin = row.pos?.let(::toneToDigit) ?: ""
 
     // A pinyin-less entry (bare char pasted by the user) has no reading
     // anchor; pass-all would let any reading hijack the call — bare 好 must
@@ -125,7 +124,7 @@ fun cjkWordSpeech(
 
     // Tier 1: the entry's own meaning column (authoritative, no reading filter).
     val fromMeaning = mutableListOf<CompoundWord>()
-    for (raw in (parsed.meaning ?: "").split(SENSE_SPLIT_RE)) {
+    for (raw in (row.gloss ?: "").split(SENSE_SPLIT_RE)) {
         for (chunk in raw.split(GLOSS_SPLIT_RE)) {
             val word = chunk.replace(MEANING_PAREN_RE, "")
                 .replace(MEANING_EDGE_PUNCT_RE, "")
@@ -136,8 +135,8 @@ fun cjkWordSpeech(
 
     // Tier 2: 已学词 = the current list's other words + the learned pool.
     val fromLearned = mutableListOf<CompoundWord>()
-    for (line in learnedWords) {
-        val word = speakTextFromEntry(line)
+    for (learned in learnedRows) {
+        val word = learned.speak
         if (word.length != 2 || word == head || !word.contains(head)) continue
         fromLearned += CompoundWord(word, "")
     }

@@ -1,6 +1,6 @@
 package org.yangtse.hearwrite.domain
 
-/** Shared by the speech-text rules of this file and [cjkWordSpeech]. */
+/** Shared by the speech-text rules of this file, [kindOf] and [cjkWordSpeech]. */
 internal val CJK_RE = Regex("[\u4e00-\u9fff]")
 internal val SENSE_SPLIT_RE = Regex("[；;]")
 internal val GLOSS_SPLIT_RE = Regex("[，,、]")
@@ -20,44 +20,6 @@ private const val SPEAK_MEANING_MAX_WIDTH = 12
 fun glossNeedsExpansion(meaning: String?): Boolean =
     (meaning?.length ?: 0) > 24 ||
         (meaning?.count { it == '；' || it == ';' } ?: 0) > 0
-
-/**
- * Text to speak for a list line.
- *
- * Strips the `|`-delimited pos/meaning suffix (TTS must not read them) and
- * supports expansion-style entries like `you're = you are`: speak the left
- * side (`you're`) while the full line remains the display/answer text.
- */
-fun speakTextFromEntry(entry: String): String {
-    var text = jsEdgeTrim(entry)
-    if (text.isEmpty()) return ""
-
-    // Strip pos/meaning after the first pipe delimiter — ASCII `|` or
-    // fullwidth `｜` (the parser accepts both, AGENTS.md Word-line format).
-    val pipe = text.indexOfFirst { it == '|' || it == '｜' }
-    if (pipe != -1) text = jsEdgeTrim(text.substring(0, pipe))
-    if (text.isEmpty()) return ""
-
-    val eq = text.indexOfFirst { it == '=' || it == '＝' }
-    if (eq == -1) return text
-
-    val left = jsEdgeTrim(text.substring(0, eq))
-    return left.ifEmpty { text }
-}
-
-/** True when the speakable headword is Chinese (汉字/词语听写). */
-fun isCjkEntry(entry: String): Boolean =
-    CJK_RE.containsMatchIn(speakTextFromEntry(entry))
-
-/**
- * The first line of [lines] whose speakable headword is [word], or null. The
- * 错词本 keys on exactly that headword (AGENTS.md "Persistence"), so this is
- * how a marked word is matched back to its enriched line (Roadmap #7): the
- * line keeps its 词性/释义 or 拼音/组词 columns, and an expansion line
- * (`you're = you are`) matches the left side the book stored.
- */
-fun findLineByHeadword(lines: List<String>, word: String): String? =
-    lines.firstOrNull { speakTextFromEntry(it) == word }
 
 /**
  * Visual width of [text] in display units: a fullwidth char (汉字, CJK

@@ -36,6 +36,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.math.max
 import kotlin.math.roundToInt
+import org.yangtse.hearwrite.domain.WordRow
 import org.yangtse.hearwrite.domain.isCjkRun
 
 /** Longest image edge after downscaling (alice `OCR_MAX_EDGE`). */
@@ -146,8 +147,8 @@ internal fun answerPrompt(lang: OcrLang): String = when (lang) {
  * 汉字 dictation"; an empty or English list is English, the vision sheet's
  * historical default.
  */
-fun inferOcrLang(lines: List<String>): OcrLang =
-    if (isCjkRun(lines)) OcrLang.CHINESE else OcrLang.ENGLISH
+fun inferOcrLang(rows: List<WordRow>): OcrLang =
+    if (isCjkRun(rows)) OcrLang.CHINESE else OcrLang.ENGLISH
 
 private val JSON = Json { ignoreUnknownKeys = true }
 private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()

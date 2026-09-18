@@ -1,5 +1,7 @@
 package org.yangtse.hearwrite.data
 
+import org.yangtse.hearwrite.domain.WordRow
+
 /**
  * In-memory handoff of the prepared word list between the launching screen
  * (Home paste area or a library list preview) and the dictation screen —
@@ -9,12 +11,12 @@ package org.yangtse.hearwrite.data
  * session restarts from Home, same as upstream).
  */
 class DictationSessionStore {
-    /** Canonical list lines, slice → shuffle already applied by the caller. */
+    /** Parsed rows, slice → shuffle already applied by the caller. */
     @Volatile
-    var lines: List<String> = emptyList()
+    var rows: List<WordRow> = emptyList()
 
     /**
-     * Provenance of the staged lines for the 错词本 source label (Roadmap #1):
+     * Provenance of the staged rows for the 错词本 source label (Roadmap #1):
      * a built-in list id (`default_<category>_<label>`), the history row id
      * the list was recorded under, or the `multi:` label of a 抽词听写 pool
      * (Roadmap #9); null for bare-word sessions (听写错词 over the book,
@@ -24,12 +26,12 @@ class DictationSessionStore {
     var sourceLabel: String? = null
 
     /**
-     * Stage one session: [lines] plus its optional [sourceLabel]. Written
+     * Stage one session: [rows] plus its optional [sourceLabel]. Written
      * right before navigating (Home records the list in history and hands the
      * row id; the library preview hands the built-in list id).
      */
-    fun stage(lines: List<String>, sourceLabel: String?) {
-        this.lines = lines
+    fun stage(rows: List<WordRow>, sourceLabel: String?) {
+        this.rows = rows
         this.sourceLabel = sourceLabel
     }
 
@@ -40,15 +42,15 @@ class DictationSessionStore {
      * empty state and 返回 restarts from Home.
      */
     fun take(): Session {
-        val session = Session(lines, sourceLabel)
-        lines = emptyList()
+        val session = Session(rows, sourceLabel)
+        rows = emptyList()
         sourceLabel = null
         return session
     }
 
-    /** One staged session: canonical list lines plus its provenance label. */
+    /** One staged session: parsed rows plus its provenance label. */
     data class Session(
-        val lines: List<String>,
+        val rows: List<WordRow>,
         val sourceLabel: String?,
     )
 }

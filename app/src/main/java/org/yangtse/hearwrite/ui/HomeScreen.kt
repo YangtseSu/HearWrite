@@ -61,6 +61,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.yangtse.hearwrite.HearWriteApplication
+import org.yangtse.hearwrite.domain.WordRow
 
 /**
  * Home (alice layout, Material 3 tokens): a brand header with the OCR
@@ -84,7 +85,7 @@ import org.yangtse.hearwrite.HearWriteApplication
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    onStartDictation: (lines: List<String>, sourceLabel: String?) -> Unit,
+    onStartDictation: (rows: List<WordRow>, sourceLabel: String?) -> Unit,
     onOpenLibrary: () -> Unit,
     onOpenLibraryPreview: (category: String, label: String) -> Unit,
     onOpenSettings: () -> Unit,
@@ -381,7 +382,7 @@ fun HomeScreen(
                     } else {
                         scope.launch {
                             viewModel.prepareAndRecord()?.let { prepared ->
-                                onStartDictation(prepared.lines, prepared.historyId)
+                                onStartDictation(prepared.rows, prepared.historyId)
                             }
                         }
                     }
@@ -553,8 +554,8 @@ fun HomeScreen(
                     // where the source still resolves; the round itself is a
                     // bare-word run, so its marks carry no new provenance.
                     scope.launch {
-                        viewModel.prepareWrongWordRun()?.let { lines ->
-                            onStartDictation(lines, null)
+                        viewModel.prepareWrongWordRun()?.let { rows ->
+                            onStartDictation(rows, null)
                         }
                     }
                 },

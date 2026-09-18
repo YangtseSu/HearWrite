@@ -51,10 +51,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
-import org.yangtse.hearwrite.domain.WordEntry
-import org.yangtse.hearwrite.domain.entryToLine
+import org.yangtse.hearwrite.domain.WordKind
+import org.yangtse.hearwrite.domain.WordRow
 import org.yangtse.hearwrite.domain.glossNeedsExpansion
-import org.yangtse.hearwrite.domain.isCjkEntry
+import org.yangtse.hearwrite.domain.rowToLine
 import org.yangtse.hearwrite.ui.theme.wordHead
 
 /**
@@ -71,7 +71,7 @@ import org.yangtse.hearwrite.ui.theme.wordHead
 fun LibraryPreviewScreen(
     onBack: () -> Unit,
     onLoadToDraft: (List<String>) -> Unit,
-    onStartDictation: (List<String>) -> Unit,
+    onStartDictation: (List<WordRow>) -> Unit,
     viewModel: LibraryPreviewViewModel = viewModel(),
 ) {
     val entries by viewModel.entries.collectAsState()
@@ -79,7 +79,7 @@ fun LibraryPreviewScreen(
     val startIndex by viewModel.startIndex.collectAsState()
     val starting by viewModel.starting.collectAsState()
     val current = entries
-    // startLines awaits the lazy ECDICT enrich — launch off the click handler.
+    // startRows awaits the lazy ECDICT enrich — launch off the click handler.
     val startScope = rememberCoroutineScope()
     // 载入草稿 hands the list to Home's draft and returns to this category
     // (B8: Home is four taps away, the browsing position is not). Confirming
@@ -191,7 +191,7 @@ fun LibraryPreviewScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         OutlinedButton(onClick = {
-                            onLoadToDraft(current.map(::entryToLine))
+                            onLoadToDraft(current.map(::rowToLine))
                             // Names the destination: this no longer navigates
                             // away, so the message is the only thing that
                             // tells the user where the list went.
@@ -201,10 +201,10 @@ fun LibraryPreviewScreen(
                         }
                         Button(
                             onClick = {
-                                // startLines awaits the lazy ECDICT enrich; run it
+                                // startRows awaits the lazy ECDICT enrich; run it
                                 // off the click so the button never blocks the UI.
                                 startScope.launch {
-                                    viewModel.startLines()?.let(onStartDictation)
+                                    viewModel.startRows()?.let(onStartDictation)
                                 }
                             },
                             enabled = !starting,
@@ -274,7 +274,7 @@ fun LibraryPreviewScreen(
                                 onToggleExpand = {
                                     // Non-expandable rows (short single-sense glosses)
                                     // only select the 起始词 — same gate as Home.
-                                    if (glossNeedsExpansion(entry.meaning)) {
+                                    if (glossNeedsExpansion(entry.gloss)) {
                                         expanded = if (index in expanded) {
                                             expanded - index
                                         } else {
@@ -294,7 +294,7 @@ fun LibraryPreviewScreen(
 
 @Composable
 private fun EntryRow(
-    entry: WordEntry,
+    entry: WordRow,
     index: Int,
     selected: Boolean,
     expanded: Boolean,
@@ -303,7 +303,7 @@ private fun EntryRow(
 ) {
     // Same anatomy as Home's 展示态 rows: word over a single meta line
     // (`pos meaning`), 2-line clamp with expansion for long glosses.
-    val meta = listOfNotNull(entry.pos, entry.meaning).joinToString(" ")
+    val meta = listOfNotNull(entry.pos, entry.gloss).joinToString(" ")
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -356,7 +356,7 @@ private fun EntryRow(
                 .padding(vertical = 8.dp),
         ) {
             Text(
-                entry.word,
+                entry.display,
                 style = MaterialTheme.typography.wordHead,
                 color = if (selected) {
                     MaterialTheme.colorScheme.primary
@@ -375,7 +375,7 @@ private fun EntryRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 2.dp),
                 )
-            } else if (!isCjkEntry(entry.word)) {
+            } else if (entry.kind == WordKind.EN) {
                 // English headwords without ECDICT meta yet — a placeholder
                 // keeps the row height stable while the offline enrichment
                 // fills in (Chinese bare words are spoken as-is, no meta).

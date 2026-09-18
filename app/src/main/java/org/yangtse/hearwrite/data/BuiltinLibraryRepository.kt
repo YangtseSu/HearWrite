@@ -3,10 +3,10 @@ package org.yangtse.hearwrite.data
 import android.content.res.AssetManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.yangtse.hearwrite.domain.WordEntry
+import org.yangtse.hearwrite.domain.WordRow
 import org.yangtse.hearwrite.domain.builtinListId
 import org.yangtse.hearwrite.domain.compareLabels
-import org.yangtse.hearwrite.domain.parseWordEntries
+import org.yangtse.hearwrite.domain.parseWordRows
 import java.util.concurrent.ConcurrentHashMap
 
 /** A built-in library list at packaged asset path `<category>/<label>.txt`. */
@@ -41,7 +41,7 @@ class BuiltinLibraryRepository(private val assets: AssetManager) {
      */
     private val nonLibrary = setOf("dict", "compounds", "audio", "licenses")
 
-    private val entriesCache = ConcurrentHashMap<String, List<WordEntry>>()
+    private val entriesCache = ConcurrentHashMap<String, List<WordRow>>()
 
     /** Every library category, ordered like the upstream library generator. */
     suspend fun categories(): List<LibraryCategory> = withContext(Dispatchers.IO) {
@@ -67,13 +67,13 @@ class BuiltinLibraryRepository(private val assets: AssetManager) {
         entries(list).size
     }
 
-    /** Parsed entries of one list (cached after first load). */
-    suspend fun entries(list: LibraryList): List<WordEntry> = withContext(Dispatchers.IO) {
+    /** Parsed rows of one list (cached after first load). */
+    suspend fun entries(list: LibraryList): List<WordRow> = withContext(Dispatchers.IO) {
         entriesCache.getOrPut(list.id) {
             val text = assets.open("${list.category}/${list.label}.txt")
                 .bufferedReader(Charsets.UTF_8)
                 .use { it.readText() }
-            parseWordEntries(text)
+            parseWordRows(text)
         }
     }
 
@@ -98,7 +98,7 @@ class BuiltinLibraryRepository(private val assets: AssetManager) {
                         continue
                     }
                     val matched = entries(list)
-                        .map { it.word }
+                        .map { it.display }
                         .distinct()
                         .filter { it.contains(q, ignoreCase = true) }
                     if (matched.isNotEmpty()) {

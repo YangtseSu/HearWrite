@@ -23,15 +23,15 @@ class WordLineParserTest {
     // --- parseWordLine: 1 or 3 columns, fullwidth pipe accepted ---
 
     @Test
-    fun `bare word parses to word only`() {
-        assertEquals(WordEntry("apple"), parseWordLine("apple"))
-        assertEquals(WordEntry("Good morning"), parseWordLine("  Good morning  "))
+    fun `bare word parses to display only`() {
+        assertEquals(wordRowOf("apple"), parseWordLine("apple"))
+        assertEquals(wordRowOf("Good morning"), parseWordLine("  Good morning  "))
     }
 
     @Test
-    fun `three ascii columns parse into word pos meaning`() {
+    fun `three ascii columns parse into display pos gloss`() {
         assertEquals(
-            WordEntry("apple", "n.", "苹果"),
+            wordRowOf("apple", "n.", "苹果"),
             parseWordLine("apple | n. | 苹果"),
         )
     }
@@ -39,7 +39,7 @@ class WordLineParserTest {
     @Test
     fun `fullwidth pipe is accepted as column delimiter`() {
         assertEquals(
-            WordEntry("月", "yuè", "月亮"),
+            wordRowOf("月", "yuè", "月亮"),
             parseWordLine("月｜yuè｜月亮"),
         )
     }
@@ -47,7 +47,7 @@ class WordLineParserTest {
     @Test
     fun `mixed ascii and fullwidth pipes work`() {
         assertEquals(
-            WordEntry("apple", "n.", "苹果"),
+            wordRowOf("apple", "n.", "苹果"),
             parseWordLine("apple | n.｜苹果"),
         )
     }
@@ -55,19 +55,21 @@ class WordLineParserTest {
     @Test
     fun `blank pos column parses to null`() {
         // Real textbook row: what's |  | what is 的缩写形式
-        val entry = parseWordLine("what's |  | what is 的缩写形式")
-        assertEquals(WordEntry("what's", null, "what is 的缩写形式"), entry)
+        val row = parseWordLine("what's |  | what is 的缩写形式")
+        assertEquals(wordRowOf("what's", null, "what is 的缩写形式"), row)
     }
 
     @Test
-    fun `blank meaning column parses to null`() {
-        assertEquals(WordEntry("apple", "n.", null), parseWordLine("apple | n. |  "))
+    fun `blank gloss column parses to null`() {
+        assertEquals(wordRowOf("apple", "n.", null), parseWordLine("apple | n. |  "))
     }
 
     @Test
-    fun `columns beyond meaning are ignored`() {
+    fun `columns beyond gloss are ignored`() {
+        // The .txt format is 1–3 columns (AGENTS.md "Word-line format"); a
+        // stray 4th column is dropped rather than read as anything.
         assertEquals(
-            WordEntry("apple", "n.", "苹果"),
+            wordRowOf("apple", "n.", "苹果"),
             parseWordLine("apple | n. | 苹果 | extra | ignored"),
         )
     }
@@ -75,59 +77,154 @@ class WordLineParserTest {
     @Test
     fun `whitespace around columns is trimmed but inner spaces survive`() {
         assertEquals(
-            WordEntry("Good morning", "adj.", "好的,令人愉快的"),
+            wordRowOf("Good morning", "adj.", "好的,令人愉快的"),
             parseWordLine("  Good morning  |  adj.  |  好的,令人愉快的 "),
         )
     }
 
     @Test
-    fun `blank line parses to empty-word entry`() {
-        assertEquals(WordEntry(""), parseWordLine("   "))
+    fun `blank line parses to empty row`() {
+        assertEquals(wordRowOf(""), parseWordLine("   "))
     }
 
     @Test
-    fun `parseWordEntries maps every line`() {
-        val entries = parseWordEntries("月 | yuè | 月亮\n\napple\n果 |  | 苹果")
+    fun `parseWordRows maps every line`() {
+        val rows = parseWordRows("月 | yuè | 月亮\n\napple\n果 |  | 苹果")
         assertEquals(
             listOf(
-                WordEntry("月", "yuè", "月亮"),
-                WordEntry("apple"),
-                WordEntry("果", null, "苹果"),
+                wordRowOf("月", "yuè", "月亮"),
+                wordRowOf("apple"),
+                wordRowOf("果", null, "苹果"),
             ),
-            entries,
+            rows,
         )
     }
 
-    // --- entryToLine: canonical serialization, round-trip stable ---
+    // --- speak: derived once at parse time, not re-derived per consumer ---
 
     @Test
-    fun `entryToLine bare word has no pipes`() {
-        assertEquals("hello", entryToLine(WordEntry("hello")))
+    fun `bare headword speaks itself`() {
+        assertEquals("apple", parseWordLine("  apple  ").speak)
+        assertEquals("Good morning", parseWordLine("Good morning").speak)
+        assertEquals("", parseWordLine("   ").speak)
     }
 
     @Test
-    fun `entryToLine keeps empty columns as separators`() {
-        assertEquals("apple | n. | 苹果", entryToLine(WordEntry("apple", "n.", "苹果")))
-        assertEquals("what's |  | what is 的缩写形式", entryToLine(WordEntry("what's", null, "what is 的缩写形式")))
+    fun `columns never reach the spoken text`() {
+        assertEquals("apple", parseWordLine("apple | n. | 苹果").speak)
+        assertEquals("处", parseWordLine("处 | chù | 到处").speak)
+        // Fullwidth pipes strip the same way.
+        assertEquals("月", parseWordLine("月｜yuè｜月亮").speak)
+        // A line that starts with the delimiter has no headword to speak.
+        assertEquals("", parseWordLine("| n. | 苹果").speak)
+    }
+
+    @Test
+    fun `you are expansion speaks the left side`() {
+        assertEquals("you're", parseWordLine("you're = you are").speak)
+        assertEquals("you're", parseWordLine("you're = you are | v.").speak)
+        assertEquals("Mr", parseWordLine("Mr=mister | n. | 先生(用于姓名前)").speak)
+    }
+
+    @Test
+    fun `fullwidth equals also splits`() {
+        assertEquals("you are", parseWordLine("you are＝你是").speak)
+    }
+
+    @Test
+    fun `empty left side falls back to whole text`() {
+        assertEquals("= you are", parseWordLine("= you are").speak)
+    }
+
+    @Test
+    fun `only the first equals splits`() {
+        assertEquals("a", parseWordLine("a = b = c").speak)
+    }
+
+    // --- kind: decided by the headword alone ---
+
+    @Test
+    fun `kind follows the display headword`() {
+        assertEquals(WordKind.EN, parseWordLine("apple").kind)
+        assertEquals(WordKind.EN, parseWordLine("good morning | n. | 早上好").kind)
+        assertEquals(WordKind.HANZI, parseWordLine("月").kind)
+        assertEquals(WordKind.HANZI, parseWordLine("月 | yuè | 月亮").kind)
+        assertEquals(WordKind.WORD, parseWordLine("月亮").kind)
+        assertEquals(WordKind.WORD, parseWordLine("生日快乐").kind)
+    }
+
+    @Test
+    fun `a chinese gloss column never makes an english row chinese`() {
+        assertEquals(WordKind.EN, parseWordLine("apple | n. | 苹果").kind)
+        assertEquals(WordKind.EN, parseWordLine("you're = you are | v.").kind)
+    }
+
+    @Test
+    fun `kindOf is the single source of the classification`() {
+        assertEquals(WordKind.EN, kindOf(""))
+        assertEquals(WordKind.EN, kindOf("apple"))
+        assertEquals(WordKind.HANZI, kindOf("月"))
+        assertEquals(WordKind.WORD, kindOf("月亮"))
+        // A Chinese headword stays Chinese whatever its expansion reads.
+        assertEquals(WordKind.WORD, kindOf("你 = you"))
+        assertEquals("你", wordRowOf("你 = you").speak)
+    }
+
+    // --- rowToLine: canonical serialization, round-trip stable ---
+
+    @Test
+    fun `rowToLine bare word has no pipes`() {
+        assertEquals("hello", rowToLine(wordRowOf("hello")))
+    }
+
+    @Test
+    fun `rowToLine keeps empty columns as separators`() {
+        assertEquals("apple | n. | 苹果", rowToLine(wordRowOf("apple", "n.", "苹果")))
+        assertEquals("what's |  | what is 的缩写形式", rowToLine(wordRowOf("what's", null, "what is 的缩写形式")))
         // A missing trailing column is dropped: the hint-only 生字 shape
         // (`字 | 拼音`) is what the CJK enrichment emits for a char with no
         // 组词, and a dangling `| ` would ship as a visible empty column.
-        assertEquals("apple | n.", entryToLine(WordEntry("apple", "n.", null)))
-        assertEquals("很 | hěn", entryToLine(WordEntry("很", "hěn", null)))
+        assertEquals("apple | n.", rowToLine(wordRowOf("apple", "n.", null)))
+        assertEquals("很 | hěn", rowToLine(wordRowOf("很", "hěn", null)))
     }
 
     @Test
-    fun `entryToLine round trips through parseWordLine`() {
-        val entries = listOf(
-            WordEntry("hello"),
-            WordEntry("apple", "n.", "苹果"),
-            WordEntry("what's", null, "what is 的缩写形式"),
-            WordEntry("月", "yuè", "月亮"),
-            WordEntry("", null, null),
+    fun `rowToLine round trips through parseWordLine`() {
+        val rows = listOf(
+            wordRowOf("hello"),
+            wordRowOf("apple", "n.", "苹果"),
+            wordRowOf("what's", null, "what is 的缩写形式"),
+            wordRowOf("月", "yuè", "月亮"),
+            wordRowOf(""),
         )
-        for (entry in entries) {
-            assertEquals(entry, parseWordLine(entryToLine(entry)))
+        for (row in rows) {
+            assertEquals(row, parseWordLine(rowToLine(row)))
         }
+    }
+
+    // --- findRowByHeadword: the 错词本 key lookup ---
+
+    @Test
+    fun `headword lookup returns the enriched row, not the bare word`() {
+        val rows = listOf("apple | n. | 苹果", "月 | yuè | 月亮", "pear").map(::parseWordLine)
+        assertEquals(wordRowOf("apple", "n.", "苹果"), findRowByHeadword(rows, "apple"))
+        assertEquals(wordRowOf("月", "yuè", "月亮"), findRowByHeadword(rows, "月"))
+        // A row without columns comes back as-is.
+        assertEquals(wordRowOf("pear"), findRowByHeadword(rows, "pear"))
+    }
+
+    @Test
+    fun `headword lookup matches the spoken side of an expansion`() {
+        // The book keys on the speakable headword, so `you're` must find its
+        // expansion row rather than the raw text.
+        val rows = listOf(parseWordLine("you're = you are"))
+        assertEquals(wordRowOf("you're = you are"), findRowByHeadword(rows, "you're"))
+    }
+
+    @Test
+    fun `unknown headword has no row`() {
+        assertEquals(null, findRowByHeadword(listOf("apple", "pear").map(::parseWordLine), "plum"))
+        assertEquals(null, findRowByHeadword(emptyList(), "apple"))
     }
 
     // --- normalizePos: ECDICT -> textbook mapping ---
@@ -192,8 +289,10 @@ class WordLineParserTest {
     @Test
     fun `BOM and unicode whitespace are stripped at line edges js parity`() {
         assertEquals(listOf("月", "apple"), parseWords("\uFEFF月\uFEFF\n\u3000apple"))
-        assertEquals("月", parseWordLine("\uFEFF月 | yuè | 月亮").word)
+        assertEquals("月", parseWordLine("\uFEFF月 | yuè | 月亮").display)
+        assertEquals("月", parseWordLine("\uFEFF月 | yuè | 月亮").speak)
         assertEquals("yuè", parseWordLine("\uFEFF月 | yuè | 月亮").pos)
+        assertEquals("apple", parseWordLine("\uFEFFapple | n. | 苹果").speak)
         // A BOM-only or fullwidth-space-only line is blank after the parity trim.
         assertEquals(emptyList<String>(), parseWords("\u3000\u3000\n\uFEFF"))
     }

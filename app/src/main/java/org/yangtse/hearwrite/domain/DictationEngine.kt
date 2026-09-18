@@ -93,8 +93,8 @@ class DictationEngine(
      */
     val speechFailures: StateFlow<Int> = _speechFailures.asStateFlow()
 
-    /** Lines of the active session (raw list lines, parsed per word). */
-    private var words: List<String> = emptyList()
+    /** Rows of the active session. */
+    private var rows: List<WordRow> = emptyList()
 
     /** 组词 candidate tables; set before [start] (kept out of the constructor so
      *  the caller can load them off the main thread first). */
@@ -125,17 +125,17 @@ class DictationEngine(
         this.tables = tables
     }
 
-    /** Start dictating [lines] from the first word. Stops any active run. */
-    fun start(lines: List<String>) {
+    /** Start dictating [rows] from the first word. Stops any active run. */
+    fun start(rows: List<WordRow>) {
         gen++
         cancelRun()
         stopAudio()
-        words = lines
+        this.rows = rows
         _finished.value = false
         _index.value = 0
         _speechFailures.value = 0
         clearCountdown()
-        if (lines.isEmpty()) {
+        if (rows.isEmpty()) {
             _state.value = PlayState.IDLE
             return
         }
@@ -183,7 +183,7 @@ class DictationEngine(
         stopAudio()
         clearCountdown()
         val next = _index.value + 1
-        if (next >= words.size) {
+        if (next >= rows.size) {
             // Skipping past the last word ends the session, like upstream.
             _state.value = PlayState.IDLE
             _finished.value = true
@@ -291,21 +291,19 @@ class DictationEngine(
     }
 
     /**
-     * speakMeaning pass for a line: the 组词 phrase of a single CJK char
+     * speakMeaning pass for a row: the 组词 phrase of a single CJK char
      * (through [phraseSpeaker]) or the 朗读释义 gloss of an English entry
      * (through [speaker]); null when there is no pass. A single char without
      * any matching compound (虚词 or no candidate) yields null — no phrase,
      * the word itself is spoken twice.
      */
-    private fun meaningPass(line: String): Pair<String, Speaker>? {
-        if (isCjkEntry(line)) {
-            val head = speakTextFromEntry(line)
-            if (head.length != 1) return null
-            val phrase = cjkWordSpeech(line, tables, words)
+    private fun meaningPass(row: WordRow): Pair<String, Speaker>? {
+        if (row.kind != WordKind.EN) {
+            val phrase = cjkWordSpeech(row, tables, rows)
             return if (phrase.isEmpty()) null else phrase to phraseSpeaker
         }
         if (!readTranslation) return null
-        val gloss = speakableMeaning(parseWordLine(line).meaning)
+        val gloss = speakableMeaning(row.gloss)
         return if (gloss.isEmpty()) null else gloss to speaker
     }
 
@@ -314,19 +312,19 @@ class DictationEngine(
         var phase = fromPhase
         while (true) {
             if (!currentRun(myGen)) return
-            if (i >= words.size) {
+            if (i >= rows.size) {
                 _state.value = PlayState.IDLE
                 _finished.value = true
                 clearCountdown()
                 return
             }
-            val line = words[i]
+            val row = rows[i]
             when (phase) {
                 WordPhase.SPEAK1, WordPhase.SPEAK2 -> {
                     val first = phase == WordPhase.SPEAK1
                     _index.value = i
                     if (first) clearCountdown()
-                    val ok = speaker.speak(speakTextFromEntry(line), wordLang(line))
+                    val ok = speaker.speak(row.speak, wordLang(row))
                     if (!ok) _speechFailures.value += 1
                     if (!currentRun(myGen)) return
                     if (first) {
@@ -337,7 +335,7 @@ class DictationEngine(
                             if (!currentRun(myGen)) return
                         }
                         phase =
-                            if (meaningPass(line) != null) WordPhase.MEANING
+                            if (meaningPass(row) != null) WordPhase.MEANING
                             else WordPhase.SPEAK2
                     } else {
                         // speak2 done. Auto-next off parks here (session stays
@@ -348,7 +346,7 @@ class DictationEngine(
                 }
 
                 WordPhase.MEANING -> {
-                    val meaning = meaningPass(line)
+                    val meaning = meaningPass(row)
                     if (meaning != null) {
                         if (!meaning.second.speak(meaning.first, LANG_ZH)) _speechFailures.value += 1
                         if (!currentRun(myGen)) return
@@ -387,7 +385,7 @@ class DictationEngine(
         }
     }
 
-    /** Voice language of the word itself, by entry kind. */
-    private fun wordLang(line: String): String =
-        if (isCjkEntry(line)) LANG_ZH else LANG_EN
+    /** Voice language of the word itself, by row kind. */
+    private fun wordLang(row: WordRow): String =
+        if (row.kind == WordKind.EN) LANG_EN else LANG_ZH
 }

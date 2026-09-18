@@ -24,11 +24,11 @@ import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.data.LibraryCategory
 import org.yangtse.hearwrite.data.LibraryList
 import org.yangtse.hearwrite.data.LibrarySearchResult
-import org.yangtse.hearwrite.domain.WordEntry
-import org.yangtse.hearwrite.domain.entryToLine
-import org.yangtse.hearwrite.domain.isCjkEntry
+import org.yangtse.hearwrite.domain.WordKind
+import org.yangtse.hearwrite.domain.WordRow
 import org.yangtse.hearwrite.domain.parseWordLine
-import org.yangtse.hearwrite.domain.prepareStartLines
+import org.yangtse.hearwrite.domain.prepareStartRows
+import org.yangtse.hearwrite.domain.rowToLine
 
 /** Search UI state: idle (no query), loading, or the finished result. */
 sealed interface LibrarySearchState {
@@ -144,9 +144,9 @@ class LibraryPreviewViewModel(
     val category: String = checkNotNull(handle["category"])
     val label: String = checkNotNull(handle["label"])
 
-    private val _entries = MutableStateFlow<List<WordEntry>?>(null)
+    private val _entries = MutableStateFlow<List<WordRow>?>(null)
     /** null = still loading. */
-    val entries: StateFlow<List<WordEntry>?> = _entries.asStateFlow()
+    val entries: StateFlow<List<WordRow>?> = _entries.asStateFlow()
 
     private val _shuffle = MutableStateFlow(false)
     /** 随机顺序 — session-local, defaults off (never persisted). */
@@ -158,14 +158,14 @@ class LibraryPreviewViewModel(
 
     private val _starting = MutableStateFlow(false)
     /**
-     * True while [startLines] is preparing (awaits the lazy ECDICT enrich —
+     * True while [startRows] is preparing (awaits the lazy ECDICT enrich —
      * hundreds of ms on a cold process). The button spins instead of looking
      * dead, mirroring Home's 整理词表… state.
      */
     val starting: StateFlow<Boolean> = _starting.asStateFlow()
 
     /** Completes once the initial enrich pass settled (done, skipped, or
-     *  failed) — [startLines] awaits it so a start in the enrich window still
+     *  failed) — [startRows] awaits it so a start in the enrich window still
      *  ships the ECDICT meanings (朗读释义 needs them). */
     private val enrichSettled = CompletableDeferred<Unit>()
 
@@ -185,18 +185,18 @@ class LibraryPreviewViewModel(
         _startIndex.value = 0
     }
 
-    /** Final lines for one start: slice from 起始序号, then 随机顺序 — the same
+    /** Final rows for one start: slice from 起始序号, then 随机顺序 — the same
      *  ordering Home applies (AGENTS.md playback engine stays dumb). Waits
      *  for the initial ECDICT enrich to settle so a fast start does not drop
      *  the spoken meanings; double invocations are rejected (not queued).
      *  Returns null when another start is already in flight. */
-    suspend fun startLines(): List<String>? {
+    suspend fun startRows(): List<WordRow>? {
         if (!startGate.tryLock()) return null
         _starting.value = true
         try {
             enrichSettled.await()
             val current = _entries.value ?: return null
-            return prepareStartLines(current.map(::entryToLine), _startIndex.value, _shuffle.value)
+            return prepareStartRows(current, _startIndex.value, _shuffle.value)
         } finally {
             _starting.value = false
             startGate.unlock()
@@ -206,7 +206,7 @@ class LibraryPreviewViewModel(
     init {
         viewModelScope.launch {
             // enrichSettled MUST complete on every path (success, skip,
-            // asset failure) — startLines() awaits it and would hang forever
+            // asset failure) — startRows() awaits it and would hang forever
             // on an uncompleted deferred.
             try {
                 loadAndEnrich()
@@ -234,10 +234,10 @@ class LibraryPreviewViewModel(
         // 拼音/组词 from `dict/hanzi-meta.json`. Multi-char Chinese words have
         // no offline source (and no columns to fill), so they never trigger it.
         val needsEnrich = parsed.any {
-            it.pos == null && it.meaning == null && (!isCjkEntry(it.word) || it.word.length == 1)
+            it.pos == null && it.gloss == null && it.kind != WordKind.WORD
         }
         if (!needsEnrich) return
-        val enriched = dictionaryRepository.enrichLines(parsed.map(::entryToLine))
+        val enriched = dictionaryRepository.enrichLines(parsed.map(::rowToLine))
             .map(::parseWordLine)
         if (_entries.value == parsed) _entries.value = enriched
     }

@@ -12,9 +12,11 @@ import kotlinx.coroutines.sync.Mutex
 import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.data.LibraryList
 import org.yangtse.hearwrite.domain.dedupeByHeadword
-import org.yangtse.hearwrite.domain.entryToLine
+import org.yangtse.hearwrite.domain.WordRow
 import org.yangtse.hearwrite.domain.multiSourceLabel
 import org.yangtse.hearwrite.domain.parseBuiltinListId
+import org.yangtse.hearwrite.domain.parseWordLine
+import org.yangtse.hearwrite.domain.rowToLine
 import org.yangtse.hearwrite.domain.sampleWords
 
 /** One ticked list of a 抽词听写 pool, with its loaded 词数. */
@@ -37,14 +39,14 @@ data class DrawPoolState(
     val failedLabels: List<String> = emptyList(),
 )
 
-/** A startable draw: the sampled lines plus the run's provenance label. */
-data class DrawSession(val lines: List<String>, val sourceLabel: String)
+/** A startable draw: the sampled rows plus the run's provenance label. */
+data class DrawSession(val rows: List<WordRow>, val sourceLabel: String)
 
 /**
  * 抽词听写 (Roadmap #9): the 多选词表 selection is loaded as one candidate pool
  * — lists in selection order, cross-list duplicates merged by speakable
  * headword, bare English headwords enriched with the offline ECDICT meta —
- * then X lines are drawn without replacement. The pool is assembled before
+ * then X rows are drawn without replacement. The pool is assembled before
  * the start entry points, so the result continues through the existing
  * staging into the unchanged playback engine.
  */
@@ -62,9 +64,9 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
     /** Requested draw size X, clamped against the pool on every use. */
     val count: StateFlow<Int> = _count.asStateFlow()
 
-    /** The assembled candidate lines (enriched), kept for [prepareSession]. */
+    /** The assembled candidate rows (enriched), kept for [prepareSession]. */
     @Volatile
-    private var candidates: List<String> = emptyList()
+    private var candidates: List<WordRow> = emptyList()
 
     /** Serializes starts; claimed before the first suspension (AGENTS.md
      *  re-entry guard) so a double tap cannot stage two sessions. */
@@ -79,14 +81,14 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
      */
     private var previewCount = 0
 
-    private val _preview = MutableStateFlow<List<String>>(emptyList())
+    private val _preview = MutableStateFlow<List<WordRow>>(emptyList())
 
     /**
      * The current draw, for the 逐词预览 block (Roadmap #9 left it out). Drawn
      * once and kept: the run reuses exactly this list, so what the page shows
      * is what gets dictated.
      */
-    val preview: StateFlow<List<String>> = _preview.asStateFlow()
+    val preview: StateFlow<List<WordRow>> = _preview.asStateFlow()
 
     /**
      * Make sure a draw of the currently requested size exists — sampled on
@@ -121,7 +123,7 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
             var merged = 0
             val lists = ArrayList<DrawListInfo>(ids.size)
             val failed = ArrayList<String>(0)
-            val raw = ArrayList<String>()
+            val raw = ArrayList<WordRow>()
             ids.forEach { id ->
                 val parts = parseBuiltinListId(id)
                 if (parts == null) {
@@ -135,19 +137,19 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
                 // A list that fails to load (asset read error) degrades by
                 // being left out; the rest of the pool still dictates — but
                 // the drop is reported, not swallowed.
-                val lines = try {
-                    repository.entries(LibraryList(category, label)).map(::entryToLine)
+                val rows = try {
+                    repository.entries(LibraryList(category, label))
                 } catch (e: Exception) {
                     Log.w("LibraryDrawViewModel", "list load failed for $id", e)
                     failed += "$category / $label"
                     return@forEach
                 }
-                if (lines.isEmpty()) {
+                if (rows.isEmpty()) {
                     failed += "$category / $label"
                     return@forEach
                 }
-                lists += DrawListInfo(id, category, label, lines.size)
-                raw += lines
+                lists += DrawListInfo(id, category, label, rows.size)
+                raw += rows
             }
             val deduped = dedupeByHeadword(raw)
             merged = raw.size - deduped.size
@@ -155,7 +157,7 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
             // hanzi 拼音/组词) columns must ride into the dictation, or an
             // English draw would dictate bare words with no hints at all.
             val enriched = try {
-                dictionaryRepository.enrichLines(deduped)
+                dictionaryRepository.enrichLines(deduped.map(::rowToLine)).map(::parseWordLine)
             } catch (e: Exception) {
                 Log.w("LibraryDrawViewModel", "pool enrich failed", e)
                 deduped
@@ -192,7 +194,7 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
             // Replay the previewed draw: the page showed these words, so these
             // are the words to dictate. Re-sample only when the preview is
             // stale (X changed after the last draw).
-            val lines = if (previewCount == x && _preview.value.isNotEmpty()) {
+            val rows = if (previewCount == x && _preview.value.isNotEmpty()) {
                 _preview.value
             } else {
                 sampleWords(pool, x).also {
@@ -200,9 +202,9 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
                     _preview.value = it
                 }
             }
-            if (lines.isEmpty()) return null
+            if (rows.isEmpty()) return null
             val ids = _pool.value.lists.map { it.id }
-            return DrawSession(lines, multiSourceLabel(ids))
+            return DrawSession(rows, multiSourceLabel(ids))
         } finally {
             startGate.unlock()
         }

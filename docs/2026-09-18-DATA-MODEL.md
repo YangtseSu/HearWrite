@@ -249,6 +249,13 @@ data class ResolvedWord(
 
 **验收**：`testDebugUnitTest` 全绿；`grep -r "speakTextFromEntry\|isCjkEntry"` 在 `main` 下返回 0。
 
+> **Phase 1 已完成（2026-09-18）**，验收两条均满足（396 tests green；`main` 下 0 命中）。落地时补的命名与偏差：
+> - `parseWordEntries`/`entryToLine` → `parseWordRows`/`rowToLine`；新增 `wordRowOf(display, pos, gloss)`（派生 `speak`/`kind`）与 `findRowByHeadword(rows, word): WordRow?`（原 `findLineByHeadword`，现返回整行）。
+> - 顶层类型名去掉了流水线残留：`prepareStartLines` → `prepareStartRows`、`DictationSessionStore.lines` → `rows`、`WrongWordLineResolver.linesFor` → `rowsFor`（返回 `List<WordRow>`）。
+> - `ResolvedWord` 按 §1.3 定义（含 `Sense`/`Ipa`），当前**无消费者**——合成发生在 Phase 3 的 resolver，Phase 1 不含 lexicon。
+> - §7 的「4/5 列」「音标占位往返」「`enrichLines` 只补音标」诸条属于被 §2.1/§3.3 否决的行内音标草案，Phase 1 未采纳：`.txt` 仍是 1–3 列，第 4 列照旧忽略。
+> - 未做：`dialFit` 的 `hasPos` → `hasHint` 改名（属拨盘合成行，Phase 3）；`docs/WORDLIST.md` 的格式说明更新（Phase 2 第 13 项）。`AGENTS.md` 只改了三处会与代码矛盾的说法（row 模型、kind 判定、`prepareStartRows`）。
+
 ### Phase 2 · Lexicon
 
 | # | 文件 | 变更 |

@@ -29,7 +29,7 @@ import org.yangtse.hearwrite.data.TtsChainSpeaker
 import org.yangtse.hearwrite.data.WrongWordLineResolver
 import org.yangtse.hearwrite.data.WrongWordsRepository
 import org.yangtse.hearwrite.data.YoudaoTts
-import org.yangtse.hearwrite.domain.entryToLine
+import org.yangtse.hearwrite.domain.rowToLine
 
 /**
  * Application-scoped singleton container (manual DI per AGENTS.md — no
@@ -145,7 +145,7 @@ class HearWriteApplication : Application() {
     }
 
     /**
-     * Restore 错词本 marks to their original word-list lines (Roadmap #7):
+     * Restore 错词本 marks to their original word-list rows (Roadmap #7):
      * built-in sources read the asset library (enriched with the offline
      * ECDICT meta exactly like the list preview, so an English mark keeps its
      * 词性/释义 and 朗读释义 still has something to speak), history sources the
@@ -155,7 +155,7 @@ class HearWriteApplication : Application() {
     val wrongWordLineResolver: WrongWordLineResolver by lazy {
         WrongWordLineResolver(
             builtinListLines = { category, label ->
-                val lines = libraryRepository.entries(LibraryList(category, label)).map(::entryToLine)
+                val lines = libraryRepository.entries(LibraryList(category, label)).map(::rowToLine)
                 dictionaryRepository.enrichLines(lines)
             },
             historyText = { id ->

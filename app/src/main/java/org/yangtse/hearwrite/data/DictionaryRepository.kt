@@ -5,14 +5,12 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import org.yangtse.hearwrite.domain.CJK_RE
 import org.yangtse.hearwrite.domain.POS_PREFIX_RE
-import org.yangtse.hearwrite.domain.WordEntry
-import org.yangtse.hearwrite.domain.entryToLine
+import org.yangtse.hearwrite.domain.WordKind
 import org.yangtse.hearwrite.domain.normalizePos
 import org.yangtse.hearwrite.domain.parseWordLine
 import org.yangtse.hearwrite.domain.parseWords
-import org.yangtse.hearwrite.domain.speakTextFromEntry
+import org.yangtse.hearwrite.domain.rowToLine
 
 /** Offline word meta from ECDICT (English) or `hanzi-meta.json` (Chinese): the
  *  two enrichment columns — pos/拼音 and 释义/组词. */
@@ -104,22 +102,21 @@ class DictionaryRepository(private val readAsset: (String) -> String) {
         var ecdict: Map<String, String>? = null
         var hanzi: Map<String, String>? = null
         lines.map { line ->
-            val entry = parseWordLine(line)
-            if (entry.pos != null || entry.meaning != null) {
+            val row = parseWordLine(line)
+            if (row.pos != null || row.gloss != null) {
                 line
             } else {
-                val head = speakTextFromEntry(line)
-                val meta: WordMeta? = when {
-                    !CJK_RE.containsMatchIn(head) ->
-                        lookupIn(ecdict ?: table().also { ecdict = it }, head)
-                    head.length == 1 ->
-                        (hanzi ?: hanziTable().also { hanzi = it })[head]?.let(::decodeStored)
-                    else -> null
+                val meta: WordMeta? = when (row.kind) {
+                    WordKind.EN ->
+                        lookupIn(ecdict ?: table().also { ecdict = it }, row.speak)
+                    WordKind.HANZI ->
+                        (hanzi ?: hanziTable().also { hanzi = it })[row.speak]?.let(::decodeStored)
+                    WordKind.WORD -> null
                 }
                 if (meta == null || (meta.pos == null && meta.meaning == null)) {
                     line
                 } else {
-                    entryToLine(WordEntry(entry.word, meta.pos, meta.meaning))
+                    rowToLine(row.copy(pos = meta.pos, gloss = meta.meaning))
                 }
             }
         }

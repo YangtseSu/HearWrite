@@ -49,7 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
-import org.yangtse.hearwrite.domain.parseWordLine
+import org.yangtse.hearwrite.domain.WordRow
 import org.yangtse.hearwrite.ui.theme.wordHead
 
 /**
@@ -71,7 +71,7 @@ import org.yangtse.hearwrite.ui.theme.wordHead
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun LibraryDrawScreen(
-    onStartDictation: (lines: List<String>, sourceLabel: String) -> Unit,
+    onStartDictation: (rows: List<WordRow>, sourceLabel: String) -> Unit,
     onBack: () -> Unit,
     viewModel: LibraryDrawViewModel = viewModel(),
 ) {
@@ -198,7 +198,7 @@ fun LibraryDrawScreen(
                             // first suspension — a double tap only loses.
                             scope.launch {
                                 viewModel.prepareSession()?.let { session ->
-                                    onStartDictation(session.lines, session.sourceLabel)
+                                    onStartDictation(session.rows, session.sourceLabel)
                                 }
                             }
                         },
@@ -276,8 +276,8 @@ fun LibraryDrawScreen(
                         }
                     }
                 }
-                itemsIndexed(preview, key = { index, _ -> "p$index" }) { index, line ->
-                    DrawPreviewRow(index = index + 1, line = line)
+                itemsIndexed(preview, key = { index, _ -> "p$index" }) { index, row ->
+                    DrawPreviewRow(index = index + 1, row = row)
                     HorizontalDivider()
                 }
                 item {
@@ -315,8 +315,7 @@ fun LibraryDrawScreen(
  * them. Kept to one row per word so a full 100-word draw stays scannable.
  */
 @Composable
-private fun DrawPreviewRow(index: Int, line: String) {
-    val entry = parseWordLine(line)
+private fun DrawPreviewRow(index: Int, row: WordRow) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -331,12 +330,12 @@ private fun DrawPreviewRow(index: Int, line: String) {
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                entry.word,
+                row.display,
                 style = MaterialTheme.typography.wordHead,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            val hint = listOfNotNull(entry.pos, entry.meaning).joinToString(" · ")
+            val hint = listOfNotNull(row.pos, row.gloss).joinToString(" · ")
             if (hint.isNotEmpty()) {
                 Text(
                     hint,
