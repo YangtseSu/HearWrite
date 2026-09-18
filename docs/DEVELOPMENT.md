@@ -65,10 +65,10 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties   # 已被 gitignore，机�
 ~/Android/Sdk/emulator/emulator -list-avds        # 列出 ~/.android/avd/ 下的全部 AVD
 ```
 
-有输出就启动其中一个（本机为 API 37 / x86_64 / google_apis 的 `pixel_9a_api37`），没有输出才回到真机：
+有输出就启动其中一个（本机模拟器为 API 37 / x86_64 / google_apis），没有输出才回到真机：
 
 ```bash
-~/Android/Sdk/emulator/emulator -avd pixel_9a_api37 &
+~/Android/Sdk/emulator/emulator -avd <AVD 名> &    # 名字用上一步 -list-avds 列出的
 adb wait-for-device                              # 启动等到 boot_completed 才截图/输入
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```

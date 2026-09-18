@@ -30,7 +30,7 @@
 
 依赖链：**1 → 3 → 4**（错词本升级 → 听写统计 → 间隔复习）。2、6、7、8、9、12 相互独立，可随时插队；11 依赖 1；15 依赖 3。
 
-> 验证环境：本机模拟器用 `~/Android/Sdk/emulator/emulator -list-avds` 查（当前为 API 37 / x86_64 / google_apis 的 `pixel_9a_api37`），迁移与进程死亡类验证走它；音频焦点、来电、TTS 音色等仍需真机。下面的历史验证记录里出现的 AVD 名是当时的机器配置。
+> 验证环境：本机模拟器用 `~/Android/Sdk/emulator/emulator -list-avds` 查（当前为 API 37 / x86_64 / google_apis），迁移与进程死亡类验证走它；音频焦点、来电、TTS 音色等仍需真机。记录里只写「模拟器 / 真机」，不写机型、串号与 AVD 名（见 `AGENTS.md` *Repo hygiene*）。
 
 ---
 
@@ -137,7 +137,7 @@
 - 边界：来电中 `UtteranceProgressListener` 可能不回调 `onDone`，依赖现有 watchdog / `onStop(interrupted=true)` 兜底（`SystemSpeaker` 已有该分支）；续播不再 shuffle（顺序已在会话里）；进程死亡恢复只保证词序与词序号，不保证 TTS 缓存。
 - 待定：遍内断点 vs 遍头重播（课堂口径后者更简单）；音频焦点用 `GAIN_TRANSIENT` 还是 `GAIN_TRANSIENT_MAY_DUCK`；后台自动暂停是否允许关闭。
 
-**验证**：进程死亡恢复可在模拟器 `HearWrite37` 上用 `adb shell am kill org.yangtse.hearwrite` 复现/验收；音频焦点与真实来电必须真机。
+**验证**：进程死亡恢复可在模拟器上用 `adb shell am kill org.yangtse.hearwrite` 复现/验收；音频焦点与真实来电必须真机。
 
 ---
 
@@ -263,7 +263,7 @@
   建议：**中高**。若两者只做一个，我倾向先做它而不是拍照批改。
 - **提示层可配置**（拼音 / 释义 / 词性 / 全隐藏）— 现状提示层是固定组合。
   建议：**中**。与"看拼音写词""反向默写"共用一个提示层开关。
-- ✅ **听写页屏幕常亮** — 听写中看屏幕，熄屏会打断节奏。**早已实现**（`b198fff`，v0.1 起）：`ui/DictationScreen.kt` 在组合期间设 `View.keepScreenOn`、`onDispose` 清除，听写中 / 暂停 / 结束页整场不熄屏，退出听写页立刻恢复系统熄屏（`View.keepScreenOn` 落到窗口 `fl=KEEP_SCREEN_ON`，等价于 `FLAG_KEEP_SCREEN_ON`）。此前本条一直留在候选池、且记录它的 PROGRESS/PHASES 日志在 `c0688d4` 公开化时删除，才显得"被改没了"——代码从未移除。验证（2026-09-11，模拟器 `pixel_9a_api37`，`screen_off_timeout=15000` + `svc power stayon false`）：听写窗口 `mAttrs` 带 `fl=KEEP_SCREEN_ON`，活动中 45 s、暂停 30 s、结束页仍 `mWakefulness=Awake`；回首页后窗口无该 flag，25 s 内 `Asleep`。
+- ✅ **听写页屏幕常亮** — 听写中看屏幕，熄屏会打断节奏。**早已实现**（`b198fff`，v0.1 起）：`ui/DictationScreen.kt` 在组合期间设 `View.keepScreenOn`、`onDispose` 清除，听写中 / 暂停 / 结束页整场不熄屏，退出听写页立刻恢复系统熄屏（`View.keepScreenOn` 落到窗口 `fl=KEEP_SCREEN_ON`，等价于 `FLAG_KEEP_SCREEN_ON`）。此前本条一直留在候选池、且记录它的 PROGRESS/PHASES 日志在 `c0688d4` 公开化时删除，才显得"被改没了"——代码从未移除。验证（2026-09-11，模拟器，`screen_off_timeout=15000` + `svc power stayon false`）：听写窗口 `mAttrs` 带 `fl=KEEP_SCREEN_ON`，活动中 45 s、暂停 30 s、结束页仍 `mWakefulness=Awake`；回首页后窗口无该 flag，25 s 内 `Asleep`。
 - **成绩单分享图** — 把结束页成绩卡渲染成图片分享（家长群打卡）。
   建议：**中**，与"可打印练习纸"共用 Compose → Bitmap/PDF 渲染层。
 
