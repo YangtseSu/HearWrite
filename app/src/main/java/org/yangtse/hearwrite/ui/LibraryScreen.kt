@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.PaddingValues
@@ -123,7 +125,14 @@ fun LibraryScreen(
                 modifier = Modifier
                     .fillMaxHeight()
                     .contentWidth()
-                    .padding(innerPadding),
+                    .padding(innerPadding)
+                    // Scaffold's default contentWindowInsets does NOT contain
+                    // the IME (systemBarsForVisualComponents only), so the
+                    // search field's results must yield the keyboard here.
+                    // consumeWindowInsets first, so the system-bar part of
+                    // innerPadding is not counted twice once the IME opens.
+                    .consumeWindowInsets(innerPadding)
+                    .imePadding(),
             ) {
                 OutlinedTextField(
                     value = queryText,

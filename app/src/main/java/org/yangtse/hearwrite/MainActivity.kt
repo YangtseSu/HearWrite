@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
             // only thing that has to track the theme.
             val view = LocalView.current
             SideEffect {
+                window.isNavigationBarContrastEnforced = false
                 WindowCompat.getInsetsController(window, view).apply {
                     isAppearanceLightStatusBars = !darkTheme
                     isAppearanceLightNavigationBars = !darkTheme

@@ -305,14 +305,16 @@ fun SettingsSubPage(
                         .fillMaxHeight()
                         .contentWidth()
                         .padding(innerPadding)
-                        .verticalScroll(rememberScrollState())
                         // Edge-to-edge and the window is not resized by the IME, so a
                         // sub-page with text fields (both provider forms) must yield
                         // the keyboard space itself — otherwise 保存并启用 and the
                         // lower fields sit behind the keyboard and scroll-to-focus
-                        // cannot lift them clear.
+                        // cannot lift them clear. imePadding goes BEFORE
+                        // verticalScroll (the Compose ordering contract: padding
+                        // must be applied before scrolling offsets content).
                         .imePadding()
-                        .padding(bottom = 32.dp),
+                        .padding(bottom = 32.dp)
+                        .verticalScroll(rememberScrollState()),
                     content = content,
                 )
             }
