@@ -180,6 +180,11 @@ No emulator is guaranteed. Discover one with `~/Android/Sdk/emulator/emulator -l
 - **Swipe direction**: `adb shell input swipe x y1 x y2` dragging from a top area **downward** opens the notification shade / lock screen — a top-down swipe meant to scroll a list up near its top hides the app behind the shade and later inputs get eaten. List-scroll swipes go bottom-to-top (e.g. `540 1900 540 500`).
 - **`unzip -l` garbles CJK asset names**: inspecting the APK with `unzip` shows mojibake for Chinese entries (terminal charset decoding) and `grep -c 'assets/.*\.txt$'` counts zero — the entries themselves are correct UTF-8. Verify asset packaging with Python instead: `python3 -c "import zipfile; z=zipfile.ZipFile('app/build/outputs/apk/debug/app-debug.apk'); print([n for n in z.namelist() if n.startswith('assets/')])"`.
 
+## Repo hygiene (non-negotiable)
+
+- **Never push without explicit permission.** No `git push` of any form — plain, `--force-with-lease`, branch rewrite, tag or branch deletion — unless the user asked for it in that same turn. Committing is local work; publishing is the user's call. When a commit is ready to publish, say so and wait for the go-ahead.
+- **No hardware identifiers in tracked content.** Docs, code comments, commit messages, test fixtures and file names MUST NOT carry a device model, a device serial or any other device-unique id, or an emulator/AVD name. Name the class instead — `真机` / `模拟器` / `device` — and keep only the facts the evidence actually needs (API level, locale, screen size, app version). A ROM/vendor name is allowed only where that ROM *is* the finding (e.g. an initialization bug reproduced on one vendor's ROM); it is never shorthand for "the machine I ran this on". The signing certificate's subject identity is out as well — see `docs/DEVELOPMENT.md` §4.4.
+
 ## Code Conventions
 
 - **Language**: identifiers, comments, docstrings (KDoc), and commit messages in **English**; user-facing UI strings and spoken sample text hardcoded **Chinese**, inline in code — no `strings.xml`, no i18n.
