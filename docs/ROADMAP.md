@@ -26,6 +26,7 @@
 |14|可打印听写练习纸 / 导出分享|独立；与候选池的分享图共用渲染层|
 |15|每日计划与本地提醒（打卡）|依赖 3；需通知权限与 receiver|
 |16|完善内置词库|长期数据工作，可随时穿插|
+|17|数据模型重构（行与词典分离 + 英文音标）|测试基建（Phase 1 行模型）随时可做；lexicon 资产与管线切换是一次大提交|
 
 依赖链：**1 → 3 → 4**（错词本升级 → 听写统计 → 间隔复习）。2、6、7、8、9、12 相互独立，可随时插队；11 依赖 1；15 依赖 3。
 
@@ -34,62 +35,20 @@
 ---
 
 ## 1. ✅ 错词本升级（错次 + 来源） 🤖
+已实现（2026-09-09，详情见 commit `2412a…` 一带与 `app/schemas/…/2.json`）：Room v2——`wrong_words` 增加 `errorCount`（按场次计）/`lastWrongAt`/`sourceLabel`（教材词表 id / 历史行 id / null）；`recordMark` upsert；`DictationSessionStore` 携带来源；错词本抽屉按来源分组、错次降序；来源失效降级「未知来源」不删行。配套新增 `app/src/androidTest`（迁移测试基建）。**决定**：`sessions` 表不并入 v2，另起 v3。
 
-现状：`wrong_words` 只有 `word + addedAt`（`data/HearWriteDatabase.kt:13-17`），无来源、无错次；复习只能全量重听一遍，看不出哪些词反复错。Room `version = 1`，`exportSchema` 已开启且提交了 `app/schemas/…/1.json`，但全仓没有任何 `Migration` 基础设施。
-
-**规划（spec 草稿）**：
-
-- Room v2：`wrong_words` 增加 `errorCount: Int`（默认 0）、`lastWrongAt: Long`、`sourceLabel: String?`；`version` 升 2 + 手写 `Migration(1,2)` + 提交 `2.json`。
-- 语义决定：`errorCount` **按场次计**（同一场内重复标记只 +1），`lastWrongAt` 取该场标记时间；`sourceLabel` 记内置词表 id（`default_<category>_<label>`）、历史行 id，或 null = 手动输入；来源失效（历史行被删）时降级显示"未知来源"，不删错词行。
-- UI：错词本按错次降序、按来源分组；行内显示来源与错次；内置来源可跳回该词表预览。
-- 落点：`WrongWordsRepository.add` 目前是纯 insert，需改 upsert 计数；`DictationViewModel` 标记错词时把来源传下来。
-- 应用：高频错词优先排序，是"间隔复习队列"与"听写统计"的数据地基。
-
-**验证**：模拟器 `HearWrite37` 上跑 instrumentation 迁移测试——建 v1 库写数据 → 升 v2 → 断言新列默认值与既有行完整；再真机走查排序/分组。仓库目前没有 `app/src/androidTest`，需同时补测试基础设施（见候选池「测试基础设施」）。
-
-**决定**：不把"听写统计"的 `sessions` 表并进 v2——避免建一张暂时没有写入方的空表；统计另起 v3。
-
-**已实现（2026-09-09）**：Room v2 落地——`MIGRATION_1_2` 手写迁移（既有行 `errorCount=1`、`lastWrongAt=addedAt`，`sourceLabel` null）+ 提交 `app/schemas/…/2.json`；`WrongWordsDao.recordMark` upsert（同一场重复标记由 ViewModel 的 `runWrongWords` 集合去重，复习错词轮次传 null 来源、不重复计数）；`DictationSessionStore` 携带来源（Home 起听写 = 历史行 id，词库预览 = `default_*` id，裸词 / 错词本听写 = null）；错词本抽屉按来源分组、错次降序，行内显示「错 N 次 · 最近…」，内置来源带「查看词表」跳回词表预览，来源失效降级「未知来源」不删行。配套新增 `app/src/androidTest`（Room 迁移 instrumentation 测试：v1 建库 → 迁移 → 断言新列默认值与 schema 一致 + `recordMark` 真库 upsert）。
 
 ---
 
 ## 2. ✅ 用户词表长期保存（收藏不被 50 条上限淘汰） 🤖
+已实现（2026-09-09）：`trimTo`/`clear` 加 `AND id NOT IN (SELECT id FROM favorites)`（`f886f67`，纯查询、无迁移）；`pruneHistoryOrphans` 语义保留。验收补 `HistoryFavoritesTrimTest`（真库：收藏豁免、50+1 上限、显式删行才清收藏、`default_*` 永不裁剪）。
 
-现状：`HistoryDao.trimTo` 只保留最新 50 行（`data/HearWriteDatabase.kt:60-65`），紧接着 `pruneHistoryOrphans` 删掉指向已消失历史行的收藏（`data/HearWriteDatabase.kt:88-94`）——用户收藏过的用户词表一旦跌出前 50 条就被**连带静默删除**，家长反复用的同一份词表会消失。
-
-**规划**：
-
-- 让被收藏的历史行免于裁剪：`trimTo` 的 DELETE 加一个条件 `AND id NOT IN (SELECT id FROM favorites)`（**纯查询改动，无 schema 变更、无迁移**）。
-- `pruneHistoryOrphans` 语义保留：只有用户显式删除历史行时才清理其收藏。
-- 边界：收藏数量不设上限（用户主动收藏的理应长期保留）；内置词表 id（`default_*`）不受影响。
-- 界面：收藏行为不变，可在收藏/历史空态文案里点明"收藏的词表不会被历史上限清理"。
-
-**验证**：Room instrumentation 测试——写入 51+ 条历史并收藏其中最早一条，再触发 `trimTo`，断言收藏行仍在、未收藏的最旧行已删；真机走查（收藏一份词表 → 再粘贴 50 份 → 收藏项仍在）。
-
-**已实现（2026-09-09）**：`trimTo` 与 `clear` 的收藏豁免在错词本升级期间随 `f886f67`（fix: keep favorited lists when history is cleared or trimmed）先行落地——`DELETE` 均加 `AND id NOT IN (SELECT id FROM favorites)`，纯查询改动、无迁移；`pruneHistoryOrphans` 语义保留（显式删行才清其收藏）；清空确认文案已点明「收藏的词表会保留」。本条目验收补上：新增 `app/src/androidTest/.../HistoryFavoritesTrimTest`（真库断言：满 50 后收藏最旧行 + 再入两条 → 收藏行存活、未收藏最旧行被裁、50 上限 + 1 豁免；清空保留收藏而显式删行清理其收藏；`default_*` 永不裁剪）；`HistoryRepositoryTest` 里"无 androidTest 基础设施"的过期注释已更正。
 
 ---
 
 ## 3. ✅ 听写统计（本地） 🤖
+已实现（2026-09-10）：Room v3 新表 `sessions` + `MIGRATION_2_3`；`DictationViewModel` 在 `engine.finished` 首次为真时写一条（中止不记）；聚合为 `domain/Stats.kt` 纯函数（`summarize`/`dailyStats`/`streakDays`）；页面 `ui/StatsScreen.kt`（无图表库）。**与规划的差异**：不做错词率趋势（样本太小）；连续天数按"今天未听写不清零"口径。验收：单测 265 绿、迁移测试 6/6、模拟器走查记录/错词率/图表/清空。详见 commit。
 
-现状：每场成绩只在内存里——`DictationViewModel` 的 `runStartedAtMs` / `_elapsedSec` / `runWrongCount` 随页面销毁即失，从不落库。
-
-**规划（spec 草稿）**：
-
-- Room v3：新表 `sessions`（`id`、`startedAt`、`sourceLabel`、`totalWords`、`wrongCount`、`durationSec`、`kind` = 正式听写 / 复习错词）；听写结束页写一条。
-- UI：入口建议放首页「更多」菜单 → 统计页；先用列表 + 简单条形，**不引图表库**。
-- 展示：趋势、错词率、高频错词、连续听写天数——聚合逻辑写成 `domain/` 纯函数 + 单测锁定。
-- 纯本地，数据不出设备，与"错词本升级""间隔复习"共用同一份数据。
-
-**依赖**：无。排在 1 之后只为每次只动一个迁移。
-
-**验证**：聚合纯函数单测；真机连做两场听写后核对记录条数与错词率。
-
-**已实现（2026-09-10）**：Room v3 落地——新表 `sessions` + `MIGRATION_2_3`（纯追加建表，v1/v2 数据不动）+ 提交 `app/schemas/…/3.json`。记录时机：`DictationViewModel` 在 `engine.finished` 首次为真时把本场数字（`runStartedAtMs` / `_total` / `_runWrongCount` / 结束页同一个 `elapsedSec`）写一条，`beginRun` 带上 `SessionKind`（复习错词轮次 = `review`，其 `sourceLabel` 仍为 null）；**中止的听写（结束/返回）不记录**——只有听完的才算一场。聚合为 `domain/Stats.kt` 纯函数（`summarize` / `dailyStats` / `streakDays`，zone 与 today 由调用方注入，便于测试），单测 `StatsTest` 锁定日归属（跨时区按本地日）、窗口补零、连续天数（今天还没听写不算断档，空一整天才算）、错词率与空记录。页面 `ui/StatsScreen.kt`（首页「更多」→ 听写统计，无图表库）：概览卡（场次 / 正式·复习拆分 / 词数 / 错词率 / 累计用时 / 听写天数 / 连续天数）、14 天词数条形（每条带 TalkBack 描述）、高频错词（复用错词本前 10）、最近记录（来源标题解析与错词本共用 `ui/SourceTitles.kt`），另有 清空听写记录（错词本不受影响）。逐词结果与来源条目 id 沿用错词本的 key 体系。
-
-**与规划的差异**：统计页不做「错词率趋势」而只做词数趋势（一天内的错词率样本太小，21 词的错词率是噪声）；「连续听写天数」按"今天未听写不清零"口径实现。
-
-**验证**：`testDebugUnitTest` 265 tests 全绿（新增 `StatsTest` 9 + `SessionRepositoryTest` 5）；`connectedDebugAndroidTest` 6/6 绿（新增 `SessionsMigrationTest`：v2 建库 → 迁 v3 断言既有三表原样 + `sessions` 与 3.json 一致 + 真库写入两条并回读）；`lintDebug` 在改动文件上无新告警（报告里与基线不同的一项是对未改动的 `gradle/libs.versions.toml` 的「有更新版本」时效性检查）。模拟器 `HearWrite37` 走查：5 词正式听写（标记 1 个错词）→ 结束页显示「共 5 词 · 用时 36 秒」→ `sqlite3` 查到 `…|5|1|36|dictation` 且来源为本次历史行 id；点「复习错词」再听 1 词 → 记录 `…|1|0|7|review`，错词本仍是 `banana|1`（复习轮次不加错次）；统计页显示「共听写 2 场 / 正式 1 · 复习 1 / 错词率 17% / 累计 43 秒 / 天数 1 / 连续 1」，14 天条最后一条有柱且日期轴为 8/28–9/10，高频错词与最近记录（来源解析出 `apple`、复习那条为「未知来源」）正确；清空记录后 `sessions` 0 行、错词本仍 1 行并回到空态文案。
 
 ---
 
@@ -137,26 +96,8 @@
 ---
 
 ## 7. ✅ 结束页重做本场 / 复习错词带原词行 🤖
+已实现（2026-09-10）：①**再听一遍**：`replayRun()` 用本场 `_activeLines` 直接 `beginRun`（不写新历史行，顺序已烘焙）；②**复习错词带原词行**：新增 `data/WrongWordLineResolver.kt`（本场行优先 → sourceLabel 回查 → 裸词降级），内置来源按预览口径 ECDICT 富化；首页错词本入口同走 resolver；两处入口 `Mutex.tryLock()` 防双击。**与想法的差异**：再听一遍不重抽随机；内置来源额外做了富化。验收：单测 275 绿、模拟器走查（富化行随重放/跨场回查）。详见 commit。
 
-现状（修正）：结束页「复习错词」**已能**从本场 `lines` 回查富化行（`ui/DictationViewModel.kt:430-437`），并非纯裸词。真正的缺口是：① 没有「再听一遍」；② 跨场词与首页错词本入口仍退化成裸词（`ui/HomeScreen.kt:426` `wrongWords.map { it.word }`）；③ 跨场回查需要来源信息——依赖错词本升级的 `sourceLabel`。
-
-**想法**：
-
-- "再听一遍"：重放本场全部词，保留本次顺序与随机/起始设置。
-- "复习错词"：携带本场原行（英文带 pos/释义，汉字带拼音/组词），而非裸词；跨场时按 `sourceLabel` 回查内置词表原行 / 载入历史文本，手动输入的词保持裸词。
-- 落点：本场行数据在结束页直接可用，无需新表；`DictationSessionStore` 是一次性消费，重放所需的本场列表 ViewModel 内已持有。
-
-**已实现（2026-09-10）**：
-
-- **再听一遍**（结束页主按钮，与「复习错词」同排）：`DictationViewModel.replayRun()` 用本场 `_activeLines` 直接 `beginRun`——本场顺序与随机/起始设置在准备阶段已经烘焙进这套行里，重放不做二次准备、**不写新的历史行**，来源沿用本场（`runSourceLabel`）。它是一场新的正式听写：标记照常计数、照常记统计。错词本为空时结束页只显示「再听一遍 / 返回」，不再出现空的复习/导出区。
-- **复习错词带原词行**：新增 `data/WrongWordLineResolver.kt`（两个 loader 作 seam：内置词表读 assets、历史来源读 Room，JVM 测试传普通 lambda，文件本身无 Android 依赖）。解析顺序：**本场行优先**（覆盖「本次听写的词只有本场有」的裸词会话与自定义行），其次按 `sourceLabel` 回查来源，最后才退化成裸词。来源整份加载一次并缓存（同一份词表的多条错词只读一次）；来源失效（历史行被删、词表改名、assets 读失败）或来源里没有该词时，该条降级为裸词、不牵连其他条目。
-- **内置来源按预览的口径补全**：内置词表 assets 里存的是裸词（pos/释义来自离线 ECDICT），所以 resolver 的 loader 走 `dictionaryRepository.enrichLines`，与 `LibraryPreviewScreen` 的富化完全一致——否则英文内置来源的错词复习会既没有提示层、也没有 `朗读释义` 可读的释义列（真机走查时发现的缺口，非规划所及）。汉字表不受影响（enrichLine 对有列的行与 ECDICT 查不到的词原样返回）。
-- **首页错词本入口**（`错词本` 抽屉 → `听写错词（N 词）`）同样走 resolver：`HomeViewModel.prepareWrongWordRun()` 恢复全部错词的原行后再起听写，来源仍传 null（该轮标记不新增来源）。两处入口（结束页 / 抽屉）都在首次挂起前 `Mutex.tryLock()` 领取重入闸（`reviewGate` / `wrongWordGate`），双击不会起两轮。
-- Room/资产读取失败时降级：结束页退回「本场行 + 内存错词本」的旧行为，抽屉入口直接不启动，均不崩、不丢按钮。
-
-**与想法的差异**：再听一遍不做「重新抽随机」——重放的就是这一场原样的顺序（要换顺序回首页重开）；跨场回查对内置来源额外做了 ECDICT 富化（想法里只写了"回查内置词表原行"）。
-
-**验证**：`testDebugUnitTest` 275 tests 全绿（新增 `WrongWordLineResolverTest` 7 + `SpeechTextTest` 的 `findLineByHeadword` 3）；`connectedDebugAndroidTest` 6/6 绿（未动 schema/DAO，迁移测试不受影响）；`lintDebug` 无新增告警。模拟器 `HearWrite37` 走查：英文示例听写标错 `school` → 结束页出现「再听一遍 / 复习错词 / 导出错词」→ 点「再听一遍」回到 `1 / 5` 且暂停后显示 `school | n. | 学校`（富化行随重放保留）；换「汉字示例」再听一场，在该场结束页点「复习错词」→ 本轮为 `1 / 1`，拨盘显示 `school / n. / 学校`——该词不在本场行里，是从第一次听写的历史行回查出来的；清空错词本后从内置词库 `中考1600/A` 起听写并标错 `a/an` → 抽屉「听写错词（2 词）」→ 拨盘显示 `a/an / art. / 一个`（内置来源经 ECDICT 补全），第二条 `school` 仍为 `n. / 学校`（历史来源），两个 loader 一次走通。
 
 ---
 
@@ -176,21 +117,8 @@
 ---
 
 ## 9. ✅ 多选词表、抽词听写 🤖
+已实现（2026-09-11 + UI 审计 C4 后续）：①**多选词表** `data/LibrarySelectionStore.kt`（进程级选中，跨分类；退出/回首页复位；列表行整行 `toggleable`）；②**抽词页** `ui/LibraryDrawScreen.kt`（池摘要固定底栏、逐词预览 + 换一批、chip 门控、自动去重提示）；③**池与抽样** `domain/DrawWords.kt`（按可朗读词头跨表去重、shuffle+take 无放回、候选池离线富化）；④**来源** `multi:<id>,…`，resolver 逐成员回查，UI「首个可解析词表 等 N 个词表」。抽词结果不写历史（内置词表从不落库）。验收：单测 303 绿、模拟器走查。详见 commit。
 
-**想法**：在词库中多选若干词表（可跨分类/教材），从中随机抽 X 个词听写。
-
-**已实现（2026-09-11）**：
-
-- **多选词表**：新增 `data/LibrarySelectionStore.kt` ——进程级选中状态（跨页面、跨分类），词库浏览页与分类页顶栏「多选词表」图标进入，底栏「抽词听写」发起；「退出多选词表」/系统返回退出多选并清空选中（非空选中先弹「退出多选词表？」确认，`rememberSelectionExitGuard` 是顶栏箭头与底栏按钮的同一入口），**回到首页也复位**（`HomeScreen` 进入时清）——任何一次进入多选都是干净状态，隐藏的旧选中不会在下次访问冒出来。底栏常显「已选 N 个词表」，未选时入口禁用。列表行整行 `toggleable` 承载勾选状态（`Checkbox(onCheckedChange = null)` 只作视觉反射；不挂叶子 `contentDescription`——它会**替换**节点文本，把 `一上 识字表 汉语拼音 3 · 2 词` 换成一句描述），全库搜索的「词表 / 词条」结果行同样可勾选。（叫法于 `UI-AUDIT` C7 统一为「多选词表」，此前记作「多选模式 / 多选词库」。）
-- **抽词页** `ui/LibraryDrawScreen.kt` + `ui/LibraryDrawViewModel.kt`：选中词表按选择顺序在 IO 线程读入 → 合成一个候选池 → 页首显示「已选 N 个词表 · 合计 M 词」与成员表（分类 · 词数）；X 默认 = 全部词数，输入框可改、上限即词数（超出给「最多 M 词」提示），快捷 chip 10/20/全部与输入框同源（一处写入、显示值与实际抽取数不会漂移）。
-- **池与抽样**（`domain/DrawWords.kt`，纯函数）：`dedupeByHeadword` 按**可朗读词头**跨表去重——与错词本同键，`you're = you are` 和 `月 | yuè | 月亮` 各算一个词，先出现的那行（连同其列）保留；`sampleWords` = shuffle + take 无放回抽样，X ≥ 词数即全量随机。候选池沿用词表预览的离线富化（裸英文补 ECDICT 词性/释义、裸单字补拼音/组词），所以抽出的英文词在听写页仍有提示层与可读释义。抽好的行照旧走 `prepareStartLines` 语义 → `DictationSessionStore.stage` → 听写页，**引擎零改动**。
-- **来源**：抽词场次的来源标签是 `multi:<id>,<id>,…`（`domain/SourceLabel.kt`；内置 id、分类名、词表名都不含 `,`，编码无歧义）。`WrongWordLineResolver` 会在其成员词表里逐个回查，因此抽词场次的错词既能复习到原行、也不退化成「未知来源」；错词本与统计页显示为「首个可解析词表 等 N 个词表」，成员词表全失效时显示「多词表（N 个词表）」且错词不删。
-- **与规划的一致/差异**：入口放在浏览页**与分类页**顶栏（规划只提浏览页，但列表行在分类页）；跨表去重策略定为按词头（规划的待定项）；抽词结果**不写历史**（内置词表从不落库，AGENTS.md），所以「再听一遍」能重放本场，但同一批抽词不能事后重新打开。
-- **未做**：场次内不重抽（X 在开始时抽一次）。
-
-**后续（UI 审计 C4，2026-09-16）**：抽词页补上**逐词预览**（`本次将听写 N 词（按顺序）` 列表 + `换一批`）——预览与本次抽词同源：`LibraryDrawViewModel` 先抽一份留存，起听写时复用（仅 X 变化才重抽），所以页面显示的词就是听写的词。同时控件行改 `FlowRow`（320dp 下不再溢出）、池摘要移入底栏与启动按钮同层固定。
-
-**验证**：`testDebugUnitTest` 303 tests 全绿（新增 `DrawWordsTest` 6、`SourceLabelTest` 3、`SourceTitlesTest` 3、resolver 多表来源 2）；`connectedDebugAndroidTest` 6/6 绿（未动 schema/DAO）；`lintDebug` 仅在未改动的 `gradle/libs.versions.toml` 上保留既有的「有新版本」时效性提示。模拟器 `HearWrite37` 走查：勾选 人教版小学语文 二上 词语表 识字 1（4 词）+ 识字 2（5 词）与 中考1600 A（103 词）→ 底栏「已选 3 个词表」，跨分类选中在返回浏览页后保持 → 抽词页「已选 3 个词表 · 合计 112 词」，chip「10」后输入框与按钮同为「随机抽 10 词听写」（未点「抽词听写」按钮在 0 选中时无反应）→ 起听写 `1 / 10`，拨盘 `advise | vt. | 劝告, …`（富化随抽词带出）→ 标错后 `wrong_words` 行 `artist|1|multi:default_人教版小学语文_二上 词语表 识字 1,…,default_中考1600_A`，中止的场次 `sessions` 无行（符合统计口径）→ 错词本抽屉分组标题「二上 词语表 识字 1 等 3 个词表」，「听写错词（1 词）」拨盘显示 `artist | n. | 艺术家, 画家`（多表回查命中 中考1600/A）→ 全库搜索「Unit」结果行勾选生效，「退出多选」清空计数，回首页再进词库时多选为关闭态。
 
 ---
 
@@ -214,29 +142,8 @@
 ---
 
 ## 11. ✅ 拍手写答案自动批改（照片批改） 🤖
+已实现（2026-09-11）：结束页「拍照批改」→ 批改页 `ui/DictationGradePane.kt`；语言由本场词表判定（`isCjkRun`）；复用 OCR 管线（`OcrImagePicker` + `OcrCropOverlay` + `recognizeAnswers`），仍是四个出网点；批改提示语"抄学生的字不纠正"（`answerPrompt(lang)`）；比对为纯 domain `domain/AnswerGrading.kt`（题号优先 → NW 序列比对 → 顺序不符兜底；正确/错词/漏答/多余作答，近似拼写标存疑）；**必须人工确认才入库**（`confirmGrade`）。**差异**：成绩不计入 sessions；不做多列版面分析。验收：单测 327 绿、模拟器走查（假服务注入）。详见 commit。
 
-**想法**：听写结束后拍学生手写的答案纸，识别后与本次词表比对，自动逐词批改并给出成绩，错词并入错词本——把"标记错词"从手动自觉变成机器初判 + 人工确认。
-
-**规划（spec 草稿）**：
-
-- 入口：听写结束页成绩卡"拍照批改"；语言由本场词表判定（英文/汉字）。
-- 复用：现有拍照识词整条管线——框选识别区域（`ui/OcrCropOverlay.kt`）→ 裁剪编码 → OpenAI 兼容视觉 OCR（同一 BYOK 提供方，无新网络出口）。
-- 流程：识别行 → domain 比对归一化（大小写、中英全半角、空白、行序错位）→ 逐词对错 + 成绩 → 存疑项人工核对 → 确认的错词才并入错词本。
-- **依赖：错词本升级**——确认后的错词要带 `errorCount`/来源入库，否则白批。
-- 边界：识别为空/答非本场 → 提示重拍；识别结果永远不是最终判定，必须有人工确认缓冲；错词入库沿用现有 key（speakable headword）。
-- 待定：批改成绩是否计入"听写统计"；行序错位/漏行的容忍策略；与 OCR 提示语"AI 识图可能存在误差"一致的口径。
-
-**已实现（2026-09-11）**：
-
-- **入口与语言**：结束页成绩卡「再听一遍 / 复习错词」下方新增「拍照批改」，进入后成绩卡整体换成批改页（`ui/DictationGradePane.kt`，`DictationViewModel.gradePane`），可随时「返回成绩」。识别语言**由本场词表判定**（`domain/isCjkRun`：可朗读词头中汉字占严格多数），没有语言选择器可点错。
-- **复用不新增出网点**：拍照/相册 launcher 抽成 `ui/OcrImagePicker.kt`（首页拍照识词与批改共用同一套 FileProvider 取景文件与 Photo Picker），选图后同样先走**选定识别区域**（`OcrCropOverlay`，默认整幅），再 `OcrService.recognizeAnswers`——同一个 BYOK 视觉接口，仍是四个出网点。识别中/失败/重试与拍照识词同款（`gradePhase`/`gradeError`/`gradeRetryable`，重试复用同一张已压缩照片，不必重拍）。
-- **提示语是"抄学生的字"而非"还原教材"**：批改用独立提示语（`ENGLISH_ANSWER_PROMPT`/`CHINESE_ANSWER_PROMPT`，`answerPrompt(lang)`）——如实识别、**不要自动纠正**拼写、保留题号（`1. apple`）、跳过空白行；`extractAnswerLines` 只去围栏、保留每一行原文（不做词头搜救、不做语言过滤），因为"悄悄改对"会直接抹掉一个错。
-- **比对为纯 domain**（`domain/AnswerGrading.kt`）：`normalizeAnswer` 折叠大小写、空白、全半角与标点（撇号/连字符保留，属拼写）；每个词条提供词头与 `you're = you are` 右侧两种可接受写法；带汉字的作答额外提供"仅汉字"键（汉字听写不该出现拉丁字母，模型回显的拼音注释 `月(yuè)` 不该判错——反向不做）。定位顺序：**题号优先**（本场范围内且不重复的题号直接落位，漏答的词因此判「漏答」而不是把后面全部错位）→ 余下按序列比对（Needleman–Wunsch，错词仍配对，避免"漏答+多余"成对出现）→ 兜底把与空位完全一致的作答补位并标「顺序不符」。结论：正确 / 错词 / 漏答 / 多余作答；`doubt` 标出**近似拼写**（编辑距离 ≤ 长度/4，上限 3）、空白与游离行，提示人工核对。
-- **必须人工确认才入库**：`confirmGrade` 是照片到错词本的唯一路径——列表逐行显示词头与"写：xxx"，默认勾选错词与漏答（勾选可增可减），确认后按词头逐个 `recordMark`（每词一次、带本场 `sourceLabel`），结束页成绩、错词本、复习错词、听写统计随之更新；同一场重复确认不重复计数（沿用 `runWrongWords` 去重），复习轮次照旧不写库。识别出的作答与本场词表差异过大时给出「可能拍错了页面」提示，但不阻断（仍可逐条核对）。
-- **与规划/想法的差异**：①成绩**不计入** `sessions`（本场是否算"完成"由学生是否写对决定不了，且统计口径是"听完一场"——记入错词本已足够）；②"行序错位"不是待定项而是实现里的「顺序不符」兜底与题号定位；③额外做了「近似拼写标存疑」而不是只判对错——手写体识别错一个字母是很常见的情形，直接判错会撒谎。
-- **未做**：不做"整页多列排版"的版面分析（保持一行一答的通用假设）；不改视觉模型与提示语之外的识别管线。
-
-**验证**：`testDebugUnitTest` 327 tests 全绿（新增 `AnswerGradingTest` 22、`OcrServiceTest` 批改提示语与 `extractAnswerLines` 2）；`lintDebug` 无新增告警；`app/src/androidTest` 未动 schema/DAO。模拟器 `pixel_9a_api37` 走查（用一个 OpenAI 兼容的本地回环假服务经 `adb reverse` 提供识别结果，控制台可查请求）：英文示例 5 词听写完成 → 成绩卡「拍照批改」→ 照片选择 → 框选（默认整幅）→ 假服务返回 `1. apple / 2. banan / 3. school / 5. car` → 批改页显示「正确 3 词 · 错词 1 · 漏答 1」「有 2 处需人工核对（标「存疑」）」，第 4 格 `book` 判「漏答 · 存疑」（题号定位生效，未把第 5 行的作答顶上来）、第 2 格 `banan` 判「错词 · 存疑」；取消勾选第 4 格后按钮变「确认错词（1）」、重新勾选回「确认错词（2）」→ 确认后 toast「已记入错词本 2 个词」，成绩卡变「正确 3 词 · 错词 2」、错词本出现 `banana`/`book`；`sqlite3` 查 `wrong_words` 两行 `errorCount=1` 且 `sourceLabel` 为本场历史行 id（同一场重复确认 `学校` 仍为 1，不重复计数）。汉字示例再走一场：服务端请求体确认为中文批改提示语，`学较` 判「错词 · 存疑」、其余正确，确认后 `学校` 入库；错词本抽屉与「听写错词」复习轮次里 `banana` 仍显示富化原行 `banana | n. | 香蕉`（沿用来源回查）。
 
 ---
 
@@ -331,6 +238,16 @@
 
 ---
 
+## 17. 🔀 数据模型重构（行与词典分离、英文音标） 🤖
+
+**详见 [`docs/2026-09-18-DATA-MODEL.md`](2026-09-18-DATA-MODEL.md)**（完整设计 + 实测 + 测试清单）。核心：把"词表行"与"词典条目"拆开——行只携带作者权威（该词表印什么、顺序、念什么），词典是按词头查表的共享资产（ECDICT 义项 + ipa-dict 音标 + 仁爱教材音标覆盖），二者在读取时合成，**运行时零写回**。作者已拍板：音标英美双套（拨盘显示美式 = 朗读口音，详情卡并列英/美）、行文本追加音标列。
+
+解决了旧设计的一个根本缺陷：`enrichLines` 把词典数据写进行文本，"已有列就不补"导致仁爱 1,806 行永远拿不到音标，且行内 `pos`/`gloss` 的语义按 kind 重载（EN=词性/释义，HANZI=拼音/组词）。
+
+依赖：无。实施分 4 个 Phase（行模型 → lexicon 资产 → 管线切换 → 文档），详见专项文档 §6。
+
+---
+
 ## 候选池（待评审，尚未排期） 🤖
 
 以下为分析代码与同类应用后整理的候选想法，**尚未并入上方顺序**；评审通过后挪进正文。每条给出成本与我的建议。
@@ -350,11 +267,11 @@
 - **成绩单分享图** — 把结束页成绩卡渲染成图片分享（家长群打卡）。
   建议：**中**，与"可打印练习纸"共用 Compose → Bitmap/PDF 渲染层。
 
-### 界面（UI / UX Audit，2026-09-12 🤖）
+### 界面（UI / UX Audit，2026-09-12 🤖）— ✅ 已完成
 
-**详见 [`docs/UI-AUDIT.md`](UI-AUDIT.md)**（基线 `4c40ab7`，纯源码静态审查，177 条原始发现 / 去重后约 150 条，P1 18 条）。分四段：**A 缺陷修复**（12 项，≤20 行/项）→ **B 一致性收口**（补 `Type.kt` 字阶覆盖 85% 文字、Snackbar 取代 15 处 Toast、`toggleable` 统一、insets 去重、单位合一、TTS/OCR provider 表单抽公共件）→ **C 状态覆盖与内容层** → **D 打磨**（动效、导航、术语）。
+**全文见 [`docs/implemented/UI-AUDIT.md`](implemented/UI-AUDIT.md)**（基线 `4c40ab7`，纯源码静态审查，177 条原始发现 / 去重后约 150 条，P1 18 条）。分四段：**A 缺陷修复**（12 项，≤20 行/项）→ **B 一致性收口**（补 `Type.kt` 字阶覆盖 85% 文字、Snackbar 取代 15 处 Toast、`toggleable` 统一、insets 去重、单位合一、TTS/OCR provider 表单抽公共件）→ **C 状态覆盖与内容层** → **D 打磨**（动效、导航、术语）。
 建议：**高**，A 段可随时插队（便宜且用户可感知）；B1 字阶应排在其他视觉微调之前。
-**已拍板（2026-09-12）**：① 表盘恢复 tap-to-reveal（改回 `AGENTS.md:94` 描述的行为，按钮保留作可见标注，见 UI-AUDIT §0.1 D-1）；② 5 个零引用语义 token **接上**——朱砂用于汉字提示层、`successContainer` 用于"正确"徽章，`DialCenter(isCjk)` 从死参数转为实际判据（见 §0.1 D-2）。
+**已拍板（2026-09-12）**：① 表盘恢复 tap-to-reveal（改回 `AGENTS.md:94` 描述的行为，按钮保留作可见标注，见 `docs/implemented/UI-AUDIT.md` §0.1 D-1）；② 5 个零引用语义 token **接上**——朱砂用于汉字提示层、`successContainer` 用于"正确"徽章，`DialCenter(isCjk)` 从死参数转为实际判据（见 `docs/implemented/UI-AUDIT.md` §0.1 D-2）。
 
 ### 平台与打磨
 
@@ -368,7 +285,7 @@
   建议：**中**。
 - **应用内更新检查** — GitHub Releases 分发没有自动更新通道；可查 GitHub API 提示新版本。
   建议：**中低**。注意这会新增一个网络出口，需同步更新 AGENTS.md 的"四个出网点"清单。
-- **动态取色（Material You）** — ✅ 已做（2026-09-18）：设置 → 外观 的 `动态取色` 开关，默认关（策展纸墨配色仍是默认身份），开时换成壁纸取色；朱砂/收藏金/成功语义色保持策展。见 `docs/UI-AUDIT.md` 阶段 D 收尾。
+- **动态取色（Material You）** — ✅ 已做（2026-09-18）：设置 → 外观 的 `动态取色` 开关，默认关（策展纸墨配色仍是默认身份），开时换成壁纸取色；朱砂/收藏金/成功语义色保持策展。见 `docs/implemented/UI-AUDIT.md` 阶段 D 收尾。
 - **预测性返回手势** — 打磨项，成本低。建议：**低**，可顺手做。
 
 ### 工程质量
