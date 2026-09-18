@@ -2,7 +2,7 @@
 
 功能想法登记处。状态：💡 idea（只有想法）→ 📋 spec（有设计）→ ✅ done。**只记未完成项**——条目做完就把正文移进 [`implemented/2026-09-18-ROADMAP-DONE.md`](implemented/2026-09-18-ROADMAP-DONE.md)，**编号不重排**，代码注释与文档里的 `Roadmap #N` 引用照旧有效；已实现功能见 README。
 
-已归档编号：**1** 错词本升级 · **2** 用户词表长期保存 · **3** 听写统计 · **7** 结束页重做本场 / 复习错词带原词行 · **9** 多选词表、抽词听写 · **11** 拍手写答案自动批改；候选池里已落地的五组（测试基础设施、界面审计、屏幕常亮、动态取色、词库质检脚本）一并归档。
+已归档编号：**1** 错词本升级 · **2** 用户词表长期保存 · **3** 听写统计 · **7** 结束页重做本场 / 复习错词带原词行 · **9** 多选词表、抽词听写 · **11** 拍手写答案自动批改；候选池里已落地的条目（含冷启动复测、大屏适配、TalkBack 走查）见归档文末。
 
 ---
 
@@ -225,8 +225,6 @@
 
 ### 平台与打磨
 
-- **冷启动预算的真机复核** — 词典仍是惰性加载（`DictionaryRepository` 首次查询时才解析 3.3 MB → 约 15–25 MB 堆），Phase 10 已按"先测量"决策：**真机 release 稳态 173 ms** < 500 ms 阈值，不迁 `Room.createFromAsset`（记录见 `implemented/2026-09-04-PHASES.md`）。**现状（2026-09-18 复测）**：本机只有软件渲染模拟器可用，release `am start -W` 稳态 **700–727 ms**，同一模拟器上的系统设置基线 243–292 ms——模拟器不作阈值判据；0.2–0.8 的功能增量之后**尚未在真机复测**。
-  建议：**低**。下次有真机时跑 3 次 release `am start -W` 确认仍在 500 ms 内；超了再评估迁 SQLite，不要提前优化。
 - **快捷方式 / 桌面小组件** — 静态 shortcuts（开始听写 / 复习错词）成本低；Glance 小组件建议等"今日复习"落地后再做。
   建议：**中低**。
 - **大字号 2.0× 走查与固定高度文本容器** — TalkBack 面已闭环（33 处图标按钮全带中文 `contentDescription`，角色 / `liveRegion` / `heading` / `clearAndSetSemantics` 到位；1.5× 字号已在拨盘、横屏舞台、统计图上走查），故本条只余字号侧：**2.0× 未走查**，而若干文本容器是固定 dp 高度（`ui/DictationScreen.kt:139`/`:149` 的 40 / 52 dp、`ui/HomeDrawers.kt:267` 的 36 dp、`ui/HomePlaybackPanel.kt:214` 的 52 dp——舞台只把倒计时那一行按 `fontScale` 计入高度），文字随系统放大时会裁切；`ui/Wordmark.kt:52`/`:64`/`:72` 的标题 `maxLines = 1` + Ellipsis 会先行省略；`ui/HomeDrawers.kt:267` 的「查看词表」36 dp 还低于 48 dp 触达最小。Android 17 的 CJKV 无障碍事件 / `TextAttribute` API 未接（全仓无 `textInputSession`）。
