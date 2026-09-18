@@ -26,7 +26,7 @@
 
 ### 4. 阶段 B 的"净 −347 行"
 
-`docs/implemented/UI-AUDIT.md` §5 已就地更正为 **净 +581 行**（`app/` 内 +2362 / −1781）：`1434` 那份手算漏掉了本 commit 新建文件的正文行（`SettingsProviderForms.kt` 770 + `Feedback.kt` 100 + `Format.kt` 58）。收口本身确在删除，只是新增的共享件把总量拉正。
+`docs/implemented/2026-09-12-UI-AUDIT.md` §5 已就地更正为 **净 +581 行**（`app/` 内 +2362 / −1781）：`1434` 那份手算漏掉了本 commit 新建文件的正文行（`SettingsProviderForms.kt` 770 + `Feedback.kt` 100 + `Format.kt` 58）。收口本身确在删除，只是新增的共享件把总量拉正。
 
 ## 2026-09-16 复核 `9d181ad`（release 0.8.0）
 
