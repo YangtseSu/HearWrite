@@ -7,16 +7,20 @@ import kotlinx.coroutines.flow.map
 data class HistoryEntry(
     val id: String,
     val text: String,
-    val enrichedText: String?,
     val createdAt: Long,
 )
 
 /**
  * History persistence with the upstream row semantics (AGENTS.md "Persistence"
  * + `alice/src/lib/storage.ts`): user-pasted lists only, dedupe by exact
- * text (a re-run bumps the row to the front instead of duplicating), ECDICT
- * enriched text attached to the row, hard cap of 50 dropping the oldest.
- * Favorite rows whose history entry disappears are pruned in the same call.
+ * text (a re-run bumps the row to the front instead of duplicating), hard cap
+ * of 50 dropping the oldest. Favorite rows whose history entry disappears are
+ * pruned in the same call.
+ *
+ * The stored text is the authored list and nothing else: 词性/释义 are read
+ * from the offline lexicon when they are shown, never baked into a row
+ * (`docs/2026-09-18-DATA-MODEL.md` §0 — the `enriched_text` column this
+ * repository used to write was dropped in Room v5).
  */
 class HistoryRepository(
     private val historyDao: HistoryDao,
@@ -25,7 +29,7 @@ class HistoryRepository(
     /** Newest first; mapped to plain rows for the UI. */
     fun observe(): Flow<List<HistoryEntry>> =
         historyDao.observeAll().map { entities ->
-            entities.map { HistoryEntry(it.id, it.text, it.enrichedText, it.createdAt) }
+            entities.map { HistoryEntry(it.id, it.text, it.createdAt) }
         }
 
     /**
@@ -34,42 +38,27 @@ class HistoryRepository(
      * a dictation source's stored text, Roadmap #7).
      */
     suspend fun all(): List<HistoryEntry> =
-        historyDao.all().map { HistoryEntry(it.id, it.text, it.enrichedText, it.createdAt) }
+        historyDao.all().map { HistoryEntry(it.id, it.text, it.createdAt) }
 
     /**
-     * Record a started user list. [enrichedText] is the ECDICT-expanded text
-     * (null when enrichment changed nothing — the plain text is then the
-     * row's only form). An existing row whose text or enriched text matches
-     * is bumped to the front with a fresh timestamp.
+     * Record a started user list: the authored [text], verbatim. An existing
+     * row with the same text is bumped to the front with a fresh timestamp.
      *
      * @return the stored row id — the provenance key a dictation started from
      *         this list carries into the 错词本 (Roadmap #1 `sourceLabel`).
      */
-    suspend fun add(text: String, enrichedText: String?): String? {
+    suspend fun add(text: String): String? {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return null
-        val effective = enrichedText?.trim()?.takeIf { it.isNotEmpty() && it != trimmed }
         val now = System.currentTimeMillis()
-        val existing = historyDao.all().firstOrNull { e ->
-            e.text == trimmed || e.text == effective ||
-                (effective != null && e.enrichedText == effective) ||
-                // Re-dictating a stored enriched row submits the enriched
-                // text itself (enrich() is then a no-op → effective == null);
-                // it is the same content, not a new row.
-                (effective == null && e.enrichedText == trimmed)
-        }
+        val existing = historyDao.all().firstOrNull { it.text == trimmed }
         val id: String = if (existing != null) {
-            // Bump to the front; attach enrichment that was missing before.
-            val mergedEnriched = existing.enrichedText ?: effective
-            historyDao.insert(
-                existing.copy(createdAt = now, enrichedText = mergedEnriched)
-            )
+            historyDao.insert(existing.copy(createdAt = now))
             existing.id
         } else {
             val fresh = HistoryEntity(
                 id = "${now}_${randomSuffix()}",
                 text = trimmed,
-                enrichedText = effective,
                 createdAt = now,
             )
             historyDao.insert(fresh)
@@ -98,7 +87,6 @@ class HistoryRepository(
             HistoryEntity(
                 id = entry.id,
                 text = entry.text,
-                enrichedText = entry.enrichedText,
                 createdAt = entry.createdAt,
             )
         )

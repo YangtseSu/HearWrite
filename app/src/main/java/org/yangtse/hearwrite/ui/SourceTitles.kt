@@ -23,7 +23,7 @@ fun resolveSourceTitle(
     sourceLabel.startsWith(MULTI_SOURCE_PREFIX) -> multiSourceTitle(sourceLabel, libraryTitles)
     sourceLabel.startsWith(BUILTIN_LIST_ID_PREFIX) -> libraryTitles[sourceLabel]
     else -> history.firstOrNull { it.id == sourceLabel }
-        ?.let { it.enrichedText ?: it.text }
+        ?.text
         ?.lineSequence()?.firstOrNull { it.isNotBlank() }
         // The stored line is `word | pos | meaning`; the source title is the
         // list's headword, not the whole gloss.

@@ -21,7 +21,7 @@ class DialHiddenStackTest {
         wordLineRatio = 52.0 / 40.0,
         hintFontSizeSp = 15.0,
         hintLineHeightSp = 24.0,
-        wordPosGapDp = 6.0,
+        wordHintGapDp = 6.0,
         glossMaxLines = 2,
         glossGapDp = 2.0,
     )

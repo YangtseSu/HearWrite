@@ -44,8 +44,8 @@ class FakeSpeaker(
     }
 }
 
-/** The engine takes parsed rows; the cases stay written in raw list lines. */
-private fun rows(vararg lines: String): List<WordRow> = lines.map(::parseWordLine)
+/** The engine takes resolved rows; the cases stay written in raw list lines. */
+private fun rows(vararg lines: String): List<ResolvedWord> = resolvedRows(*lines)
 
 private val EN_WORD = "apple | n. | 苹果"
 private val BARE_EN = "banana"

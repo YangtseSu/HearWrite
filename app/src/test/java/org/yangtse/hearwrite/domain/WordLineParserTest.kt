@@ -202,29 +202,31 @@ class WordLineParserTest {
         }
     }
 
-    // --- findRowByHeadword: the 错词本 key lookup ---
+    // --- findResolvedByHeadword: the 错词本 key lookup ---
 
     @Test
-    fun `headword lookup returns the enriched row, not the bare word`() {
-        val rows = listOf("apple | n. | 苹果", "月 | yuè | 月亮", "pear").map(::parseWordLine)
-        assertEquals(wordRowOf("apple", "n.", "苹果"), findRowByHeadword(rows, "apple"))
-        assertEquals(wordRowOf("月", "yuè", "月亮"), findRowByHeadword(rows, "月"))
-        // A row without columns comes back as-is.
-        assertEquals(wordRowOf("pear"), findRowByHeadword(rows, "pear"))
+    fun `headword lookup returns the resolved row, not the bare word`() {
+        val rows = resolvedRows("apple | n. | 苹果", "月 | yuè | 月亮", "pear")
+        assertEquals(Sense("n.", "苹果"), findResolvedByHeadword(rows, "apple")?.senses?.single())
+        assertEquals("yuè", findResolvedByHeadword(rows, "月")?.pinyin)
+        assertEquals("月亮", findResolvedByHeadword(rows, "月")?.compound)
+        // A row without columns comes back as a bare one.
+        assertEquals(emptyList<Sense>(), findResolvedByHeadword(rows, "pear")?.senses)
     }
 
     @Test
     fun `headword lookup matches the spoken side of an expansion`() {
         // The book keys on the speakable headword, so `you're` must find its
         // expansion row rather than the raw text.
-        val rows = listOf(parseWordLine("you're = you are"))
-        assertEquals(wordRowOf("you're = you are"), findRowByHeadword(rows, "you're"))
+        val rows = resolvedRows("you're = you are")
+        assertEquals("you're = you are", findResolvedByHeadword(rows, "you're")?.display)
     }
 
     @Test
     fun `unknown headword has no row`() {
-        assertEquals(null, findRowByHeadword(listOf("apple", "pear").map(::parseWordLine), "plum"))
-        assertEquals(null, findRowByHeadword(emptyList(), "apple"))
+        val rows = resolvedRows("apple", "pear")
+        assertEquals(null, findResolvedByHeadword(rows, "plum"))
+        assertEquals(null, findResolvedByHeadword(emptyList(), "apple"))
     }
 
     // --- normalizePos: ECDICT -> textbook mapping ---

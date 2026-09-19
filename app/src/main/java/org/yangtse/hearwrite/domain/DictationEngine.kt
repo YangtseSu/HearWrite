@@ -94,7 +94,7 @@ class DictationEngine(
     val speechFailures: StateFlow<Int> = _speechFailures.asStateFlow()
 
     /** Rows of the active session. */
-    private var rows: List<WordRow> = emptyList()
+    private var rows: List<ResolvedWord> = emptyList()
 
     /** 组词 candidate tables; set before [start] (kept out of the constructor so
      *  the caller can load them off the main thread first). */
@@ -126,7 +126,7 @@ class DictationEngine(
     }
 
     /** Start dictating [rows] from the first word. Stops any active run. */
-    fun start(rows: List<WordRow>) {
+    fun start(rows: List<ResolvedWord>) {
         gen++
         cancelRun()
         stopAudio()
@@ -297,13 +297,13 @@ class DictationEngine(
      * any matching compound (虚词 or no candidate) yields null — no phrase,
      * the word itself is spoken twice.
      */
-    private fun meaningPass(row: WordRow): Pair<String, Speaker>? {
+    private fun meaningPass(row: ResolvedWord): Pair<String, Speaker>? {
         if (row.kind != WordKind.EN) {
             val phrase = cjkWordSpeech(row, tables, rows)
             return if (phrase.isEmpty()) null else phrase to phraseSpeaker
         }
         if (!readTranslation) return null
-        val gloss = speakableMeaning(row.gloss)
+        val gloss = speakableMeaning(row.glossText())
         return if (gloss.isEmpty()) null else gloss to speaker
     }
 
@@ -386,6 +386,6 @@ class DictationEngine(
     }
 
     /** Voice language of the word itself, by row kind. */
-    private fun wordLang(row: WordRow): String =
+    private fun wordLang(row: ResolvedWord): String =
         if (row.kind == WordKind.EN) LANG_EN else LANG_ZH
 }

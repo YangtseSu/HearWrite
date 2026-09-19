@@ -1,6 +1,6 @@
 # 数据模型重构（英文 + 中文）
 
-状态：📋 spec（有设计）→ 实施中。
+状态：✅ 已落地（Phase 1–3 全部完成，各 Phase 的验收与偏差见下方注记）；条目已归档至 [`implemented/2026-09-18-ROADMAP-DONE.md`](implemented/2026-09-18-ROADMAP-DONE.md) #17。Phase 4 的 `CHANGELOG.md` 段随发版补（版本号属发布决定）。
 来源：2026-09-18 音标方案评审；作者拍板两处（音标英美双套、行文本第 4/5 列），随后升级为整体数据模型重构——**抛弃历史兼容，只考虑作者自己**。
 
 ---
@@ -292,9 +292,22 @@ data class ResolvedWord(
 
 **验收**：`grep -r "enrichLines\|enrichText\|enrichedText"` 返回 0；模拟器走查：仁爱版行显示教材音标、中考1600 行显示 ipa-dict 音标、拨盘拨到 仁爱行 `/let/ v.`。
 
+> **Phase 3 已完成（2026-09-19）**，两条验收均满足。落地实测与偏差：
+> - **验收 2（真机走查）**：仁爱 `七上 Unit 1 导入` 的 `let` 行显示 `英 /let/ · 美 /let/ · v. · 让；允许`（教材记号）；中考1600 `A.txt` 的 `ability`/`abroad` 行显示 ipa-dict 记号（`英 /ɐbˈɪlətˌi/ · 美 /əˈbɪɫəˌti/`）；拨盘拨到该 `let` 行显示单行 `/let/ v.` + 释义行 `让；允许`；`school`（长释义）走 展开全部 → 详情卡，卡内独立一行 `英 /skˈuːl/ · 美 /ˈskuɫ/`。
+> - **验收 1（写回消失）**：`main` 下无 `enrichLines`/`enrichText` 命中，`displayRow()` 与 `enriched_text` 列已删。残留的 `enrichedText` 只有三类，都是"点名被删的东西"所必需：Room v5 的 `ALTER TABLE … DROP COLUMN`、v≤4 老库的构造 SQL（迁移测试的种子）、以及记录删除原因的 KDoc/测试注释。管线里没有任何写回路径。
+> - **运行时类型切换**：`ResolvedWord` 成为唯一消费类型 —— `DictationSessionStore`（暂存**已 resolve** 的 rows）、`DictationEngine`、`StartLines.prepareStartRows`、`AnswerGrading`、`CjkWordSpeech`、`WrongWordLineResolver`、`HomeViewModel.displayRows`、`LibraryViewModel`/`LibraryPreviewViewModel`/`LibraryDrawViewModel`，以及三个展示面（首页展示行、词库预览、抽词预览）。#18 的 `DictationGradePane` 无需改动：它只消费 `GradeResult`，其中的 `expected` 本来就由 rows 得来（走查中复核）。
+> - **#16 Room v5**：`history` 删列（`MIGRATION_4_5`，SQLite ≥ 3.35 = API 33+，不必重建表），`app/schemas/…/5.json` 已提交；新增 `HistoryEnrichedDropMigrationTest`（v4 种子 → 迁移 → 真 Room 往返：读取、去重 bump、新插）。
+> - **新增展示层 `domain/WordDisplay.kt`**：`dialHint`（美式音标 + 词性合成一行）、`glossText`、`listMeta`、`ipaLabels`（英在前）、`dialIpa`、`findResolvedByHeadword`。§4.2 的列表行规则按字面实现（`英 /…/ · 美 /…/ · 词性 · 释义`）；§4.1 表里的 `/音标/ pos meaning` 是同一件事的简写。
+> - **几何零改动**：`DialMetrics`/`tailDp`/`dialContentWidthDp`/`dialStageGeometry` 未动，只把 `dialFit` 的 `hasPos` 正名为 `hasHint`（§4.1），并把 `DialMetrics.wordPosGapDp` 一起改为 `wordHintGapDp`（同一行现在是 `/音标/ 词性`，旧名会误导）。**未**给 `DialFit` 增加"提示行截断"字段：§4 实测合成提示行 p99 113 dp < 204 dp 盘的 147.5 dp，0 溢出。
+> - **有意的一处行为改动**：词库预览的 载入草稿 现在载入**作者行**（asset 原样），而不是 resolve 后的行 —— 把词典列灌进用户草稿正是 §0 要消灭的写回；首页展示态照旧 resolve 显示。
+> - **`SpeakableWord`**：新增一个小接口（`speak` + `kind`），`WordRow` 与 `ResolvedWord` 都实现 —— `isCjkRun`/`dedupeByHeadword`/`sampleWords` 因此能在 lookup 前后共用一份实现（抽词池仍按 §9 在 resolve **之前**按词头去重）。
+> - **§7 未采纳**：§7 全部条目针对被 §2.1/§3.3 否决的"行内音标 4/5 列"草案 —— `.txt` 仍是 1–3 列，第 4 列照旧忽略。实际测试改动：新增 `ResolvedWordTest`/`WordDisplayTest`；`HistoryRepositoryTest` 按"文本即键"重写；`DictationSessionStoreTest`/`WrongWordLineResolverTest`/`AnswerGradingTest`/`DictationEngineTest`/`StartLinesTest`/`DrawWordsTest`/`CjkWordSpeechTest` 改吃 resolved rows（共享 fixture `app/src/test/…/domain/ResolvedRows.kt`）；`LexiconRepositoryTest` 只断言字段（展示串归 `WordDisplayTest`）；`findRowByHeadword` 删除，用例迁到 `findResolvedByHeadword`。421 条 JVM 全绿（Phase 2 之末 402）。
+
 ### Phase 4 · 文档 + 提交
 
 `CHANGELOG.md` 新版本段；commit 信息含体积/堆/解析三组前后实测值。
+
+> **2026-09-19**：文档与提交已落地 —— `AGENTS.md` 同步了运行时类型/展示规则/迁移清单，本条目的归档见 `implemented/2026-09-18-ROADMAP-DONE.md`，提交正文带真机（API 37 / 1080×2400 / debug）的体积、冷启动、堆与解析窗口实测。`CHANGELOG.md` 版本段留到打 tag 时写：`## [x.y.z]` 必须与 tag 一一对应，版本号是发布决定。
 
 ---
 

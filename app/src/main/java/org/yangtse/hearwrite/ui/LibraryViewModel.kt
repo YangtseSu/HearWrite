@@ -23,9 +23,11 @@ import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.data.LibraryCategory
 import org.yangtse.hearwrite.data.LibraryList
 import org.yangtse.hearwrite.data.LibrarySearchResult
+import org.yangtse.hearwrite.domain.ResolvedWord
 import org.yangtse.hearwrite.domain.WordRow
-import org.yangtse.hearwrite.domain.displayRow
 import org.yangtse.hearwrite.domain.prepareStartRows
+import org.yangtse.hearwrite.domain.resolveWord
+import org.yangtse.hearwrite.domain.rowToLine
 
 /** Search UI state: idle (no query), loading, or the finished result. */
 sealed interface LibrarySearchState {
@@ -141,9 +143,17 @@ class LibraryPreviewViewModel(
     val category: String = checkNotNull(handle["category"])
     val label: String = checkNotNull(handle["label"])
 
-    private val _entries = MutableStateFlow<List<WordRow>?>(null)
-    /** null = still loading. Rows carry the lexicon's 词性/释义 (or 拼音/组词). */
-    val entries: StateFlow<List<WordRow>?> = _entries.asStateFlow()
+    /**
+     * The list's authored rows, kept for [draftLines]: 载入草稿 hands the draft
+     * the list as the asset holds it, never a row the dictionary has been
+     * written into (`docs/2026-09-18-DATA-MODEL.md` §0).
+     */
+    @Volatile
+    private var parsedRows: List<WordRow> = emptyList()
+
+    private val _entries = MutableStateFlow<List<ResolvedWord>?>(null)
+    /** null = still loading. Rows carry the lexicon's 音标/词性/释义 (or 拼音/组词). */
+    val entries: StateFlow<List<ResolvedWord>?> = _entries.asStateFlow()
 
     private val _shuffle = MutableStateFlow(false)
     /** 随机顺序 — session-local, defaults off (never persisted). */
@@ -180,7 +190,7 @@ class LibraryPreviewViewModel(
      *  already resolved (the list is read once), so a start never races the
      *  dictionary. Double invocations are rejected (not queued); null when
      *  another start is already in flight or the list failed to load. */
-    suspend fun startRows(): List<WordRow>? {
+    suspend fun startRows(): List<ResolvedWord>? {
         if (!startGate.tryLock()) return null
         _starting.value = true
         try {
@@ -192,20 +202,25 @@ class LibraryPreviewViewModel(
         }
     }
 
+    /** 载入草稿: the list's authored lines, exactly as the asset holds them. */
+    fun draftLines(): List<String> = parsedRows.map(::rowToLine)
+
     init {
         viewModelScope.launch {
             try {
-                // Parsed rows first so the list renders immediately; then the
-                // dictionary pass on IO (the lexicon parses lazily on first
-                // lookup — never on the startup path, AGENTS.md). A bare
-                // English word gains ECDICT 义项, a bare single Chinese char
-                // gains 拼音/组词 from `lexicon-hanzi.json`; a multi-char
-                // Chinese word has no offline source. A stale result is
-                // dropped if the list changed.
+                // Authored rows first, published with their own columns so the
+                // list renders immediately; then the dictionary pass on IO (the
+                // lexicon parses lazily on first lookup — never on the startup
+                // path, AGENTS.md). A bare English word gains ECDICT 音标/义项,
+                // a bare single Chinese char gains 拼音/组词 from
+                // `lexicon-hanzi.json`; a multi-char Chinese word has no offline
+                // source. A stale result is dropped if the list changed.
                 val parsed = repository.entries(LibraryList(category, label))
-                _entries.value = parsed
-                val resolved = lexiconRepository.resolve(parsed).map { it.displayRow() }
-                if (_entries.value == parsed) _entries.value = resolved
+                parsedRows = parsed
+                val immediate = parsed.map { resolveWord(it, entry = null, hanzi = null) }
+                _entries.value = immediate
+                val resolved = lexiconRepository.resolve(parsed)
+                if (_entries.value == immediate) _entries.value = resolved
             } catch (e: Exception) {
                 // Asset/parse failure degrades to the plain list (or to the
                 // still-loading state) — the preview keeps working.

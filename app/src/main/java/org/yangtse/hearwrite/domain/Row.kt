@@ -17,11 +17,11 @@ data class WordRow(
     /** 展示/作答/错词键 — as printed in the list (`you're = you are`). */
     val display: String,
     /** TTS text: the left side of an `=` expansion, else [display]. */
-    val speak: String,
-    val kind: WordKind,
+    override val speak: String,
+    override val kind: WordKind,
     val pos: String? = null,
     val gloss: String? = null,
-)
+) : SpeakableWord
 
 private const val PIPE = "|"
 private const val FULLWIDTH_PIPE = "｜"
@@ -114,8 +114,8 @@ fun parseWordRows(text: String): List<WordRow> =
  * carry content — `word | pinyin` for a hint-only 生字 row, `word | pos |
  * gloss` otherwise. A gap before a present column keeps its empty
  * placeholder (`word |  | gloss`), because the parser reads columns by
- * position. The one place a row becomes text again (draft persistence,
- * history, enrichment).
+ * position. The one place a row becomes text again: the authored list — draft
+ * persistence, history, and each writer that round-trips a user list.
  */
 fun rowToLine(row: WordRow): String = when {
     row.gloss != null -> listOf(row.display, row.pos ?: "", row.gloss)
@@ -124,12 +124,4 @@ fun rowToLine(row: WordRow): String = when {
     else -> row.display
 }
 
-/**
- * The first row of [rows] whose speakable headword is [word], or null. The
- * 错词本 keys on exactly that headword (AGENTS.md "Persistence"), so this is
- * how a marked word is matched back to its line (Roadmap #7): the row keeps
- * its 词性/释义 or 拼音/组词 columns, and an expansion row (`you're = you
- * are`) matches the left side the book stored.
- */
-fun findRowByHeadword(rows: List<WordRow>, word: String): WordRow? =
-    rows.firstOrNull { it.speak == word }
+

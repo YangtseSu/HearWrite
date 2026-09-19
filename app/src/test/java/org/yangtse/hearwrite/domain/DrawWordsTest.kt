@@ -13,7 +13,7 @@ import kotlin.random.Random
  */
 class DrawWordsTest {
 
-    private fun rows(vararg lines: String): List<WordRow> = lines.map(::parseWordLine)
+    private fun rows(vararg lines: String): List<ResolvedWord> = resolvedRows(*lines)
 
     @Test
     fun `dedupe keeps the first occurrence in list order`() {
@@ -35,15 +35,15 @@ class DrawWordsTest {
             "you're",
         )
         // First occurrence wins: the earlier row keeps its columns.
-        assertEquals(
-            listOf("月 | yuè | 月亮", "you're = you are"),
-            dedupeByHeadword(pool).map(::rowToLine),
-        )
+        val deduped = dedupeByHeadword(pool)
+        assertEquals(listOf("月", "you're = you are"), deduped.map { it.display })
+        assertEquals("yuè", deduped[0].pinyin)
+        assertEquals("月亮", deduped[0].compound)
     }
 
     @Test
     fun `sample draws distinct rows of the requested size`() {
-        val pool = (1..30).map { wordRowOf("word$it") }
+        val pool = (1..30).map { bareResolvedWord("word$it") }
         val drawn = sampleWords(pool, 7, Random(42))
         assertEquals(7, drawn.size)
         assertEquals(7, drawn.toSet().size)
@@ -59,9 +59,9 @@ class DrawWordsTest {
 
     @Test
     fun `sample of a non-positive count draws nothing`() {
-        assertEquals(emptyList<WordRow>(), sampleWords(rows("a", "b"), 0))
-        assertEquals(emptyList<WordRow>(), sampleWords(rows("a", "b"), -3))
-        assertEquals(emptyList<WordRow>(), sampleWords(emptyList(), 5))
+        assertEquals(emptyList<ResolvedWord>(), sampleWords(rows("a", "b"), 0))
+        assertEquals(emptyList<ResolvedWord>(), sampleWords(rows("a", "b"), -3))
+        assertEquals(emptyList<ResolvedWord>(), sampleWords(emptyList(), 5))
     }
 
     @Test

@@ -21,9 +21,9 @@ class CjkWordSpeechTest {
         )
     }
 
-    /** The row API takes parsed rows; the cases stay written in raw list lines. */
+    /** The row API takes resolved rows; the cases stay written in raw list lines. */
     private fun speech(line: String, learnedLines: List<String> = emptyList()): String =
-        cjkWordSpeech(parseWordLine(line), TABLES, learnedLines.map(::parseWordLine))
+        cjkWordSpeech(resolved(line), TABLES, learnedLines.map(::resolved))
 
     // ------------------------------------------------------ meaning column
 

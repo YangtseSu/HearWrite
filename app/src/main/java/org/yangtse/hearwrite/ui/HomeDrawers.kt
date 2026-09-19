@@ -92,7 +92,7 @@ fun HistorySheet(
                 } else {
                     LazyColumn(modifier = Modifier.heightIn(max = SHEET_LIST_MAX_HEIGHT)) {
                         items(entries, key = { it.id }) { entry ->
-                            val text = entry.enrichedText ?: entry.text
+                            val text = entry.text
                             val favorited = entry.id in favoriteIds
                             ListRow(
                                 title = entry.text.lineSequence().first { it.isNotBlank() }.trim(),

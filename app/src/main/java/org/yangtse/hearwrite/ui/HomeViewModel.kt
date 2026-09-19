@@ -38,11 +38,12 @@ import org.yangtse.hearwrite.domain.CJK_RE
 import org.yangtse.hearwrite.domain.DEFAULT_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
+import org.yangtse.hearwrite.domain.ResolvedWord
 import org.yangtse.hearwrite.domain.WordRow
-import org.yangtse.hearwrite.domain.displayRow
 import org.yangtse.hearwrite.domain.parseWordRows
 import org.yangtse.hearwrite.domain.parseWords
 import org.yangtse.hearwrite.domain.prepareStartRows
+import org.yangtse.hearwrite.domain.resolveWord
 import org.yangtse.hearwrite.domain.rowToLine
 
 /**
@@ -70,13 +71,13 @@ data class FavoriteUiItem(
 )
 
 /**
- * A prepared dictation from Home: parsed rows (slice → shuffle applied) plus
+ * A prepared dictation from Home: resolved rows (slice → shuffle applied) plus
  * the provenance of the recorded history row, which becomes the run's 错词本
  * source label (Roadmap #1). A bare-word start (听写错词 over the book)
  * carries a null source.
  */
 data class PreparedSession(
-    val rows: List<WordRow>,
+    val rows: List<ResolvedWord>,
     val historyId: String?,
 )
 
@@ -173,10 +174,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      * row that already carried a column without its 音标 (§0).
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    val displayRows: StateFlow<List<WordRow>> = combine(_draft, _displayMode) { text, display ->
+    val displayRows: StateFlow<List<ResolvedWord>> = combine(_draft, _displayMode) { text, display ->
         if (display) text else null
     }
-        .mapLatest { text -> if (text == null) emptyList() else resolveDisplay(parseWordRows(text)) }
+        .mapLatest { text -> if (text == null) emptyList() else resolve(parseWordRows(text)) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     // ---- 历史 / 收藏 drawer state ----------------------------------------
@@ -663,7 +664,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      * start is already in flight (the gate is claimed before the first
      * suspension, AGENTS.md).
      */
-    suspend fun prepareWrongWordRun(): List<WordRow>? {
+    suspend fun prepareWrongWordRun(): List<ResolvedWord>? {
         if (!wrongWordGate.tryLock()) return null
         try {
             val marks = wrongWordsRepository.observeMarks().first()
@@ -717,7 +718,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun resolveHistory(row: HistoryEntry): FavoriteUiItem? {
-        val text = row.enrichedText ?: row.text
+        val text = row.text
         if (text.isBlank()) return null
         val count = parseWords(text).size
         return FavoriteUiItem(
@@ -746,11 +747,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         try {
             // The row id becomes the run's wrong-word source (Roadmap #1) —
             // marks from this dictation point back to the recorded list. The
-            // stored text is the plain one: 词性/释义 are read from the
-            // lexicon when they are shown, never baked into the row.
-            val historyId = historyRepository.add(text, null)
+            // stored text is the authored one: 词性/释义 (and 音标) are read
+            // from the lexicon when they are shown, never baked into the row.
+            val historyId = historyRepository.add(text)
             return PreparedSession(
-                prepareStartRows(resolveDisplay(rows), _startIndex.value, _shuffle.value),
+                prepareStartRows(resolve(rows), _startIndex.value, _shuffle.value),
                 historyId,
             )
         } finally {
@@ -759,20 +760,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Rows with their dictionary columns filled, for the surfaces that read
-     * `word | pos | gloss` rows (the display list, the dial, 朗读释义). Any
-     * failure (asset missing, parse error) degrades to the plain rows — never
-     * blocks the UI or dictation.
+     * Rows composed with the offline lexicon, for the surfaces that read a
+     * resolved word (the display list, the dial, 朗读释义). Any failure (asset
+     * missing, parse error) degrades to the rows' own columns — never blocks
+     * the UI or dictation.
      */
-    private suspend fun resolveDisplay(rows: List<WordRow>): List<WordRow> = try {
-        lexiconRepository.resolve(rows).map { it.displayRow() }
+    private suspend fun resolve(rows: List<WordRow>): List<ResolvedWord> = try {
+        lexiconRepository.resolve(rows)
     } catch (e: CancellationException) {
         // mapLatest cancels the previous pass when the draft changes; that
         // cancellation must propagate, not degrade to a stale row list.
         throw e
     } catch (e: Exception) {
         Log.w(TAG, "lexicon resolve failed", e)
-        rows
+        rows.map { resolveWord(it, entry = null, hanzi = null) }
     }
 
     // ------------------------------------------------------- 拍照识词 (OCR)

@@ -3,18 +3,18 @@ package org.yangtse.hearwrite.data
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
-import org.yangtse.hearwrite.domain.WordRow
-import org.yangtse.hearwrite.domain.parseWordLine
+import org.yangtse.hearwrite.domain.ResolvedWord
+import org.yangtse.hearwrite.domain.resolvedRows
 
 /**
  * `DictationSessionStore` — the in-memory handoff between the launch pad and
- * the dictation screen (AGENTS.md). It stages parsed rows; its contract is
+ * the dictation screen (AGENTS.md). It stages resolved rows; its contract is
  * take-once: an activity kill that recreates the DictationViewModel must not
  * replay the old session, so the second `take()` must see an empty store.
  */
 class DictationSessionStoreTest {
 
-    private fun rows(vararg lines: String): List<WordRow> = lines.map(::parseWordLine)
+    private fun rows(vararg lines: String): List<ResolvedWord> = resolvedRows(*lines)
 
     @Test
     fun `take returns the staged session then empties the store`() {
@@ -27,7 +27,7 @@ class DictationSessionStoreTest {
 
         // Consume-once: a recreated ViewModel must not restart the old run.
         val again = store.take()
-        assertEquals(emptyList<WordRow>(), again.rows)
+        assertEquals(emptyList<ResolvedWord>(), again.rows)
         assertNull(again.sourceLabel)
     }
 
@@ -45,7 +45,7 @@ class DictationSessionStoreTest {
     fun `taking without staging yields an empty session`() {
         val store = DictationSessionStore()
         val session = store.take()
-        assertEquals(emptyList<WordRow>(), session.rows)
+        assertEquals(emptyList<ResolvedWord>(), session.rows)
         assertNull(session.sourceLabel)
     }
 

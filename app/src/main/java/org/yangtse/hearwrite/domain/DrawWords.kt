@@ -15,7 +15,7 @@ import kotlin.random.Random
  * any other run's row. First occurrence wins — an earlier list's row (with
  * its columns) is kept.
  */
-fun dedupeByHeadword(rows: List<WordRow>): List<WordRow> {
+fun <T : SpeakableWord> dedupeByHeadword(rows: List<T>): List<T> {
     val seen = HashSet<String>()
     return rows.filter { seen.add(it.speak) }
 }
@@ -26,11 +26,11 @@ fun dedupeByHeadword(rows: List<WordRow>): List<WordRow> {
  * [count] is clamped to the pool (X ≥ 总词数 = 全量随机, Roadmap #9); a
  * non-positive [count] draws nothing. [random] is injectable for tests.
  */
-fun sampleWords(
-    pool: List<WordRow>,
+fun <T : SpeakableWord> sampleWords(
+    pool: List<T>,
     count: Int,
     random: Random = Random.Default,
-): List<WordRow> {
+): List<T> {
     if (count <= 0 || pool.isEmpty()) return emptyList()
     return pool.shuffled(random).take(count.coerceAtMost(pool.size))
 }

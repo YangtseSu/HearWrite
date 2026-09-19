@@ -8,7 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.domain.builtinListId
-import org.yangtse.hearwrite.domain.WordRow
+import org.yangtse.hearwrite.domain.ResolvedWord
 
 /** Top-level navigation routes. Finish (听写结束) is a DictationScreen end state, not a route. */
 object Routes {
@@ -35,8 +35,8 @@ fun HearWriteApp() {
     val navController = rememberNavController()
     val app = LocalContext.current.applicationContext as HearWriteApplication
 
-    /** Stage the prepared session (rows + provenance) and start dictation. */
-    val startSession: (List<WordRow>, String?) -> Unit = { rows, sourceLabel ->
+    /** Stage the prepared session (resolved rows + provenance) and start dictation. */
+    val startSession: (List<ResolvedWord>, String?) -> Unit = { rows, sourceLabel ->
         app.dictationSession.stage(rows, sourceLabel)
         navController.navigate(Routes.DICTATION) { launchSingleTop = true }
     }

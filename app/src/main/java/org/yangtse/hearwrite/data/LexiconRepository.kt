@@ -9,10 +9,10 @@ import org.yangtse.hearwrite.domain.HanziEntry
 import org.yangtse.hearwrite.domain.Ipa
 import org.yangtse.hearwrite.domain.LexEntry
 import org.yangtse.hearwrite.domain.ResolvedWord
-import org.yangtse.hearwrite.domain.Sense
 import org.yangtse.hearwrite.domain.WordKind
 import org.yangtse.hearwrite.domain.WordRow
 import org.yangtse.hearwrite.domain.kindOf
+import org.yangtse.hearwrite.domain.resolveWord
 import java.io.InputStream
 
 private const val EN_PATH = "dict/lexicon-en.json"
@@ -158,13 +158,11 @@ class LexiconRepository(private val readAssetStream: (String) -> InputStream) {
     // ------------------------------------------------------------ resolve
 
     /**
-     * 行覆盖 + 词典回填 (`§1.3`): the row's own columns win **field by field**,
+     * 行覆盖 + 词典回填 (`§1.4`): the row's own columns win **field by field**,
      * the lexicon fills what it left empty — the rule that finally gives a
      * 仁爱 row (which prints its own 词性/释义) the textbook IPA it never could
-     * get while enrichment skipped any row that already carried a column.
-     *
-     * IPA only ever comes from the lexicon (a row does not carry one), and a
-     * [WordKind.WORD] row is never looked up at all.
+     * get while enrichment skipped any row that already carried a column. The
+     * composition itself is [resolveWord]; this only does the two lookups.
      */
     suspend fun resolve(row: WordRow): ResolvedWord = withContext(Dispatchers.IO) { resolveIn(row) }
 
@@ -173,45 +171,8 @@ class LexiconRepository(private val readAssetStream: (String) -> InputStream) {
         withContext(Dispatchers.IO) { rows.map(::resolveIn) }
 
     private fun resolveIn(row: WordRow): ResolvedWord = when (row.kind) {
-        WordKind.EN -> {
-            val entry = lookupEnglish(row.speak)
-            ResolvedWord(
-                display = row.display,
-                speak = row.speak,
-                kind = row.kind,
-                senses = rowSenses(row) ?: entry?.senses.orEmpty(),
-                pinyin = null,
-                compound = null,
-                ipa = entry?.ipa,
-            )
-        }
-
-        WordKind.HANZI -> {
-            val entry = hanziTable()[row.speak]
-            ResolvedWord(
-                display = row.display,
-                speak = row.speak,
-                kind = row.kind,
-                senses = emptyList(),
-                pinyin = row.pos ?: entry?.pinyin,
-                compound = row.gloss ?: entry?.compound,
-                ipa = null,
-            )
-        }
-
-        WordKind.WORD -> ResolvedWord(
-            display = row.display,
-            speak = row.speak,
-            kind = row.kind,
-            senses = emptyList(),
-            pinyin = null,
-            compound = null,
-            ipa = null,
-        )
+        WordKind.EN -> resolveWord(row, entry = lookupEnglish(row.speak), hanzi = null)
+        WordKind.HANZI -> resolveWord(row, entry = null, hanzi = hanziTable()[row.speak])
+        WordKind.WORD -> resolveWord(row, entry = null, hanzi = null)
     }
-
-    /** A row's own `pos`/`gloss` as one sense — null when it carries neither. */
-    private fun rowSenses(row: WordRow): List<Sense>? =
-        if (row.pos == null && row.gloss == null) null
-        else listOf(Sense(row.pos, row.gloss.orEmpty()))
 }

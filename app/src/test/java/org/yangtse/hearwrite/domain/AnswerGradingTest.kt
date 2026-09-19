@@ -14,7 +14,7 @@ import org.junit.Test
 class AnswerGradingTest {
 
     /** The run's rows: the cases are written as raw list lines. */
-    private fun rows(vararg lines: String): List<WordRow> = lines.map(::parseWordLine)
+    private fun rows(vararg lines: String): List<ResolvedWord> = resolvedRows(*lines)
 
     /** The student's answer lines, as the vision model read them off the paper. */
     private fun answers(vararg lines: String): List<String> = lines.toList()

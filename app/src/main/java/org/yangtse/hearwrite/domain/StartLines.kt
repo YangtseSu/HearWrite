@@ -8,10 +8,10 @@ package org.yangtse.hearwrite.domain
  * engine).
  */
 fun prepareStartRows(
-    rows: List<WordRow>,
+    rows: List<ResolvedWord>,
     startIndex: Int,
     shuffle: Boolean,
-): List<WordRow> {
+): List<ResolvedWord> {
     val from = startIndex.coerceIn(0, (rows.size - 1).coerceAtLeast(0))
     val sliced = rows.subList(from, rows.size)
     return if (shuffle) sliced.shuffled() else sliced

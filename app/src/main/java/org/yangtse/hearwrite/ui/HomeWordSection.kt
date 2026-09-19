@@ -55,8 +55,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import org.yangtse.hearwrite.domain.WordRow
+import org.yangtse.hearwrite.domain.ResolvedWord
 import org.yangtse.hearwrite.domain.glossNeedsExpansion
+import org.yangtse.hearwrite.domain.glossText
+import org.yangtse.hearwrite.domain.listMeta
 import org.yangtse.hearwrite.ui.theme.wordHead
 
 /** 示例 content: English words with gloss columns (朗读释义 demo-able). */
@@ -92,7 +94,7 @@ private const val SURFACE_FADE_MS = 200
 fun WordListSection(
     draft: String,
     /** 展示态 rows: the draft resolved against the offline lexicon. */
-    rows: List<WordRow>,
+    rows: List<ResolvedWord>,
     displayMode: Boolean,
     wordCount: Int,
     startIndex: Int,
@@ -391,7 +393,7 @@ private fun CountBadge(count: Int) {
  */
 @Composable
 private fun WordDisplayList(
-    rows: List<WordRow>,
+    rows: List<ResolvedWord>,
     startIndex: Int,
     onStartIndexChange: (Int) -> Unit,
     onDeleteWord: (Int) -> Unit,
@@ -413,10 +415,10 @@ private fun WordDisplayList(
         LazyColumn(contentPadding = PaddingValues(bottom = 8.dp)) {
             itemsIndexed(rows) { index, entry ->
                 val isCursor = index == startIndex
-                val meta = listOfNotNull(entry.pos, entry.gloss).joinToString(" ")
+                val meta = entry.listMeta().orEmpty()
                 // 2-line clamp: offer expansion for multi-sense glosses or
                 // long text that would visibly truncate.
-                val expandable = glossNeedsExpansion(entry.gloss)
+                val expandable = glossNeedsExpansion(entry.glossText())
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

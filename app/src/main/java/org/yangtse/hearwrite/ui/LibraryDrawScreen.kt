@@ -49,7 +49,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
-import org.yangtse.hearwrite.domain.WordRow
+import org.yangtse.hearwrite.domain.ResolvedWord
+import org.yangtse.hearwrite.domain.listMeta
 import org.yangtse.hearwrite.ui.theme.wordHead
 
 /**
@@ -71,7 +72,7 @@ import org.yangtse.hearwrite.ui.theme.wordHead
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun LibraryDrawScreen(
-    onStartDictation: (rows: List<WordRow>, sourceLabel: String) -> Unit,
+    onStartDictation: (rows: List<ResolvedWord>, sourceLabel: String) -> Unit,
     onBack: () -> Unit,
     viewModel: LibraryDrawViewModel = viewModel(),
 ) {
@@ -311,11 +312,11 @@ fun LibraryDrawScreen(
 
 /**
  * One drawn word: its position in the run and the entry it will dictate, with
- * the columns (词性/释义, 拼音/组词) shown the way the dictation hints will use
- * them. Kept to one row per word so a full 100-word draw stays scannable.
+ * the columns (音标/词性/释义, 拼音/组词) shown the way the dictation hints will
+ * use them. Kept to one row per word so a full 100-word draw stays scannable.
  */
 @Composable
-private fun DrawPreviewRow(index: Int, row: WordRow) {
+private fun DrawPreviewRow(index: Int, row: ResolvedWord) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -335,7 +336,7 @@ private fun DrawPreviewRow(index: Int, row: WordRow) {
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            val hint = listOfNotNull(row.pos, row.gloss).joinToString(" · ")
+            val hint = row.listMeta().orEmpty()
             if (hint.isNotEmpty()) {
                 Text(
                     hint,

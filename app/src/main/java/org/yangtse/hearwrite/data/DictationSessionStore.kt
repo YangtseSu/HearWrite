@@ -1,6 +1,6 @@
 package org.yangtse.hearwrite.data
 
-import org.yangtse.hearwrite.domain.WordRow
+import org.yangtse.hearwrite.domain.ResolvedWord
 
 /**
  * In-memory handoff of the prepared word list between the launching screen
@@ -11,9 +11,9 @@ import org.yangtse.hearwrite.domain.WordRow
  * session restarts from Home, same as upstream).
  */
 class DictationSessionStore {
-    /** Parsed rows, slice → shuffle already applied by the caller. */
+    /** Resolved rows, slice → shuffle already applied by the caller. */
     @Volatile
-    var rows: List<WordRow> = emptyList()
+    var rows: List<ResolvedWord> = emptyList()
 
     /**
      * Provenance of the staged rows for the 错词本 source label (Roadmap #1):
@@ -30,7 +30,7 @@ class DictationSessionStore {
      * right before navigating (Home records the list in history and hands the
      * row id; the library preview hands the built-in list id).
      */
-    fun stage(rows: List<WordRow>, sourceLabel: String?) {
+    fun stage(rows: List<ResolvedWord>, sourceLabel: String?) {
         this.rows = rows
         this.sourceLabel = sourceLabel
     }
@@ -48,9 +48,9 @@ class DictationSessionStore {
         return session
     }
 
-    /** One staged session: parsed rows plus its provenance label. */
+    /** One staged session: resolved rows plus its provenance label. */
     data class Session(
-        val rows: List<WordRow>,
+        val rows: List<ResolvedWord>,
         val sourceLabel: String?,
     )
 }

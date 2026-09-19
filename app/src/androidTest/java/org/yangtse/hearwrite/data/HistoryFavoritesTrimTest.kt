@@ -48,15 +48,15 @@ class HistoryFavoritesTrimTest {
         // Fill to exactly the cap, then favorite the oldest row — the
         // exemption must be in place before the cap is exceeded, because
         // every repository.add() already runs the trim.
-        val ids = (1..50).map { repository.add("word list $it", null)!! }
+        val ids = (1..50).map { repository.add("word list $it")!! }
         val oldestId = ids.first()
         favoritesDao.insert(FavoriteEntity(oldestId))
 
         // Two more lists push the count to 52; the trim must drop the
         // oldest un-favorited row (ids[1]) while the favorited ids[0]
         // survives and the cap is allowed to sit at 50 + 1.
-        val newestId = repository.add("word list 51", null)!!
-        repository.add("word list 52", null)!!
+        val newestId = repository.add("word list 51")!!
+        repository.add("word list 52")!!
         val rows = historyDao.all()
 
         assertTrue("favorited row must survive the cap", rows.any { it.id == oldestId })
@@ -68,8 +68,8 @@ class HistoryFavoritesTrimTest {
     @Test
     fun clearKeepsFavorites_explicitDeletePrunesThem() = runBlocking {
         val repository = HistoryRepository(historyDao, favoritesDao)
-        val keptId = repository.add("keep me", null)!!
-        val droppedId = repository.add("drop me", null)!!
+        val keptId = repository.add("keep me")!!
+        val droppedId = repository.add("drop me")!!
         favoritesDao.insert(FavoriteEntity(keptId))
 
         // Bulk clear keeps favorited rows, drops the rest (a favorite must

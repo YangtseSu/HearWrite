@@ -91,7 +91,7 @@ data class GradeResult(
 
     companion object {
         /** No answers were read at all: every slot is MISSING. */
-        fun allMissing(rows: List<WordRow>): GradeResult {
+        fun allMissing(rows: List<ResolvedWord>): GradeResult {
             val expected = rows.mapNotNull(::expectedAnswer)
             return GradeResult(
                 items = expected.mapIndexed { index, answer ->
@@ -192,7 +192,7 @@ private data class Expected(
     val forms: Set<String>,
 )
 
-private fun expectedAnswer(row: WordRow): Expected? {
+private fun expectedAnswer(row: ResolvedWord): Expected? {
     val headword = row.speak
     if (headword.isEmpty()) return null
     val forms = linkedSetOf(normalizeAnswer(headword))
@@ -212,7 +212,7 @@ private fun expectedAnswer(row: WordRow): Expected? {
  * pass. A tie resolves to English; only a truly mixed list is affected and
  * neither language's extractor could read that paper anyway.
  */
-fun isCjkRun(rows: List<WordRow>): Boolean {
+fun isCjkRun(rows: List<SpeakableWord>): Boolean {
     var cjk = 0
     var other = 0
     for (row in rows) {
@@ -285,7 +285,7 @@ private fun pairScore(expected: Expected, answer: Set<String>): Int = when {
  * Whatever is still unmatched is MISSING (no answer) or EXTRA (a line with no
  * word to sit against).
  */
-fun gradeAnswers(rows: List<WordRow>, recognized: List<String>): GradeResult {
+fun gradeAnswers(rows: List<ResolvedWord>, recognized: List<String>): GradeResult {
     val expected = rows.mapNotNull(::expectedAnswer)
     if (expected.isEmpty()) return GradeResult(emptyList(), 0)
     if (recognized.isEmpty()) return GradeResult.allMissing(rows)

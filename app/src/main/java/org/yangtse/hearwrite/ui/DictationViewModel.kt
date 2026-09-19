@@ -37,18 +37,19 @@ import org.yangtse.hearwrite.domain.GradeResult
 import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.PlayState
+import org.yangtse.hearwrite.domain.ResolvedWord
 import org.yangtse.hearwrite.domain.Speaker
 import org.yangtse.hearwrite.domain.SessionKind
 import org.yangtse.hearwrite.domain.TtsSource
 import org.yangtse.hearwrite.domain.WordKind
-import org.yangtse.hearwrite.domain.WordRow
+import org.yangtse.hearwrite.domain.bareResolvedWord
 import org.yangtse.hearwrite.domain.cjkWordSpeech
-import org.yangtse.hearwrite.domain.findRowByHeadword
+import org.yangtse.hearwrite.domain.findResolvedByHeadword
+import org.yangtse.hearwrite.domain.glossText
 import org.yangtse.hearwrite.domain.gradeAnswers
 import org.yangtse.hearwrite.domain.isCjkRun
 import org.yangtse.hearwrite.domain.parseWords
 import org.yangtse.hearwrite.domain.speakableMeaning
-import org.yangtse.hearwrite.domain.wordRowOf
 
 /** Everything the dictation screen renders. */
 data class DictationUiState(
@@ -112,7 +113,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     private val session: DictationSessionStore.Session = app.dictationSession.take()
 
     /** Rows of the staged session (initial run; 复习错词 restarts with fewer). */
-    private val sessionRows: List<WordRow> = session.rows
+    private val sessionRows: List<ResolvedWord> = session.rows
 
     /**
      * The 错词本 source of the current run: the staged session's provenance
@@ -222,7 +223,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
 
     /** Rows of the run in progress (initial session or a review round). */
     private val _activeRows = MutableStateFlow(sessionRows)
-    val activeRows: StateFlow<List<WordRow>> = _activeRows.asStateFlow()
+    val activeRows: StateFlow<List<ResolvedWord>> = _activeRows.asStateFlow()
 
     /** Wall-clock start of the current run (init session or a review round). */
     private var runStartedAtMs = 0L
@@ -420,13 +421,13 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
                 prefetch(phrase, "zh-CN")
             }
         } else if (readTranslation) {
-            val gloss = speakableMeaning(current.gloss)
+            val gloss = speakableMeaning(current.glossText())
             if (gloss.isNotEmpty()) prefetch(gloss, "zh-CN")
         }
     }
 
     /** Speakable headword of [row] (strips `= you are` suffixes) → prefetch. */
-    private fun prefetchEntry(row: WordRow) {
+    private fun prefetchEntry(row: ResolvedWord) {
         if (row.speak.isNotEmpty()) {
             prefetch(row.speak, if (row.kind == WordKind.EN) "en-US" else "zh-CN")
         }
@@ -449,7 +450,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
      * rounds — see [runSourceLabel]); [kind] labels the recorded stats row.
      */
     private fun beginRun(
-        runRows: List<WordRow>,
+        runRows: List<ResolvedWord>,
         sourceLabel: String?,
         kind: SessionKind = SessionKind.DICTATION,
     ) {
@@ -1003,7 +1004,9 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
                     // Room unavailable: degrade to the book held in memory,
                     // resolved against this run's rows (the pre-sources
                     // behavior) rather than losing the button.
-                    _wrongWords.value.map { word -> findRowByHeadword(preferred, word) ?: wordRowOf(word) }
+                    _wrongWords.value.map { word ->
+                        findResolvedByHeadword(preferred, word) ?: bareResolvedWord(word)
+                    }
                 }
                 if (rows.isEmpty()) return@launch
                 beginRun(rows, null, kind = SessionKind.REVIEW)

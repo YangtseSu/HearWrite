@@ -2,11 +2,11 @@ package org.yangtse.hearwrite.data
 
 import org.yangtse.hearwrite.domain.BUILTIN_LIST_ID_PREFIX
 import org.yangtse.hearwrite.domain.MULTI_SOURCE_PREFIX
-import org.yangtse.hearwrite.domain.WordRow
-import org.yangtse.hearwrite.domain.findRowByHeadword
+import org.yangtse.hearwrite.domain.ResolvedWord
+import org.yangtse.hearwrite.domain.bareResolvedWord
+import org.yangtse.hearwrite.domain.findResolvedByHeadword
 import org.yangtse.hearwrite.domain.multiSourceIds
 import org.yangtse.hearwrite.domain.parseBuiltinListId
-import org.yangtse.hearwrite.domain.wordRowOf
 
 /**
  * Restore the original word-list rows behind 错词本 marks (Roadmap #7).
@@ -15,21 +15,26 @@ import org.yangtse.hearwrite.domain.wordRowOf
  * (`default_<category>_<label>`, shipped as an asset), a history row id (the
  * user's own pasted text), or a `multi:` label naming the several built-in
  * lists a 抽词听写 pool was assembled from (Roadmap #9); null means manual
- * input. Resolving a mark back to its stored row brings the 词性/释义 or
- * 拼音/组词 columns back for 复习错词 / 听写错词 instead of dictating a bare
+ * input. Resolving a mark back to its stored row brings the 词性/释义 (and
+ * 音标) or 拼音/组词 back for 复习错词 / 听写错词 instead of dictating a bare
  * headword; a mark whose source no longer resolves (deleted history row,
  * renamed list) or never existed stays a bare headword row — the book
  * outlives its sources.
+ *
+ * The rows are **resolved** against the offline lexicon: the sources hand out
+ * [ResolvedWord]s, the type every runtime consumer reads
+ * (`docs/2026-09-18-DATA-MODEL.md` §1.3), so no lookup happens here and no
+ * looked-up column is ever written back into a row (§0).
  *
  * The two loaders are the seam: the application wires them to the asset
  * library and Room, JVM tests pass plain lambdas — no Android dependency in
  * this file.
  */
 class WrongWordLineResolver(
-    /** A built-in list's rows, dictionary columns filled. */
-    private val builtinListRows: suspend (category: String, label: String) -> List<WordRow>,
-    /** A history row's rows, dictionary columns filled. */
-    private val historyRows: suspend (historyId: String) -> List<WordRow>,
+    /** A built-in list's rows, resolved against the lexicon. */
+    private val builtinListRows: suspend (category: String, label: String) -> List<ResolvedWord>,
+    /** A history row's rows, resolved against the lexicon. */
+    private val historyRows: suspend (historyId: String) -> List<ResolvedWord>,
 ) {
 
     /**
@@ -39,21 +44,21 @@ class WrongWordLineResolver(
      */
     suspend fun rowsFor(
         marks: List<WrongWordMark>,
-        preferred: List<WordRow> = emptyList(),
-    ): List<WordRow> {
-        val cache = HashMap<String, List<WordRow>>()
+        preferred: List<ResolvedWord> = emptyList(),
+    ): List<ResolvedWord> {
+        val cache = HashMap<String, List<ResolvedWord>>()
         return marks.map { mark ->
-            findRowByHeadword(preferred, mark.word)
-                ?: findRowByHeadword(sourceRows(mark.sourceLabel, cache), mark.word)
-                ?: wordRowOf(mark.word)
+            findResolvedByHeadword(preferred, mark.word)
+                ?: findResolvedByHeadword(sourceRows(mark.sourceLabel, cache), mark.word)
+                ?: bareResolvedWord(mark.word)
         }
     }
 
     /** Rows of one source, cached in [cache] (null source → nothing to load). */
     private suspend fun sourceRows(
         sourceLabel: String?,
-        cache: MutableMap<String, List<WordRow>>,
-    ): List<WordRow> {
+        cache: MutableMap<String, List<ResolvedWord>>,
+    ): List<ResolvedWord> {
         if (sourceLabel == null) return emptyList()
         cache[sourceLabel]?.let { return it }
         val rows = try {
@@ -74,7 +79,7 @@ class WrongWordLineResolver(
         return rows
     }
 
-    private suspend fun builtinRows(id: String): List<WordRow> {
+    private suspend fun builtinRows(id: String): List<ResolvedWord> {
         val (category, label) = parseBuiltinListId(id) ?: return emptyList()
         return builtinListRows(category, label)
     }

@@ -7,7 +7,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.yangtse.hearwrite.domain.Ipa
 import org.yangtse.hearwrite.domain.Sense
-import org.yangtse.hearwrite.domain.displayRow
 import org.yangtse.hearwrite.domain.parseWordLine
 import org.yangtse.hearwrite.domain.rowToLine
 import java.io.File
@@ -18,8 +17,9 @@ import java.io.FileNotFoundException
  * (`docs/2026-09-18-DATA-MODEL.md` §1.3–1.4): lookup routes a headword to
  * exactly one asset, and [LexiconRepository.resolve] lets the row win **field
  * by field** — the rule that finally gives a 仁爱 row (which prints its own
- * 词性/释义) its textbook IPA. Rows are never written back: [displayRow] is the
- * presentation flattening, and the row it came from is untouched.
+ * 词性/释义) its textbook IPA. Rows are never written back: the resolved entry
+ * is a read-time result and the row it came from is untouched (the display
+ * composition built on top of it is locked by `WordDisplayTest`).
  *
  * Two halves: a stub-asset half driving the seam the way
  * `DictionaryRepositoryTest` used to, and a shipped-asset half that pins the
@@ -79,10 +79,13 @@ class LexiconRepositoryTest {
     }
 
     @Test
-    fun `a row carrying only a pos still gains the glossary gloss`() = runTest {
+    fun `a row carrying its own columns wins them field by field`() = runTest {
+        // The row's pos/gloss are one column pair: a row that prints a 词性 and
+        // no 释义 keeps its (empty) gloss rather than taking the lexicon's —
+        // the row is the authority for what the list says.
         val resolved = repository().resolve(parseWordLine("apple | n."))
         assertEquals(listOf(Sense("n.", "")), resolved.senses)
-        assertEquals("apple | n.", rowToLine(resolved.displayRow()))
+        assertEquals(Ipa("ˈæpəɫ", "ˈæpl"), resolved.ipa)
     }
 
     @Test
@@ -90,14 +93,15 @@ class LexiconRepositoryTest {
         val resolved = repository().resolve(parseWordLine("月"))
         assertEquals("yuè", resolved.pinyin)
         assertEquals("岁月", resolved.compound)
-        assertEquals("月 | yuè | 岁月", rowToLine(resolved.displayRow()))
+        assertNull(resolved.ipa) // 汉字 rows carry no 音标 (§9)
     }
 
     @Test
     fun `char with a reading but no compound gains the pinyin hint alone`() = runTest {
-        // `很` has no derivable 组词 — the row stays the 2-column hint-only
-        // shape rather than getting an empty third column.
-        assertEquals("很 | hěn", rowToLine(repository().resolve(parseWordLine("很")).displayRow()))
+        // `很` has no derivable 组词 — the reading alone, not an empty gloss.
+        val resolved = repository().resolve(parseWordLine("很"))
+        assertEquals("hěn", resolved.pinyin)
+        assertNull(resolved.compound)
     }
 
     @Test
@@ -105,7 +109,9 @@ class LexiconRepositoryTest {
         val repo = repository(englishJson = """{"v":2,"entries":{"香蕉":{"s":[{"p":"n.","g":"banana"}]}}}""")
         val resolved = repo.resolve(parseWordLine("香蕉"))
         assertTrue(resolved.senses.isEmpty())
-        assertEquals("香蕉", rowToLine(resolved.displayRow()))
+        assertNull(resolved.pinyin)
+        assertNull(resolved.compound)
+        assertEquals("香蕉", resolved.display)
         assertNull(repo.lookup("香蕉"))
     }
 
@@ -122,16 +128,22 @@ class LexiconRepositoryTest {
     @Test
     fun `rows that carry no columns stay bare and unknown words gain nothing`() = runTest {
         val repo = repository(hanziJson = """{"v":2,"entries":{}}""")
-        assertEquals("zzzz", rowToLine(repo.resolve(parseWordLine("zzzz")).displayRow()))
-        assertEquals("香蕉", rowToLine(repo.resolve(parseWordLine("香蕉")).displayRow()))
+        val unknown = repo.resolve(parseWordLine("zzzz"))
+        assertTrue(unknown.senses.isEmpty())
+        assertNull(unknown.ipa)
+        val chinese = repo.resolve(parseWordLine("香蕉"))
+        assertTrue(chinese.senses.isEmpty())
+        assertNull(chinese.compound)
     }
 
     @Test
-    fun `displayRow rejoins later senses with their own pos inline`() = runTest {
-        // `fine` — the shape the old flat asset stored and the dial shows.
+    fun `senses stay structured, one entry per meaning`() = runTest {
+        // `fine` — the old flat asset could only store this as one string with
+        // its internal `；` lossily folded; the dial rebuilds the display text
+        // from the list (WordDisplayTest).
         assertEquals(
-            "fine | adj. | 身体好的；v. 对……处以罚款",
-            rowToLine(repository().resolve(parseWordLine("fine")).displayRow()),
+            listOf(Sense("adj.", "身体好的"), Sense("v.", "对……处以罚款")),
+            repository().resolve(parseWordLine("fine")).senses,
         )
     }
 
@@ -157,7 +169,9 @@ class LexiconRepositoryTest {
     @Test
     fun `an expansion row is looked up by its spoken left side`() = runTest {
         val resolved = repository().resolve(parseWordLine("you're = you are"))
-        assertEquals("you're = you are | abbr. | 你是", rowToLine(resolved.displayRow()))
+        assertEquals("you're", resolved.speak)
+        assertEquals("you're = you are", resolved.display)
+        assertEquals(listOf(Sense("abbr.", "你是")), resolved.senses)
     }
 
     @Test

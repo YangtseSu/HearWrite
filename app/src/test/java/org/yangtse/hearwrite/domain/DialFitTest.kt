@@ -30,7 +30,7 @@ class DialFitTest {
         wordLineRatio = 52.0 / 40.0,
         hintFontSizeSp = 15.0,
         hintLineHeightSp = 24.0,
-        wordPosGapDp = 6.0,
+        wordHintGapDp = 6.0,
         glossMaxLines = 2,
         glossGapDp = 2.0,
     )
@@ -90,9 +90,9 @@ class DialFitTest {
         )
         for (word in words) {
             for (gloss in glosses) {
-                for (hasPos in listOf(true, false)) {
-                    val fit = dialFit(word, gloss, hasPos, metrics)
-                    assertInsideDisc(fit, "$word / $gloss / pos=$hasPos")
+                for (hasHint in listOf(true, false)) {
+                    val fit = dialFit(word, gloss, hasHint, metrics)
+                    assertInsideDisc(fit, "$word / $gloss / pos=$hasHint")
                     assertTrue("font below the floor", fit.wordFontSizeSp >= metrics.wordMinSp - 1e-9)
                     assertTrue("font above the style", fit.wordFontSizeSp <= metrics.wordMaxSp + 1e-9)
                 }
@@ -104,7 +104,7 @@ class DialFitTest {
 
     @Test
     fun `a short word keeps the style's own size`() {
-        val fit = dialFit("apple", null, hasPos = false, metrics = metrics)
+        val fit = dialFit("apple", null, hasHint = false, metrics = metrics)
         assertEquals(40.0, fit.wordFontSizeSp, 1e-9)
         assertFalse(fit.wordTruncated)
     }
@@ -113,7 +113,7 @@ class DialFitTest {
     fun `a long headword shrinks to hold its lines instead of being cut`() {
         // 14 display units of Latin: at 40 sp it cannot hold a line of the box,
         // so the solver trades the font size instead of ellipsizing the tail.
-        val fit = dialFit("the Great Hall of the people", null, hasPos = false, metrics = metrics)
+        val fit = dialFit("the Great Hall of the people", null, hasHint = false, metrics = metrics)
         assertTrue("expected a shrink", fit.wordFontSizeSp < 40.0)
         assertFalse(fit.wordTruncated)
     }
@@ -123,7 +123,7 @@ class DialFitTest {
         // No whitespace to break at: a 60-unit run cannot fit one line at the
         // 22 sp floor, so the card must carry it — the dial must not pretend
         // the two-line clamp will show it.
-        val fit = dialFit("a".repeat(120), null, hasPos = false, metrics = metrics)
+        val fit = dialFit("a".repeat(120), null, hasHint = false, metrics = metrics)
         assertEquals(22.0, fit.wordFontSizeSp, 1e-9)
         assertTrue(fit.wordTruncated)
         assertTrue(fit.needsDetail)
@@ -131,7 +131,7 @@ class DialFitTest {
 
     @Test
     fun `a two-line name is not truncated when the box can hold it`() {
-        val fit = dialFit("doing morning exercises", null, hasPos = false, metrics = metrics)
+        val fit = dialFit("doing morning exercises", null, hasHint = false, metrics = metrics)
         assertFalse(fit.wordTruncated)
         assertTrue("the two-line area should be used", fit.wordLines >= 1)
     }
@@ -139,7 +139,7 @@ class DialFitTest {
     @Test
     fun `a longer system font scale shrinks the word rather than overflowing`() {
         val scaled = metrics.copy(fontScale = 1.5)
-        val fit = dialFit("the Great Hall of the people", null, hasPos = false, metrics = scaled)
+        val fit = dialFit("the Great Hall of the people", null, hasHint = false, metrics = scaled)
         assertInsideDisc(fit, "fontScale 1.5")
         assertTrue(fit.wordFontSizeSp < 40.0)
     }
@@ -151,7 +151,7 @@ class DialFitTest {
         val fit = dialFit(
             "surprise",
             "惊奇，惊讶,(对...)感到怀疑；惊奇，惊讶(对. . . . )感到怀",
-            hasPos = true,
+            hasHint = true,
             metrics = metrics,
         )
         assertTrue(fit.glossTruncated)
@@ -163,7 +163,7 @@ class DialFitTest {
 
     @Test
     fun `a short gloss needs no card`() {
-        val fit = dialFit("apple", "苹果", hasPos = true, metrics = metrics)
+        val fit = dialFit("apple", "苹果", hasHint = true, metrics = metrics)
         assertFalse(fit.glossTruncated)
         assertFalse(fit.needsDetail)
         assertTrue(fit.glossLines > 0)
@@ -183,8 +183,8 @@ class DialFitTest {
 
     @Test
     fun `a word with no gloss leaves the height to the word`() {
-        val withGloss = dialFit("apple", "苹果，苹果树，苹果汁的一种", hasPos = true, metrics = metrics)
-        val without = dialFit("apple", null, hasPos = true, metrics = metrics)
+        val withGloss = dialFit("apple", "苹果，苹果树，苹果汁的一种", hasHint = true, metrics = metrics)
+        val without = dialFit("apple", null, hasHint = true, metrics = metrics)
         assertTrue(without.contentHeightDp < withGloss.contentHeightDp)
     }
 

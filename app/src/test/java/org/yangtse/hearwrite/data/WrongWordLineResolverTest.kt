@@ -3,10 +3,10 @@ package org.yangtse.hearwrite.data
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import org.yangtse.hearwrite.domain.WordRow
+import org.yangtse.hearwrite.domain.ResolvedWord
 import org.yangtse.hearwrite.domain.multiSourceLabel
-import org.yangtse.hearwrite.domain.parseWordLine
-import org.yangtse.hearwrite.domain.parseWordRows
+import org.yangtse.hearwrite.domain.resolvedRows
+import org.yangtse.hearwrite.domain.resolvedText
 
 /**
  * Locks the 错词本 → original-row resolution (Roadmap #7): 复习错词 / 听写错词
@@ -16,7 +16,7 @@ import org.yangtse.hearwrite.domain.parseWordRows
  */
 class WrongWordLineResolverTest {
 
-    private fun rowsOf(vararg lines: String): List<WordRow> = lines.map(::parseWordLine)
+    private fun rowsOf(vararg lines: String): List<ResolvedWord> = resolvedRows(*lines)
 
     private val builtinRows = mapOf(
         "default_人教版小学语文_识字表" to rowsOf(
@@ -37,7 +37,7 @@ class WrongWordLineResolverTest {
             if (failBuiltin) throw IllegalStateException("asset unavailable")
             builtinRows["default_${category}_$label"].orEmpty()
         },
-        historyRows = { id -> history[id]?.let(::parseWordRows).orEmpty() },
+        historyRows = { id -> history[id]?.let(::resolvedText).orEmpty() },
     )
 
     private fun mark(word: String, source: String? = null) =

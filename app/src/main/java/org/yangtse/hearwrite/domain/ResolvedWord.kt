@@ -65,13 +65,69 @@ object IpaSerializer : KSerializer<Ipa> {
  */
 data class ResolvedWord(
     val display: String,
-    val speak: String,
-    val kind: WordKind,
+    override val speak: String,
+    override val kind: WordKind,
     val senses: List<Sense>,
     val pinyin: String?,
     val compound: String?,
     val ipa: Ipa?,
-)
+) : SpeakableWord
+
+/**
+ * A resolved word with nothing but its headword: what a 错词本 mark degrades to
+ * when its source list is gone (the book outlives its sources, AGENTS.md
+ * "Persistence"). [ResolvedWord.speak] and [ResolvedWord.kind] derive from the
+ * headword exactly as a parsed row's do.
+ */
+fun bareResolvedWord(headword: String): ResolvedWord = resolveWord(wordRowOf(headword), null, null)
+
+/**
+ * 行覆盖 + 词典回填 (`docs/2026-09-18-DATA-MODEL.md` §1.4): the row wins **field
+ * by field** — its own 词性/释义 (EN) or 拼音/组词 (HANZI) else the entry's.
+ * 音标 only ever comes from the lexicon; a row never carries one, so a 仁爱 row
+ * that prints its own 词性/释义 still gains the textbook reading (§3.2).
+ *
+ * A [WordKind.WORD] row is never looked up (a multi-char Chinese word has no
+ * English gloss to take). Null [entry]/[hanzi] is the "no dictionary" case —
+ * what the composition degrades to when the asset cannot be read — and it
+ * still yields the row's own columns.
+ */
+fun resolveWord(row: WordRow, entry: LexEntry?, hanzi: HanziEntry?): ResolvedWord =
+    when (row.kind) {
+        WordKind.EN -> ResolvedWord(
+            display = row.display,
+            speak = row.speak,
+            kind = row.kind,
+            senses = if (row.pos == null && row.gloss == null) {
+                entry?.senses.orEmpty()
+            } else {
+                listOf(Sense(row.pos, row.gloss.orEmpty()))
+            },
+            pinyin = null,
+            compound = null,
+            ipa = entry?.ipa,
+        )
+
+        WordKind.HANZI -> ResolvedWord(
+            display = row.display,
+            speak = row.speak,
+            kind = row.kind,
+            senses = emptyList(),
+            pinyin = row.pos ?: hanzi?.pinyin,
+            compound = row.gloss ?: hanzi?.compound,
+            ipa = null,
+        )
+
+        WordKind.WORD -> ResolvedWord(
+            display = row.display,
+            speak = row.speak,
+            kind = row.kind,
+            senses = emptyList(),
+            pinyin = null,
+            compound = null,
+            ipa = null,
+        )
+    }
 
 /**
  * One English dictionary entry — the value of `dict/lexicon-en.json`
@@ -96,22 +152,4 @@ data class HanziEntry(
     @SerialName("c") val compound: String? = null,
 )
 
-/**
- * Flatten a resolved word back into the `word | pos | gloss` row the dial,
- * the display list and the 错词本 restore read **today** — a presentation
- * adapter, not a write-back: rows are never persisted with looked-up columns
- * (`§0`), and the surfaces move to reading [ResolvedWord] itself in Phase 3,
- * which retires this function.
- *
- * The two columns are the row's own when it has them, the lexicon's otherwise
- * (`§1.4`): a 汉字 row shows 拼音/组词, an English row 词性 + 释义 — senses
- * rejoined with `；`, a later sense's POS spelled out inline exactly as the
- * old flat asset stored it (`fine | adj. | 身体好的…；v. 对……处以罚款`).
- */
-fun ResolvedWord.displayRow(): WordRow {
-    val mainPos = senses.firstOrNull()?.pos
-    val gloss = senses.joinToString("；") { sense ->
-        if (sense.pos != null && sense.pos != mainPos) "${sense.pos} ${sense.gloss}" else sense.gloss
-    }
-    return wordRowOf(display, pos = pinyin ?: mainPos, gloss = compound ?: gloss.ifEmpty { null })
-}
+

@@ -18,7 +18,7 @@ class SourceTitlesTest {
         "default_人教版小学语文_识字表" to "二上 识字表",
     )
     private val history = listOf(
-        HistoryEntry("h1", "apple | n. | 苹果\npear", null, 0L),
+        HistoryEntry("h1", "apple | n. | 苹果\npear", 0L),
     )
 
     @Test

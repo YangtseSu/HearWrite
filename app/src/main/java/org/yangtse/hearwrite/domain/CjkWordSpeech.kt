@@ -88,30 +88,32 @@ fun parseCompoundTables(json: String): CompoundTables {
  * - 虚词/助词（[NO_COMPOUND_HEADS]）不组词，返回 ""（单字照读）。
  *
  * Candidate tiers, first (frequency-)best match wins:
- *  1. 条目释义列：按「；」再「，,、」拆分、去括注与边缘标点，保留含该字的二字词，
- *     不按读音过滤（课本释义权威）；
+ *  1. 条目组词列（[ResolvedWord.compound]，行覆盖 + 词典回填）：按「；」再
+ *     「，,、」拆分、去括注与边缘标点，保留含该字的二字词，不按读音过滤
+ *     （课本释义权威）；
  *  2. 已学词池：[learnedRows]（当前词表其他含该字的二字词，按出现顺序、不过滤）
  *     + [tables.learned]（按读音过滤），整体按常用词表频级排序，未收录词按出现顺序排后；
  *  3. [tables.common] 常用词池兜底（按读音过滤，频级升序取第一个通过的）。
  *
- * 多音字按条目带调拼音过滤：音节须一致（数字调，ü = v），任一方无调放行。
- * 无拼音条目（用户手输单字）以该字常用词池最高频词读音为锚点过滤
- * （"好" → 良好 的 hao3），避免 好客(hao4) 这类非常用读音劫持组词。
+ * 多音字按条目带调拼音过滤（[ResolvedWord.pinyin]）：音节须一致（数字调，
+ * ü = v），任一方无调放行。拼音缺失（词典也没有该字）时以该字常用词池最高
+ * 频词读音为锚点过滤（"好" → 良好 的 hao3），避免 好客(hao4) 这类非常用读音
+ * 劫持组词。
  * ⚠️ Candidates are never deduped by word — the raw pool arrays are walked and
  * the first row passing the reading filter wins (upstream deduped 澄清 keeping
  * only cheng2, orphaning the dèng reading entirely; 朝 pool carries 朝阳 zhao1
  * and 朝阳 chao2 side by side).
  */
 fun cjkWordSpeech(
-    row: WordRow,
+    row: ResolvedWord,
     tables: CompoundTables,
-    learnedRows: List<WordRow> = emptyList(),
+    learnedRows: List<ResolvedWord> = emptyList(),
 ): String {
     val head = row.speak
     if (head.length != 1 || !CJK_RE.containsMatchIn(head)) return ""
     if (head in NO_COMPOUND_HEADS) return ""
 
-    val headPinyin = row.pos?.let(::toneToDigit) ?: ""
+    val headPinyin = row.pinyin?.let(::toneToDigit) ?: ""
 
     // A pinyin-less entry (bare char pasted by the user) has no reading
     // anchor; pass-all would let any reading hijack the call — bare 好 must
@@ -122,9 +124,9 @@ fun cjkWordSpeech(
         tables.common[head]?.firstOrNull()?.syllable.orEmpty()
     }
 
-    // Tier 1: the entry's own meaning column (authoritative, no reading filter).
+    // Tier 1: the entry's own 组词 column (authoritative, no reading filter).
     val fromMeaning = mutableListOf<CompoundWord>()
-    for (raw in (row.gloss ?: "").split(SENSE_SPLIT_RE)) {
+    for (raw in (row.compound ?: "").split(SENSE_SPLIT_RE)) {
         for (chunk in raw.split(GLOSS_SPLIT_RE)) {
             val word = chunk.replace(MEANING_PAREN_RE, "")
                 .replace(MEANING_EDGE_PUNCT_RE, "")

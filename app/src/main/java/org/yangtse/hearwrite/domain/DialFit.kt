@@ -7,11 +7,12 @@ import kotlin.math.sqrt
  *
  * The dial is a disc that `Surface` clips its children to, so content laid out
  * naively loses its corners and anything near the rim disappears. The revealed
- * stack (a two-line word, its POS/拼音, a two-line gloss and the 展开全部 button
- * under it) measured roughly 200–252 dp inside a 204 dp disc: the word's first
- * line touched the rim and the button was clipped away entirely, with nowhere to
- * scroll. The button was invisible to `uiautomator` too — outside the clip, so
- * the screen offered no way at all to read a truncated word (AUDIT C2).
+ * stack (a two-line word, its 音标/拼音/词性 hint line, a two-line gloss and the
+ * 展开全部 button under it) measured roughly 200–252 dp inside a 204 dp disc: the
+ * word's first line touched the rim and the button was clipped away entirely,
+ * with nowhere to scroll. The button was invisible to `uiautomator` too —
+ * outside the clip, so the screen offered no way at all to read a truncated
+ * word (AUDIT C2).
  *
  * The fix is geometric rather than "make the stack shorter": every child is laid
  * out inside the widest rectangle that fits the disc **at that stack's own
@@ -44,15 +45,15 @@ data class DialMetrics(
     val wordMaxLines: Int = 2,
     /** Line height ÷ font size of the word's style. */
     val wordLineRatio: Double,
-    /** Font size of the POS/拼音 and gloss lines. */
+    /** Font size of the hint line (音标/拼音/词性) and the gloss lines. */
     val hintFontSizeSp: Double,
     /** Height of one hint line. */
     val hintLineHeightSp: Double,
-    /** Gap between the word and its POS/拼音 line. */
-    val wordPosGapDp: Double,
+    /** Gap between the word and its hint line. */
+    val wordHintGapDp: Double,
     /** Lines the gloss may use before it needs the detail card. */
     val glossMaxLines: Int,
-    /** Gap between the POS/拼音 line and the gloss. */
+    /** Gap between the hint line and the gloss. */
     val glossGapDp: Double,
     /**
      * Narrowest usable content box. Below this a candidate layout is rejected
@@ -328,14 +329,14 @@ private fun textTokens(text: String?): List<Token> {
  * being dictated and a gloss is annotation — and the screen offers the card.
  * Nothing that truncates is ever shown without [DialFit.needsDetail] being true.
  */
-fun dialFit(word: String?, gloss: String?, hasPos: Boolean, metrics: DialMetrics): DialFit {
+fun dialFit(word: String?, gloss: String?, hasHint: Boolean, metrics: DialMetrics): DialFit {
     val glossSteps = if (gloss.isNullOrEmpty()) listOf(0) else metrics.glossMaxLines downTo 0
     var best: DialFit? = null
     var bestScore = 0.0
     var bestWholeWord = false
     for (wordLines in 1..metrics.wordMaxLines) {
         for (glossLines in glossSteps) {
-            val fit = layoutDial(word, gloss, hasPos, wordLines, glossLines, metrics)
+            val fit = layoutDial(word, gloss, hasHint, wordLines, glossLines, metrics)
             if (!fit.needsDetail && fit.contentWidthDp >= metrics.minBoxWidthDp) return fit
             // Nothing is clean, so rank by how much text each layout shows: the
             // dp each text occupies inside its box at the size this layout
@@ -358,13 +359,13 @@ fun dialFit(word: String?, gloss: String?, hasPos: Boolean, metrics: DialMetrics
             }
         }
     }
-    return best ?: layoutDial(word, gloss, hasPos, 1, 0, metrics)
+    return best ?: layoutDial(word, gloss, hasHint, 1, 0, metrics)
 }
 
 private fun layoutDial(
     word: String?,
     gloss: String?,
-    hasPos: Boolean,
+    hasHint: Boolean,
     wordLines: Int,
     glossLines: Int,
     m: DialMetrics,
@@ -373,7 +374,7 @@ private fun layoutDial(
     // Only what is drawn inside the disc counts: 展开全部 lives under the dial,
     // outside the clip, so it costs the content no height (AUDIT C2 — inside
     // the disc it was what pushed the stack past the rim).
-    val tailDp = (if (hasPos) m.wordPosGapDp + hintLineDp else 0.0) +
+    val tailDp = (if (hasHint) m.wordHintGapDp + hintLineDp else 0.0) +
         (if (glossLines > 0) m.glossGapDp + glossLines * hintLineDp else 0.0)
 
     // A bigger word is a taller stack, hence a narrower box, hence a word that

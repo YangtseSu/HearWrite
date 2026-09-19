@@ -35,13 +35,14 @@ data class WrongWordEntity(
 )
 
 /** One user-pasted word list (built-in lists are never persisted — they ship
- *  as assets). `text` keeps the original input for display; `enrichedText`
- *  holds the ECDICT-expanded lines (`word | pos | meaning`) when available. */
+ *  as assets). `text` is the authored list, exactly as the user typed it: the
+ *  词性/释义 (and 音标) are read from the offline lexicon at display time and
+ *  are never written into the row (`docs/2026-09-18-DATA-MODEL.md` §0 — the
+ *  `enriched_text` column this replaced is dropped in v5). */
 @Entity(tableName = "history")
 data class HistoryEntity(
     @PrimaryKey val id: String,
     val text: String,
-    val enrichedText: String?,
     val createdAt: Long,
 )
 
@@ -315,6 +316,23 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+/**
+ * v4 → v5 (data-model Phase 3, `docs/2026-09-18-DATA-MODEL.md` §6): `history`
+ * drops `enriched_text`. The column held ECDICT-expanded lines written back
+ * into the row; nothing writes it any more (the dictionary is resolved at read
+ * time and a row is never rewritten, §0), so it is dead weight that would
+ * otherwise have to be kept in sync with a lookup table it duplicates.
+ *
+ * `DROP COLUMN` needs SQLite ≥ 3.35 (API 33+, which is this app's floor), so no
+ * table rebuild is required: the stored `text` is the authored list and is
+ * untouched.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `history` DROP COLUMN `enrichedText`")
+    }
+}
+
 @Database(
     entities = [
         WrongWordEntity::class,
@@ -322,7 +340,7 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         FavoriteEntity::class,
         SessionEntity::class,
     ],
-    version = 4,
+    version = 5,
     // Schema JSON is exported to app/schemas (ksp arg in app/build.gradle.kts)
     // and committed — the v1 baseline future migrations diff against. When a
     // later version changes entities, bump `version` and add an
@@ -342,7 +360,7 @@ abstract class HearWriteDatabase : RoomDatabase() {
         /** Production builder with the registered migrations. */
         fun create(context: Context): HearWriteDatabase =
             Room.databaseBuilder(context, HearWriteDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
     }
 }

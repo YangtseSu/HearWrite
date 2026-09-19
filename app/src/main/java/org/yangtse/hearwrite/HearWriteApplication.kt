@@ -29,8 +29,8 @@ import org.yangtse.hearwrite.data.TtsChainSpeaker
 import org.yangtse.hearwrite.data.WrongWordLineResolver
 import org.yangtse.hearwrite.data.WrongWordsRepository
 import org.yangtse.hearwrite.data.YoudaoTts
+import org.yangtse.hearwrite.domain.ResolvedWord
 import org.yangtse.hearwrite.domain.WordRow
-import org.yangtse.hearwrite.domain.displayRow
 import org.yangtse.hearwrite.domain.parseWordRows
 
 /**
@@ -150,28 +150,32 @@ class HearWriteApplication : Application() {
      * Restore 错词本 marks to their original word-list rows (Roadmap #7):
      * built-in sources read the asset library, history sources the stored row.
      * Both are **resolved** against the offline lexicon at read time — a mark
-     * keeps its 词性/释义 or 拼音/组词, and 朗读释义 still has something to
-     * speak, without a single dictionary column ever being written into a
-     * row (docs/2026-09-18-DATA-MODEL.md §0).
+     * keeps its 词性/释义 (and 音标) or 拼音/组词, and 朗读释义 still has
+     * something to speak, without a single dictionary column ever being
+     * written into a row (docs/2026-09-18-DATA-MODEL.md §0).
      */
     val wrongWordLineResolver: WrongWordLineResolver by lazy {
         WrongWordLineResolver(
             builtinListRows = { category, label ->
-                resolveForDisplay(libraryRepository.entries(LibraryList(category, label)))
+                resolve(libraryRepository.entries(LibraryList(category, label)))
             },
             historyRows = { id ->
                 historyRepository.all().firstOrNull { it.id == id }
-                    ?.let { resolveForDisplay(parseWordRows(it.text)) }
+                    ?.let { resolve(parseWordRows(it.text)) }
                     .orEmpty()
             },
         )
     }
 
-    /** Rows with their dictionary columns filled, for the surfaces that still
-     *  read `word | pos | gloss` rows (the dial, the display lists, 错词本
-     *  restore). Row columns always win; nothing is persisted back. */
-    private suspend fun resolveForDisplay(rows: List<WordRow>): List<WordRow> =
-        lexiconRepository.resolve(rows).map { it.displayRow() }
+    /**
+     * Rows composed with the offline lexicon (row columns win field by field,
+     * `docs/2026-09-18-DATA-MODEL.md` §1.4) — the single read-time pass behind
+     * every runtime consumer: the dial, the display lists, a staged session,
+     * 错词本 restore. The authored rows are never rewritten; nothing is
+     * persisted back.
+     */
+    private suspend fun resolve(rows: List<WordRow>): List<ResolvedWord> =
+        lexiconRepository.resolve(rows)
 
     /** Favorite entry ids (`default_*` or history ids). */
     val favoritesRepository: FavoritesRepository by lazy {

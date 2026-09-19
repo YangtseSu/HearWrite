@@ -61,7 +61,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
 import org.yangtse.hearwrite.HearWriteApplication
-import org.yangtse.hearwrite.domain.WordRow
+import org.yangtse.hearwrite.domain.ResolvedWord
 
 /**
  * Home (alice layout, Material 3 tokens): a brand header with the OCR
@@ -85,7 +85,7 @@ import org.yangtse.hearwrite.domain.WordRow
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    onStartDictation: (rows: List<WordRow>, sourceLabel: String?) -> Unit,
+    onStartDictation: (rows: List<ResolvedWord>, sourceLabel: String?) -> Unit,
     onOpenLibrary: () -> Unit,
     onOpenLibraryPreview: (category: String, label: String) -> Unit,
     onOpenSettings: () -> Unit,

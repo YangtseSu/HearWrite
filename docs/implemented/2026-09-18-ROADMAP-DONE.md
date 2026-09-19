@@ -1,8 +1,8 @@
 # Roadmap 已完成条目（归档）
 
-**归档日期**：2026-09-18。本文件是从 [`../ROADMAP.md`](../ROADMAP.md) 拆出的**已完成**条目——正文与编号照原样保留（`Roadmap #N` 的引用按编号索引，号段不重排），拆分时只补了这条说明与失效链接，未改写内容。ROADMAP 现在只留未完成项。
+**归档日期**：2026-09-18（**17** 于 2026-09-19 追加）。本文件是从 [`../ROADMAP.md`](../ROADMAP.md) 拆出的**已完成**条目——正文与编号照原样保留（`Roadmap #N` 的引用按编号索引，号段不重排），拆分时只补了这条说明与失效链接，未改写内容。ROADMAP 现在只留未完成项。
 
-**编号索引**：**1** 错词本升级 · **2** 用户词表长期保存 · **3** 听写统计 · **7** 结束页重做本场 / 复习错词带原词行 · **9** 多选词表、抽词听写 · **11** 拍手写答案自动批改（候选池里已落地的条目见文末）。
+**编号索引**：**1** 错词本升级 · **2** 用户词表长期保存 · **3** 听写统计 · **7** 结束页重做本场 / 复习错词带原词行 · **9** 多选词表、抽词听写 · **11** 拍手写答案自动批改 · **17** 数据模型重构（行与词典分离、英文音标）（候选池里已落地的条目见文末）。
 
 ---
 
@@ -33,6 +33,11 @@
 
 ## 11. ✅ 拍手写答案自动批改（照片批改） 🤖
 已实现（2026-09-11）：结束页「拍照批改」→ 批改页 `ui/DictationGradePane.kt`；语言由本场词表判定（`isCjkRun`）；复用 OCR 管线（`OcrImagePicker` + `OcrCropOverlay` + `recognizeAnswers`），仍是四个出网点；批改提示语"抄学生的字不纠正"（`answerPrompt(lang)`）；比对为纯 domain `domain/AnswerGrading.kt`（题号优先 → NW 序列比对 → 顺序不符兜底；正确/错词/漏答/多余作答，近似拼写标存疑）；**必须人工确认才入库**（`confirmGrade`）。**差异**：成绩不计入 sessions；不做多列版面分析。验收：单测 327 绿、模拟器走查（假服务注入）。详见 commit。
+
+---
+
+## 17. ✅ 数据模型重构（行与词典分离、英文音标） 🤖
+已实现（Phase 1–2 于 2026-09-18、Phase 3 于 2026-09-19；设计与实测见 [`../2026-09-18-DATA-MODEL.md`](../2026-09-18-DATA-MODEL.md)）：①**行模型**（Phase 1）`WordRow(display, speak, kind, pos?, gloss?)` + `kindOf`，`enrichLines`/`speakTextFromEntry` 一类启发式切分整体消失；②**词典资产**（Phase 2）`dict/lexicon-en.json`（53,384 条：ECDICT 义项结构化为 `senses` + 音标 `i:[us,uk]`，仁爱教材优先于 ipa-dict）与 `dict/lexicon-hanzi.json`（5,079 字），生成器 `build-lexicon.py` / `build-hanzi-lexicon.py` + 随仓库提交的 `scripts/data/renai-ipa.tsv`（1,476 行 / 1,470 词头，提取器同仓）；③**管线切换**（Phase 3）`ResolvedWord` 成为唯一运行时类型（会话暂存、播放引擎、`AnswerGrading`、错词本 resolver、首页/词库预览/抽词预览三处展示面），`displayRow()` 展平器删除，Room v5 删掉 `history.enrichedText`，展示文案统一由 `domain/WordDisplay.kt` 给出（拨盘 = 美式音标 + 词性合成一行；列表行与详情卡 = 英/美并列，缺音标不出占位符）。验收：`check-assets.py` 651 表 / 21,769 行 0 error；421 单测 + 9 项真机 Room 迁移测试全绿；真机走查（仁爱行显示教材音标 `/let/`、中考1600 行显示 ipa-dict 记号、拨盘 `/let/ v.`、长释义走详情卡英美并列）；真机体积/堆/解析实测见该 commit 正文。**与规划的差异**：行内音标「4/5 列」草案被 §2.1/§3.3 否决（音标属于词而非词表行，永不写进 `.txt`）；仁爱 IPA 实际 1,470 词头（规划写 1,447）；`LexiconRepository.resolve` 直接产出 `ResolvedWord` 而非 `LexEntry`；词典常驻堆 Phase 2 实测 +13 MB（§4 估的 +4 MB 被推翻），Phase 3 英文行的 `senses` 常驻再 +0.7 MB / 743 行。
 
 ---
 

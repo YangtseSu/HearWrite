@@ -8,12 +8,13 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * Locks the dedupe arms of [HistoryRepository.add] — pure Kotlin logic over
- * the DAO seam: a re-run of a stored row (plain text, effective text, or the
- * enriched text itself) bumps the row instead of inserting a duplicate that
- * would crowd the 50-row cap. The SQL favorited-row exemptions in
- * `HistoryDao` are NOT unit-testable this way (a mirroring fake proves
- * nothing); they are locked on real SQLite in the instrumentation test
+ * Locks [HistoryRepository.add]'s dedupe over the DAO seam: a re-run of a
+ * stored list bumps the row instead of inserting a duplicate that would crowd
+ * the 50-row cap. The stored text is the authored list, so the key is the
+ * text itself — nothing else is persisted (`docs/2026-09-18-DATA-MODEL.md` §0,
+ * the `enriched_text` column was dropped in Room v5). The SQL favorited-row
+ * exemptions in `HistoryDao` are NOT unit-testable this way (a mirroring fake
+ * proves nothing); they are locked on real SQLite in the instrumentation test
  * `HistoryFavoritesTrimTest` (app/src/androidTest, Roadmap #2 验收).
  */
 class HistoryRepositoryTest {
@@ -21,8 +22,8 @@ class HistoryRepositoryTest {
     private class FakeHistoryDao : HistoryDao() {
         private val rows = MutableStateFlow<List<HistoryEntity>>(emptyList())
 
-        fun seed(text: String, enriched: String?, created: Long, id: String) {
-            rows.value = rows.value + HistoryEntity(id, text, enriched, created)
+        fun seed(text: String, created: Long, id: String) {
+            rows.value = rows.value + HistoryEntity(id, text, created)
         }
 
         override fun observeAll(): Flow<List<HistoryEntity>> = rows
@@ -83,32 +84,41 @@ class HistoryRepositoryTest {
     }
 
     private val plain = "apple\npear\nplum"
-    private val enriched = "apple | n. | 苹果\npear | n. | 梨\nplum | n. | 李子"
 
     @Test
-    fun `re-dictating a stored enriched row bumps instead of duplicating`() = runTest {
+    fun `re-dictating a stored list bumps instead of duplicating`() = runTest {
         val (r, dao, _) = repo()
-        dao.seed(plain, enriched, 1L, "r0")
-        // The library preview / history rows hand the enriched text to the
-        // draft, so the submission IS the enriched text and effective == null.
-        val id = r.add(enriched, null)
+        dao.seed(plain, 1L, "r0")
+        val id = r.add(plain)
         assertEquals(1, dao.all().size)
         assertEquals("r0", id) // the stored row's id is returned (source key)
     }
 
     @Test
-    fun `re-dictating the plain text of an enriched row bumps instead of duplicating`() = runTest {
+    fun `a padded paste is the same list, not a second row`() = runTest {
         val (r, dao, _) = repo()
-        dao.seed(plain, enriched, 1L, "r0")
-        r.add(plain, enriched) // effective == enrichedText of the stored row
+        dao.seed(plain, 1L, "r0")
+        r.add(plain)
         assertEquals(1, dao.all().size)
+        // The dedupe compares the trimmed input, so a phone keyboard's extra
+        // whitespace lines are the same list.
+        r.add("\n$plain\n")
+        assertEquals(1, dao.all().size)
+        assertEquals("r0", dao.all().single().id)
+    }
+
+    @Test
+    fun `the row is stored as authored, with no looked-up column`() = runTest {
+        val (r, dao, _) = repo()
+        val id = r.add("apple | n. | 苹果\nbanana")
+        assertEquals("apple | n. | 苹果\nbanana", dao.all().single { it.id == id }.text)
     }
 
     @Test
     fun `distinct content inserts a new row`() = runTest {
         val (r, dao, _) = repo()
-        dao.seed(plain, enriched, 1L, "r0")
-        val id = r.add("kiwi\nmango", null)
+        dao.seed(plain, 1L, "r0")
+        val id = r.add("kiwi\nmango")
         assertEquals(2, dao.all().size)
         assertEquals(id, dao.all().first { it.text == "kiwi\nmango" }.id)
     }
@@ -116,7 +126,7 @@ class HistoryRepositoryTest {
     @Test
     fun `blank input returns null and records nothing`() = runTest {
         val (r, dao, _) = repo()
-        val id = r.add("   ", null)
+        val id = r.add("   ")
         assertNull(id)
         assertEquals(0, dao.all().size)
     }
@@ -124,7 +134,7 @@ class HistoryRepositoryTest {
     @Test
     fun `restore re-inserts the same row and its favorite star`() = runTest {
         val (r, dao, favorites) = repo()
-        dao.seed(plain, enriched, 1L, "r0")
+        dao.seed(plain, 1L, "r0")
         favorites.insert(FavoriteEntity("r0"))
         val entry = r.all().single()
 
@@ -141,10 +151,10 @@ class HistoryRepositoryTest {
     @Test
     fun `restore without a favorite leaves the star off`() = runTest {
         val (r, dao, favorites) = repo()
-        dao.seed(plain, enriched, 1L, "r0")
+        dao.seed(plain, 1L, "r0")
         val entry = r.all().single()
-        r.delete("r0")
 
+        r.delete("r0")
         r.restore(entry, wasFavorited = false)
 
         assertEquals(listOf("r0"), dao.all().map { it.id })

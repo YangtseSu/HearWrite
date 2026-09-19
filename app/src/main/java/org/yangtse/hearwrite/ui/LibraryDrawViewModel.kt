@@ -11,11 +11,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.data.LibraryList
-import org.yangtse.hearwrite.domain.dedupeByHeadword
+import org.yangtse.hearwrite.domain.ResolvedWord
 import org.yangtse.hearwrite.domain.WordRow
-import org.yangtse.hearwrite.domain.displayRow
+import org.yangtse.hearwrite.domain.dedupeByHeadword
 import org.yangtse.hearwrite.domain.multiSourceLabel
 import org.yangtse.hearwrite.domain.parseBuiltinListId
+import org.yangtse.hearwrite.domain.resolveWord
 import org.yangtse.hearwrite.domain.sampleWords
 
 /** One ticked list of a 抽词听写 pool, with its loaded 词数. */
@@ -39,7 +40,7 @@ data class DrawPoolState(
 )
 
 /** A startable draw: the sampled rows plus the run's provenance label. */
-data class DrawSession(val rows: List<WordRow>, val sourceLabel: String)
+data class DrawSession(val rows: List<ResolvedWord>, val sourceLabel: String)
 
 /**
  * 抽词听写 (Roadmap #9): the 多选词表 selection is loaded as one candidate pool
@@ -63,9 +64,9 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
     /** Requested draw size X, clamped against the pool on every use. */
     val count: StateFlow<Int> = _count.asStateFlow()
 
-    /** The assembled candidate rows (enriched), kept for [prepareSession]. */
+    /** The assembled candidate rows (resolved), kept for [prepareSession]. */
     @Volatile
-    private var candidates: List<WordRow> = emptyList()
+    private var candidates: List<ResolvedWord> = emptyList()
 
     /** Serializes starts; claimed before the first suspension (AGENTS.md
      *  re-entry guard) so a double tap cannot stage two sessions. */
@@ -80,14 +81,14 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
      */
     private var previewCount = 0
 
-    private val _preview = MutableStateFlow<List<WordRow>>(emptyList())
+    private val _preview = MutableStateFlow<List<ResolvedWord>>(emptyList())
 
     /**
      * The current draw, for the 逐词预览 block (Roadmap #9 left it out). Drawn
      * once and kept: the run reuses exactly this list, so what the page shows
      * is what gets dictated.
      */
-    val preview: StateFlow<List<WordRow>> = _preview.asStateFlow()
+    val preview: StateFlow<List<ResolvedWord>> = _preview.asStateFlow()
 
     /**
      * Make sure a draw of the currently requested size exists — sampled on
@@ -152,15 +153,15 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
             }
             val deduped = dedupeByHeadword(raw)
             merged = raw.size - deduped.size
-            // Same dictionary pass as the list preview: the 词性/释义 (and
+            // Same dictionary pass as the list preview: the 音标/词性/释义 (and
             // 拼音/组词) ride into the dictation, or an English draw would
             // dictate bare words with no hints and no 朗读释义. The pool rows
             // stay as authored — the lookup is read-time (§0).
             val resolved = try {
-                lexiconRepository.resolve(deduped).map { it.displayRow() }
+                lexiconRepository.resolve(deduped)
             } catch (e: Exception) {
                 Log.w("LibraryDrawViewModel", "pool resolve failed", e)
-                deduped
+                deduped.map { resolveWord(it, entry = null, hanzi = null) }
             }
             candidates = resolved
             _count.value = resolved.size

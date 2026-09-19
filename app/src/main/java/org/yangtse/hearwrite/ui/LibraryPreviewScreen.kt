@@ -51,10 +51,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import org.yangtse.hearwrite.domain.ResolvedWord
 import org.yangtse.hearwrite.domain.WordKind
-import org.yangtse.hearwrite.domain.WordRow
 import org.yangtse.hearwrite.domain.glossNeedsExpansion
-import org.yangtse.hearwrite.domain.rowToLine
+import org.yangtse.hearwrite.domain.glossText
+import org.yangtse.hearwrite.domain.listMeta
 import org.yangtse.hearwrite.ui.theme.wordHead
 
 /**
@@ -71,7 +72,7 @@ import org.yangtse.hearwrite.ui.theme.wordHead
 fun LibraryPreviewScreen(
     onBack: () -> Unit,
     onLoadToDraft: (List<String>) -> Unit,
-    onStartDictation: (List<WordRow>) -> Unit,
+    onStartDictation: (List<ResolvedWord>) -> Unit,
     viewModel: LibraryPreviewViewModel = viewModel(),
 ) {
     val entries by viewModel.entries.collectAsState()
@@ -191,7 +192,7 @@ fun LibraryPreviewScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         OutlinedButton(onClick = {
-                            onLoadToDraft(current.map(::rowToLine))
+                            onLoadToDraft(viewModel.draftLines())
                             // Names the destination: this no longer navigates
                             // away, so the message is the only thing that
                             // tells the user where the list went.
@@ -274,7 +275,7 @@ fun LibraryPreviewScreen(
                                 onToggleExpand = {
                                     // Non-expandable rows (short single-sense glosses)
                                     // only select the 起始词 — same gate as Home.
-                                    if (glossNeedsExpansion(entry.gloss)) {
+                                    if (glossNeedsExpansion(entry.glossText())) {
                                         expanded = if (index in expanded) {
                                             expanded - index
                                         } else {
@@ -294,7 +295,7 @@ fun LibraryPreviewScreen(
 
 @Composable
 private fun EntryRow(
-    entry: WordRow,
+    entry: ResolvedWord,
     index: Int,
     selected: Boolean,
     expanded: Boolean,
@@ -302,8 +303,9 @@ private fun EntryRow(
     onToggleExpand: () -> Unit,
 ) {
     // Same anatomy as Home's 展示态 rows: word over a single meta line
-    // (`pos meaning`), 2-line clamp with expansion for long glosses.
-    val meta = listOfNotNull(entry.pos, entry.gloss).joinToString(" ")
+    // (`英 /…/ · 美 /…/ · 词性 · 释义`), 2-line clamp with expansion for long
+    // glosses.
+    val meta = entry.listMeta().orEmpty()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -376,9 +378,9 @@ private fun EntryRow(
                     modifier = Modifier.padding(top = 2.dp),
                 )
             } else if (entry.kind == WordKind.EN) {
-                // English headwords without ECDICT meta yet — a placeholder
-                // keeps the row height stable while the offline enrichment
-                // fills in (Chinese bare words are spoken as-is, no meta).
+                // English headwords with no dictionary row: a placeholder keeps
+                // the row height stable (Chinese bare words are spoken as-is,
+                // no meta).
                 Text(
                     "——",
                     style = MaterialTheme.typography.bodySmall,

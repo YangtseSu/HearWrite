@@ -12,7 +12,7 @@ import org.junit.Test
  */
 class StartLinesTest {
 
-    private fun rows(vararg words: String): List<WordRow> = words.map(::wordRowOf)
+    private fun rows(vararg words: String): List<ResolvedWord> = words.map(::bareResolvedWord)
 
     @Test
     fun `no shuffle keeps the tail from the start index`() {
@@ -45,13 +45,13 @@ class StartLinesTest {
 
     @Test
     fun `empty list yields an empty session`() {
-        assertEquals(emptyList<WordRow>(), prepareStartRows(emptyList(), 0, shuffle = false))
-        assertEquals(emptyList<WordRow>(), prepareStartRows(emptyList(), 4, shuffle = true))
+        assertEquals(emptyList<ResolvedWord>(), prepareStartRows(emptyList(), 0, shuffle = false))
+        assertEquals(emptyList<ResolvedWord>(), prepareStartRows(emptyList(), 4, shuffle = true))
     }
 
     @Test
     fun `shuffle is a permutation of the sliced tail`() {
-        val pool = (1..20).map { wordRowOf("w$it") }
+        val pool = (1..20).map { bareResolvedWord("w$it") }
         val shuffled = prepareStartRows(pool, 5, shuffle = true)
         val tail = pool.drop(5)
         // Same words, same count — the engine plays every drawn word exactly once.
@@ -69,6 +69,6 @@ class StartLinesTest {
         val pool = rows("a", "b", "c").toMutableList()
         prepareStartRows(pool, 1, shuffle = true)
         assertEquals(rows("a", "b", "c"), pool)
-        assertTrue(pool is MutableList<WordRow>)
+        assertTrue(pool is MutableList<ResolvedWord>)
     }
 }

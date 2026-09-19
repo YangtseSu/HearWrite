@@ -102,12 +102,16 @@ import org.yangtse.hearwrite.domain.DialStageLayout
 import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.PlayState
+import org.yangtse.hearwrite.domain.ResolvedWord
 import org.yangtse.hearwrite.domain.WordKind
-import org.yangtse.hearwrite.domain.WordRow
 import org.yangtse.hearwrite.domain.dialFit
 import org.yangtse.hearwrite.domain.dialHiddenStack
+import org.yangtse.hearwrite.domain.dialHint
 import org.yangtse.hearwrite.domain.dialStageGeometry
 import org.yangtse.hearwrite.domain.displayWidth
+import org.yangtse.hearwrite.domain.glossText
+import org.yangtse.hearwrite.domain.ipaLabels
+import org.yangtse.hearwrite.domain.mainPos
 import kotlin.math.ceil
 
 /**
@@ -127,7 +131,7 @@ private fun dialMetrics(discDp: Double, fontScale: Double) = DialMetrics(
     wordLineRatio = 52.0 / 40.0, // displayMedium's leading ÷ its size
     hintFontSizeSp = 15.0, // bodyMedium
     hintLineHeightSp = 24.0,
-    wordPosGapDp = 6.0,
+    wordHintGapDp = 6.0,
     glossMaxLines = 2,
     glossGapDp = 2.0,
     fontScale = fontScale,
@@ -362,7 +366,7 @@ private fun StatusPill(ui: DictationUiState) {
 @Composable
 private fun DictationContent(
     ui: DictationUiState,
-    runRows: List<WordRow>,
+    runRows: List<ResolvedWord>,
     viewModel: DictationViewModel,
     showWord: Boolean,
     onToggleWord: () -> Unit,
@@ -853,7 +857,7 @@ private fun FinishCard(
 @Composable
 private fun DictationStage(
     ui: DictationUiState,
-    row: WordRow?,
+    row: ResolvedWord?,
     showWord: Boolean,
     marked: Boolean,
     onToggleWord: () -> Unit,
@@ -911,7 +915,7 @@ private fun DictationStage(
             dialMetrics(geometry.discDp, fontScale)
         }
         val needsDetail = showWord && row != null &&
-            dialFit(row.display, row.gloss, row.pos != null, metrics).needsDetail
+            dialFit(row.display, row.glossText(), row.dialHint() != null, metrics).needsDetail
 
         val dial: @Composable () -> Unit = {
             DialRing(
@@ -1121,7 +1125,7 @@ private val DIAL_STAGE_BESIDE_GAP = 16.dp
 @Composable
 private fun DialRing(
     ui: DictationUiState,
-    row: WordRow?,
+    row: ResolvedWord?,
     isCjk: Boolean,
     showWord: Boolean,
     ringDp: Dp,
@@ -1199,7 +1203,7 @@ private fun DialRing(
  */
 @Composable
 private fun DialCenter(
-    row: WordRow?,
+    row: ResolvedWord?,
     isCjk: Boolean,
     markedFlash: Boolean,
     showWord: Boolean,
@@ -1211,15 +1215,21 @@ private fun DialCenter(
         label = "markFlash",
     )
     // The vermilion marks Chinese-script identity only (Color.kt): a Chinese
-    // single char's `pos` line is its pinyin and its `gloss` line is the
-    // 组词, so both carry the accent; an English entry's POS/释义 stay
+    // single char's hint line is its pinyin and its gloss line the 组词, so both
+    // carry the accent; an English entry's `/音标/ 词性` hint and 释义 stay
     // onSurfaceVariant — the accent is never a part-of-speech label.
     val hintColor = if (isCjk) {
         hearWriteSemantics.cjkAccent
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
-    val fit = dialFit(row?.display, row?.gloss, row?.pos != null, metrics)
+    // One hint line carries both the 美式 音标 and the 词性 (`/ˈæpəl/ n.`): a
+    // 音标 line of its own would cost the disc a fourth row and force a two-line
+    // word down to ~25 sp (docs/2026-09-18-DATA-MODEL.md §4.1). The solver only
+    // needs to know a hint line is there, not what it says.
+    val hint = row?.dialHint()
+    val gloss = row?.glossText()
+    val fit = dialFit(row?.display, gloss, hint != null, metrics)
     val stateText = if (playing) "听写中" else "已暂停"
 
     Surface(
@@ -1261,19 +1271,19 @@ private fun DialCenter(
                         maxLines = fit.wordLines,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    row.pos?.let { pos ->
+                    if (hint != null) {
                         Text(
-                            pos,
+                            hint,
                             style = MaterialTheme.typography.bodyMedium,
                             color = hintColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(top = metrics.wordPosGapDp.dp),
+                            modifier = Modifier.padding(top = metrics.wordHintGapDp.dp),
                         )
                     }
-                    if (!row.gloss.isNullOrEmpty() && fit.glossLines > 0) {
+                    if (!gloss.isNullOrEmpty() && fit.glossLines > 0) {
                         Text(
-                            row.gloss,
+                            gloss,
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
                             maxLines = fit.glossLines,
@@ -1369,7 +1379,7 @@ private const val DIAL_STATE_LINE_SP = 24.0
  */
 @Composable
 private fun DialDetailDialog(
-    row: WordRow,
+    row: ResolvedWord,
     isCjk: Boolean,
     onDismiss: () -> Unit,
 ) {
@@ -1378,6 +1388,12 @@ private fun DialDetailDialog(
     } else {
         MaterialTheme.colorScheme.onSurfaceVariant
     }
+    // The card is where a 音标 the dial could not fit still gets read: both
+    // accents on one line of their own (`英 /let/ · 美 /let/`), labelled — the
+    // dial shows 美式 alone because it has one line to spend
+    // (docs/2026-09-18-DATA-MODEL.md §4.2). A missing accent is simply absent.
+    val ipaLine = ipaLabels(row.ipa)
+    val gloss = row.glossText()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -1388,16 +1404,24 @@ private fun DialDetailDialog(
         },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                row.pos?.let { pos ->
+                if (ipaLine != null) {
                     Text(
-                        pos,
+                        ipaLine,
                         style = MaterialTheme.typography.bodyMedium,
                         color = hintColor,
                     )
                 }
-                if (!row.gloss.isNullOrEmpty()) {
+                row.mainPos?.let { pos ->
                     Text(
-                        row.gloss,
+                        pos,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = hintColor,
+                        modifier = Modifier.padding(top = if (ipaLine != null) 6.dp else 0.dp),
+                    )
+                }
+                if (!gloss.isNullOrEmpty()) {
+                    Text(
+                        gloss,
                         style = MaterialTheme.typography.bodyLarge,
                         color = hintColor,
                         modifier = Modifier.padding(top = 6.dp),
