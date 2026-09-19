@@ -180,6 +180,52 @@ class LexiconRepositoryTest {
         assertTrue(runCatching { repo.resolve(parseWordLine("apple")) }.isFailure)
     }
 
+    // ---------------------------------------------------------- warm-up
+
+    @Test
+    fun `warming the english table moves the parse off the first lookup`() = runTest {
+        // The app warms the dictionary while the user is still picking a list,
+        // so the lookup that would have paid the parse finds the table ready.
+        // Pinned here as "the asset is read once, by the warm-up": a second
+        // read would mean the first lookup paid the parse again.
+        val reads = mutableListOf<String>()
+        val repo = LexiconRepository { path ->
+            reads += path
+            when {
+                path.endsWith("lexicon-en.json") -> english.byteInputStream()
+                else -> throw FileNotFoundException(path)
+            }
+        }
+
+        repo.warmEnglish()
+        assertEquals(listOf("dict/lexicon-en.json"), reads)
+
+        assertEquals(listOf(Sense("n.", "苹果")), repo.resolve(parseWordLine("apple")).senses)
+        assertEquals(listOf("dict/lexicon-en.json"), reads) // served from memory
+    }
+
+    @Test
+    fun `warming never reads the hanzi asset`() = runTest {
+        // The warm-up targets the English dictionary alone: a reader that only
+        // ever meets Chinese must not pay for 6.6 MB of it, and the reverse
+        // holds too — warming must not touch the 汉字 table.
+        val reads = mutableListOf<String>()
+        val repo = LexiconRepository { path ->
+            reads += path
+            when {
+                path.endsWith("lexicon-en.json") -> english.byteInputStream()
+                path.endsWith("lexicon-hanzi.json") -> hanzi.byteInputStream()
+                else -> throw FileNotFoundException(path)
+            }
+        }
+
+        repo.warmEnglish()
+        assertEquals(listOf("dict/lexicon-en.json"), reads)
+
+        assertEquals("yuè", repo.resolve(parseWordLine("月")).pinyin)
+        assertEquals(listOf("dict/lexicon-en.json", "dict/lexicon-hanzi.json"), reads)
+    }
+
     // ------------------------------------------------- shipped assets (JVM)
 
     @Test

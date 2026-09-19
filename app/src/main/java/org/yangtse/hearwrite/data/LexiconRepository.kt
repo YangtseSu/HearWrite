@@ -84,6 +84,24 @@ class LexiconRepository(private val readAssetStream: (String) -> InputStream) {
     private fun parseHanzi(): Map<String, HanziEntry> =
         readAssetStream(HANZI_PATH).use { JSON.decodeFromStream<HanziLexicon>(it).entries }
 
+    /**
+     * Parse the English table **now**, off the caller's thread, so the first
+     * English lookup does not pay the parse: measured on a device, the first
+     * `lexicon-en.json` decode costs ~745 ms and retains ~13 MB, and it is paid
+     * today at the moment a user opens their first English list.
+     *
+     * This does not change *whether* the 6.6 MB asset is parsed — only when. A
+     * caller that cannot know whether English is coming must not call it (the
+     * asset's whole point is that a Chinese-only list never pays for it,
+     * AGENTS.md "Lexicon asset loading"); [org.yangtse.hearwrite.ui.LibraryListsViewModel]
+     * calls it once a browsed category has been seen to hold English words.
+     *
+     * Concurrent with a real lookup this is a no-op: both paths funnel through
+     * [englishTable]'s single-flight guard, so the waiting side simply gets the
+     * table when the parse finishes instead of starting a second one.
+     */
+    suspend fun warmEnglish() = withContext(Dispatchers.IO) { englishTable() }
+
     // ------------------------------------------------------------- lookup
 
     /**

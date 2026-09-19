@@ -1,13 +1,18 @@
 package org.yangtse.hearwrite
 
 import android.app.Application
+import android.util.Log
 import androidx.room.Room
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 import org.yangtse.hearwrite.data.BuiltinLibraryRepository
 import org.yangtse.hearwrite.data.CompoundRepository
 import org.yangtse.hearwrite.data.DictationSessionStore
@@ -177,6 +182,40 @@ class HearWriteApplication : Application() {
     private suspend fun resolve(rows: List<WordRow>): List<ResolvedWord> =
         lexiconRepository.resolve(rows)
 
+    private val englishLexiconWarmed = AtomicBoolean(false)
+
+    /**
+     * Warm the English dictionary ahead of the lookup that would otherwise pay
+     * for it: the first `lexicon-en.json` decode costs ~745 ms on a device
+     * (measured) and lands today at the moment a user opens their first English
+     * list. Fire-and-forget on the application scope — never the startup path,
+     * and never a screen waiting on it.
+     *
+     * Called only when English is actually coming (a browsed library category
+     * was seen to hold English words, `LibraryListsViewModel`): the dictionary
+     * being *lazy* is a design constraint, not an implementation detail — a
+     * Chinese-only list must not parse it (AGENTS.md "Lexicon asset loading").
+     * Once per process: a second caller has nothing left to warm.
+     */
+    fun warmEnglishLexicon() {
+        if (!englishLexiconWarmed.compareAndSet(false, true)) return
+        applicationScope.launch {
+            // Let the screen that asked settle first: the parse is 745 ms of
+            // CPU on a background thread, and it must not compete with the
+            // first frames of the category the user just opened.
+            delay(LEXICON_WARM_DELAY_MS)
+            try {
+                lexiconRepository.warmEnglish()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A warm-up that fails only means the next lookup parses as it
+                // always did; nothing to surface.
+                Log.w(TAG, "English lexicon warm-up failed", e)
+            }
+        }
+    }
+
     /** Favorite entry ids (`default_*` or history ids). */
     val favoritesRepository: FavoritesRepository by lazy {
         FavoritesRepository(database.favoritesDao())
@@ -191,5 +230,17 @@ class HearWriteApplication : Application() {
      *  lookup, never on the startup path. */
     val lexiconRepository: LexiconRepository by lazy {
         LexiconRepository { path -> assets.open(path) }
+    }
+
+    private companion object {
+        const val TAG = "HearWriteApplication"
+
+        /**
+         * How long a warm-up waits before parsing. Long enough for the category
+         * the user just opened to draw its first frames (a device opens a
+         * category ~4 s before tapping a list — measured), short enough that
+         * the ~745 ms parse still lands before that tap.
+         */
+        const val LEXICON_WARM_DELAY_MS = 400L
     }
 }

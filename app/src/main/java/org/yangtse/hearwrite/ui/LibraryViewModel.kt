@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,9 +26,11 @@ import org.yangtse.hearwrite.data.LibraryList
 import org.yangtse.hearwrite.data.LibrarySearchResult
 import org.yangtse.hearwrite.domain.ResolvedWord
 import org.yangtse.hearwrite.domain.WordRow
+import org.yangtse.hearwrite.domain.isCjkRun
 import org.yangtse.hearwrite.domain.prepareStartRows
 import org.yangtse.hearwrite.domain.resolveWord
 import org.yangtse.hearwrite.domain.rowToLine
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Search UI state: idle (no query), loading, or the finished result. */
 sealed interface LibrarySearchState {
@@ -93,6 +96,34 @@ class LibraryListsViewModel(
     /** Favorited entry ids of this screen (stars on list rows). */
     val favoriteIds: StateFlow<Set<String>> = _favoriteIds.asStateFlow()
 
+    /**
+     * Once-per-process guard for the lexicon probe: the warm-up it triggers is
+     * idempotent, this only stops a 230-list category from asking 230 times.
+     */
+    private val lexiconProbeDone = AtomicBoolean(false)
+
+    /**
+     * Whether this category needs the English dictionary — asked of rows
+     * [BuiltinLibraryRepository.wordCount] has **already parsed and cached**, so
+     * the answer costs no extra read. An English category warms the table while
+     * the user is still picking a list (a device spends ~4 s here, against a
+     * ~745 ms parse); a Chinese-only one (课标 字表, 语文 读读写写) never warms
+     * it — the dictionary staying lazy for such a list is a design constraint,
+     * not an implementation detail (AGENTS.md "Lexicon asset loading").
+     */
+    private suspend fun warmLexiconIfEnglish(list: LibraryList) {
+        if (lexiconProbeDone.get()) return
+        val rows = try {
+            repository.entries(list)
+        } catch (e: Exception) {
+            // The probe is an optimisation; an unreadable list just skips it.
+            return
+        }
+        if (!isCjkRun(rows) && lexiconProbeDone.compareAndSet(false, true)) {
+            app.warmEnglishLexicon()
+        }
+    }
+
     init {
         viewModelScope.launch {
             val loaded = repository.lists(category)
@@ -106,11 +137,17 @@ class LibraryListsViewModel(
                     try {
                         val count = repository.wordCount(list)
                         _wordCounts.update { it + (list.id to count) }
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         // 词数 is decoration — a failed count leaves the row
                         // without a subtitle; log so asset problems surface.
                         Log.w("LibraryListsViewModel", "wordCount failed for ${list.id}", e)
+                        return@launch
                     }
+                    // wordCount parsed — and cached — this list's rows, so the
+                    // language probe below costs no extra read.
+                    warmLexiconIfEnglish(list)
                 }
             }
         }

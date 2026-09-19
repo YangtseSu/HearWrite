@@ -192,6 +192,8 @@ data class ResolvedWord(
 
 +4 MB 堆是 `List<Sense>` 替代扁平串的代价。可接受，不需要数据库（AGENTS.md 的 500 ms 迁库阈值差一个数量级）。
 
+**后续（2026-09-19，Phase 3 之后，真机实测）**：首次英文解析的 ~745 ms 已从"用户打开第一份英文词表时"前移到"浏览到英文分类页时"——`LibraryListsViewModel` 复用 `wordCount` 已解析并缓存的 rows 判语言（`isCjkRun`，零额外 IO），英文分类触发 `warmEnglishLexicon()`（`applicationScope` + 400 ms 延迟 + 进程内单飞，与真实查找共用同一守卫），中文分类不触发。真机（API 37 / 1080×2400 / debug）实测：英文分类的 heap 解析窗口出现在分类页打开后 0.1–1.9 s（分类页打开 t=14.6 s → 预热窗口 14.7–16.5 s → 点列表 t=19.4 s 时已就绪，无跳变）；中文分类全程 Java heap 14–16 MB、无窗口；冷启动中位 647 ms（预热不在启动路径上）。**资产、schema、CI 契约零改动**——这正是"收益面只是一次后台解析、代价是 APK/设备存储 + 生成器与查询复杂度"的具体形状，也是本轮仍不迁预置 SQLite 的直接理由。
+
 **字体不是风险**：实际会用到的 52 个 IPA 字符，设备上 Roboto 全部覆盖（`Roboto-Regular.ttf` / `RobotoStatic-Regular.ttf` 缺失 0 个）。
 
 ### 4.1 拨盘显示
