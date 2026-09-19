@@ -185,7 +185,7 @@
 - `docs/WORDLIST.md` — 词库数据契约与贡献指南（格式、命名、校验、授权、导入流程）。
 - `scripts/check-assets.py` — 全库质检（结构错误退出码 1；`*`/省略号类词头等给 warning），已接入 CI，先于 Gradle 步骤执行。当前 651 表 / 21769 行 0 error。
 - `scripts/import-wordlist.py` — 外部来源（粘贴/OCR/表格导出）规范化工具：只做无歧义修复，拒绝覆盖已有词表，输出问题清单。
-- `dict/hanzi-meta.json`（`scripts/build-hanzi-meta.py`，5079 字；`scripts/data/hanzi-meta-overrides.tsv` 存人工例外）+ `DictionaryRepository` 的 CJK 补全路由 —— **裸汉字现在有拼音与组词**（无从取组词的字只补读音，行写成两列 `字 | 拼音`），拍照识词得到的生字表不再是一排没有提示的字；内置语文词表的录入成本从"字+拼音+组词"降到"字"。课标 3500 字**全部**有读音（`DataFixtureTest` 锁定）。
+- `dict/lexicon-hanzi.json`（`scripts/build-hanzi-lexicon.py`，5079 字；`scripts/data/hanzi-meta-overrides.tsv` 存人工例外）+ `LexiconRepository` 的 CJK 路由 —— **裸汉字现在有拼音与组词**（无从取组词的字只补读音），拍照识词得到的生字表不再是一排没有提示的字；内置语文词表的录入成本从"字+拼音+组词"降到"字"。课标 3500 字**全部**有读音（`DataFixtureTest` 锁定）。2026-09-19 起词表行与词典彻底分离（`docs/2026-09-18-DATA-MODEL.md`），补全只在读取时发生，行永不被改写。
 - **仁爱版初中 七上/七下/八上**入库（2026-09-15）：`七上` Unit 1–6 + `七下` Unit 7–12 + `八上` Unit 1–6，共 72 份词表 / 1545 行。来源是教材词汇表页的 OCR（14/11/13 页），公众号引流行、音标与页码全部剔除，词性/释义按教材原文逐条保留（一个词有多个词性时，主导词性进第 2 列，其余义项在第 3 列内联标注，与 ECDICT 生成的词表同一写法）。每单元的 Preparing/Exploring/Developing/Wrapping Up 四节各成一份词表，标签取 `导入 / 探究 / 拓展 / 小结`——拼音顺序恰好就是教材顺序，比较器无需改动。
 - 新增公共语料分类 **义务教育语文课程标准**：附录4 基本字表 300、附录5 常用字表 表一 2500 / 表二 1000（影印件 OCR + 独立转录逐字校验，记录见 `docs/WORDLIST.md` §7）。
 

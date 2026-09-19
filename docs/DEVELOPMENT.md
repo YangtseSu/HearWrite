@@ -90,7 +90,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | `./gradlew :app:lintDebug` | Android lint |
 | `./gradlew :app:assembleRelease` | 构建签名 Release APK（见下节） |
 | `python3 scripts/generate-compounds.py` | 重新生成 `compounds/compounds.json`（输入：`scripts/data/` 频率表 + `app/src/main/assets/人教版小学语文/`） |
-| `python3 scripts/build-ecdict-meta.py` | 重新生成 `dict/ecdict-meta.json`（首次自动下载 ECDICT csv 到 `.cache/`） |
+| `python3 scripts/build-lexicon.py` | 重新生成 `dict/lexicon-en.json`（首次自动下载 ECDICT csv 与 ipa-dict 到 `.cache/`；仁爱音标读 `scripts/data/renai-ipa.tsv`） |
+| `python3 scripts/build-hanzi-lexicon.py` | 重新生成 `dict/lexicon-hanzi.json`（输入：词表汉字行 + `scripts/data/` 频率表与人工 override） |
 
 ## 3. 仓库结构
 
@@ -98,7 +99,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | --- | --- |
 | `app/` | Android 应用（单一 `:app` 模块：`ui/` Compose 界面、`domain/` 纯 Kotlin 逻辑、`data/` 仓库与网络）；词表与内置资源本体在 `app/src/main/assets/`（原样打包，**只读**，禁止手工重新生成） |
 | `docs/` | 本指南、README 截图（按需）；图标设计源 `hearwrite.svg`（自适应图标各层由它生成到 `app/src/main/res/`） |
-| `scripts/` | 数据再生成工具与源：`generate-compounds.py`（组词表）、`build-ecdict-meta.py`（词典表，均为 Python 标准库零依赖）、`scripts/data/` 频率表（均不随 APK 打包） |
+| `scripts/` | 数据再生成工具与源：`generate-compounds.py`（组词表）、`build-lexicon.py` / `build-hanzi-lexicon.py`（两份词典表）、`extract-renai-ipa.py`（仁爱教材音标，一次性）、`scripts/data/` 频率表与音标源（均不随 APK 打包） |
 
 ## 4. 签名与打包发布
 

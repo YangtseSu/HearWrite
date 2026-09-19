@@ -104,6 +104,7 @@ fun HomeScreen(
     val draft by viewModel.draft.collectAsStateWithLifecycle()
     val draftLoaded by viewModel.draftLoaded.collectAsStateWithLifecycle()
     val wordCount by viewModel.wordCount.collectAsStateWithLifecycle()
+    val displayRows by viewModel.displayRows.collectAsStateWithLifecycle()
     val startIndex by viewModel.startIndex.collectAsStateWithLifecycle()
     val displayMode by viewModel.displayMode.collectAsStateWithLifecycle()
     val shuffle by viewModel.shuffle.collectAsStateWithLifecycle()
@@ -337,6 +338,7 @@ fun HomeScreen(
                         }
                         WordListSection(
                             draft = draft,
+                            rows = displayRows,
                             displayMode = displayMode,
                             wordCount = wordCount,
                             startIndex = startIndex,

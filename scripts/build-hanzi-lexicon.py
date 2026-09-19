@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build app/src/main/assets/dict/hanzi-meta.json — per-char default reading
+"""Build app/src/main/assets/dict/lexicon-hanzi.json — per-char default reading
 and compound for bare Chinese characters.
 
 A bare char row (`月`, no pinyin/组词 columns) is a first-class input: pasted
@@ -7,15 +7,17 @@ char lists, OCR results (the Chinese extractor keeps 汉字 only, AGENTS.md) and
 the 课标 字表 all arrive as one char per line. Without this asset the dictation
 dial can only show that one character — no pinyin hint, no reading anchor for
 组词朗读. This script derives both from data already in the repo, exactly the
-way `scripts/build-ecdict-meta.py` derives English meta for bare English words.
+way `scripts/build-lexicon.py` derives the English lexicon for bare English
+words. Renamed from `build-hanzi-meta.py` when the data model split rows from
+the dictionary (`docs/2026-09-18-DATA-MODEL.md` §2.2).
 
-Run: python3 scripts/build-hanzi-meta.py
+Run: python3 scripts/build-hanzi-lexicon.py
 
-Output: app/src/main/assets/dict/hanzi-meta.json
-    {"月": "yuè|岁月", "行": "xíng|进行", …}
-  The same flat `key → "col2|col3"` shape as ecdict-meta.json, so the app
-  decodes both with one code path (DictionaryRepository). pinyin is stored
-  tone-marked (rows carry `yuè`, never `yue4`).
+Output: app/src/main/assets/dict/lexicon-hanzi.json
+    {"v": 2, "entries": {"月": {"p": "yuè", "c": "月亮"}, "很": {"p": "hěn"}}}
+  `p` is the reading, tone-marked (rows carry `yuè`, never `yue4`); `c` is the
+  组词, omitted when the char has no derivable compound — a Chinese-only list
+  never parses the English lexicon, so the two live in separate assets.
 
 Reading/compound precedence (first hit wins), per char:
 
@@ -61,7 +63,8 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 FREQ_FILE = SCRIPTS_DIR / "data" / "xiandaihanyuchangyongcibiao.txt"
 OVERRIDE_FILE = SCRIPTS_DIR / "data" / "hanzi-meta-overrides.tsv"
 ASSETS_DIR = REPO_ROOT / "app" / "src" / "main" / "assets"
-OUTPUT_FILE = ASSETS_DIR / "dict" / "hanzi-meta.json"
+OUTPUT_FILE = ASSETS_DIR / "dict" / "lexicon-hanzi.json"
+SCHEMA_VERSION = 2
 
 # Asset dirs that are not word-list categories (AGENTS.md "Built-in library").
 NON_LIBRARY_DIRS = {"dict", "compounds", "audio", "licenses"}
@@ -261,17 +264,18 @@ def pick(rows: list[tuple[str, str]]) -> tuple[str, str] | None:
     return rows[0] if rows else None
 
 
-def build_meta() -> dict[str, str]:
+def build_meta() -> dict[str, tuple[str, str]]:
+    """char → (tone-marked reading, 组词 or "")."""
     overrides = load_overrides()
     textbook = load_textbook_rows()
     candidates = load_frequency_candidates()
 
-    meta: dict[str, str] = {}
+    meta: dict[str, tuple[str, str]] = {}
     for char, (pinyin, compound) in overrides.items():
         reading = normalize(pinyin)
         if not reading:
             raise SystemExit(f"override for {char!r}: {pinyin!r} is not pinyin")
-        meta[char] = f"{reading}|{compound}"
+        meta[char] = (reading, compound)
 
     # Textbook rows win (the classroom reading is authoritative), the frequency
     # table answers for every char no built-in list covers yet.
@@ -282,15 +286,18 @@ def build_meta() -> dict[str, str]:
         if row is not None:
             reading = normalize(row[0])
             if reading:
-                meta[char] = f"{reading}|{row[1]}"
+                meta[char] = (reading, row[1])
             continue
         reading = pick_reading(candidates[char])
         if reading:
-            meta[char] = f"{reading}|{pick_compound(candidates[char], reading)}"
+            meta[char] = (reading, pick_compound(candidates[char], reading))
     return meta
 
 
-def check_consistency(meta: dict[str, str], candidates: dict[str, list[tuple[str, str]]]) -> list[str]:
+def check_consistency(
+    meta: dict[str, tuple[str, str]],
+    candidates: dict[str, list[tuple[str, str]]],
+) -> list[str]:
     """Note where a 2-char compound's own syllable contradicts the entry reading.
 
     Nearly all hits are the 轻声 cases the textbook marks with a full tone
@@ -299,8 +306,7 @@ def check_consistency(meta: dict[str, str], candidates: dict[str, list[tuple[str
     as dànqín). Both are known and reviewed, so this only ever reports.
     """
     notes: list[str] = []
-    for char, value in sorted(meta.items()):
-        reading, _, compound = value.partition("|")
+    for char, (reading, compound) in sorted(meta.items()):
         if len(compound) != 2:
             continue
         syllables = [syllable for syllable, word in candidates.get(char, []) if word == compound]
@@ -322,21 +328,21 @@ def main() -> int:
         for note in notes:
             print(f"note {note}")
 
-    def sort_key(char: str) -> tuple[str, int]:
-        return meta[char].partition("|")[0], ord(char)
-
-    ordered = {char: meta[char] for char in sorted(meta, key=sort_key)}
+    entries = {
+        char: ({"p": reading, "c": compound} if compound else {"p": reading})
+        for char, (reading, compound) in sorted(meta.items(), key=lambda item: (item[1][0], ord(item[0])))
+    }
 
     # Compact JSON (no spaces), raw UTF-8, no trailing newline — matches the
-    # shipped ecdict-meta.json format.
+    # shipped lexicon-en.json format.
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_FILE.write_text(
-        json.dumps(ordered, ensure_ascii=False, separators=(",", ":")),
+        json.dumps({"v": SCHEMA_VERSION, "entries": entries}, ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",
     )
     size_kb = OUTPUT_FILE.stat().st_size / 1024
     print(
-        f"wrote {len(ordered)} entries → {OUTPUT_FILE} ({size_kb:.0f} KB)"
+        f"wrote {len(entries)} entries → {OUTPUT_FILE} ({size_kb:.0f} KB)"
         + (f" — {len(notes)} reading/compound notes (--notes)" if notes else "")
     )
     return 0

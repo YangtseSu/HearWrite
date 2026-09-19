@@ -88,6 +88,7 @@ you're = you are         ← 只朗读左侧
 - [vvenv/alice](https://github.com/vvenv/alice)
 - [rany2/edge-tts](https://github.com/rany2/edge-tts)
 - [skywind3000/ECDICT](https://github.com/skywind3000/ECDICT)
+- [open-dict-data/ipa-dict](https://github.com/open-dict-data/ipa-dict)
 - [liangqi/chinese-frequency-word-list](https://github.com/liangqi/chinese-frequency-word-list)
 
 ## 相关文档

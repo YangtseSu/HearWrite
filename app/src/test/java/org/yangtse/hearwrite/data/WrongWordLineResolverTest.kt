@@ -6,6 +6,7 @@ import org.junit.Test
 import org.yangtse.hearwrite.domain.WordRow
 import org.yangtse.hearwrite.domain.multiSourceLabel
 import org.yangtse.hearwrite.domain.parseWordLine
+import org.yangtse.hearwrite.domain.parseWordRows
 
 /**
  * Locks the 错词本 → original-row resolution (Roadmap #7): 复习错词 / 听写错词
@@ -17,12 +18,12 @@ class WrongWordLineResolverTest {
 
     private fun rowsOf(vararg lines: String): List<WordRow> = lines.map(::parseWordLine)
 
-    private val builtinLines = mapOf(
-        "default_人教版小学语文_识字表" to listOf(
+    private val builtinRows = mapOf(
+        "default_人教版小学语文_识字表" to rowsOf(
             "月 | yuè | 月亮",
             "明 | míng | 明天",
         ),
-        "default_中考1600_核心词汇" to listOf(
+        "default_中考1600_核心词汇" to rowsOf(
             "apple | n. | 苹果",
             "banana | n. | 香蕉",
         ),
@@ -32,11 +33,11 @@ class WrongWordLineResolverTest {
         history: Map<String, String> = emptyMap(),
         failBuiltin: Boolean = false,
     ) = WrongWordLineResolver(
-        builtinListLines = { category, label ->
+        builtinListRows = { category, label ->
             if (failBuiltin) throw IllegalStateException("asset unavailable")
-            builtinLines["default_${category}_$label"].orEmpty()
+            builtinRows["default_${category}_$label"].orEmpty()
         },
-        historyText = { id -> history[id] },
+        historyRows = { id -> history[id]?.let(::parseWordRows).orEmpty() },
     )
 
     private fun mark(word: String, source: String? = null) =

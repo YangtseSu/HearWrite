@@ -55,8 +55,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import org.yangtse.hearwrite.domain.WordRow
 import org.yangtse.hearwrite.domain.glossNeedsExpansion
-import org.yangtse.hearwrite.domain.parseWordRows
 import org.yangtse.hearwrite.ui.theme.wordHead
 
 /** 示例 content: English words with gloss columns (朗读释义 demo-able). */
@@ -91,6 +91,8 @@ private const val SURFACE_FADE_MS = 200
 @Composable
 fun WordListSection(
     draft: String,
+    /** 展示态 rows: the draft resolved against the offline lexicon. */
+    rows: List<WordRow>,
     displayMode: Boolean,
     wordCount: Int,
     startIndex: Int,
@@ -225,7 +227,7 @@ fun WordListSection(
                 // weight now); the editor below fills it too, so the card keeps
                 // its height across the switch.
                 WordDisplayList(
-                    draft = draft,
+                    rows = rows,
                     startIndex = startIndex,
                     onStartIndexChange = onStartIndexChange,
                     onDeleteWord = onDeleteWord,
@@ -383,21 +385,21 @@ private fun CountBadge(count: Int) {
  * [glossNeedsExpansion] says the text would truncate, so a tap on the row
  * never both reorders the listening and reshapes the row. The cursor row
  * (起始词) is tinted with a leading primary bar. Rows are keyed positionally —
- * content shifts with the draft, never remounting mid-typing (there is no
- * typing here; the textarea owns editing).
+ * content shifts with the list, never remounting mid-typing (there is no
+ * typing here; the textarea owns editing). The rows arrive already resolved
+ * (the draft itself stays as typed; HomeViewModel owns the lexicon pass).
  */
 @Composable
 private fun WordDisplayList(
-    draft: String,
+    rows: List<WordRow>,
     startIndex: Int,
     onStartIndexChange: (Int) -> Unit,
     onDeleteWord: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val entries = remember(draft) { parseWordRows(draft) }
-    // Expansion resets with the draft; index bookkeeping on delete is not
+    // Expansion resets with the list; index bookkeeping on delete is not
     // worth it (alice shifts the set — same user-visible effect).
-    var expanded by remember(draft) { mutableStateOf(emptySet<Int>()) }
+    var expanded by remember(rows) { mutableStateOf(emptySet<Int>()) }
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
@@ -409,7 +411,7 @@ private fun WordDisplayList(
         // panel's measured height (see HomeScreen), so extra trailing space
         // here only parked an unexplained gap under the last row.
         LazyColumn(contentPadding = PaddingValues(bottom = 8.dp)) {
-            itemsIndexed(entries) { index, entry ->
+            itemsIndexed(rows) { index, entry ->
                 val isCursor = index == startIndex
                 val meta = listOfNotNull(entry.pos, entry.gloss).joinToString(" ")
                 // 2-line clamp: offer expansion for multi-sense glosses or
@@ -520,7 +522,7 @@ private fun WordDisplayList(
                     }
                     Spacer(Modifier.width(10.dp))
                 }
-                if (index < entries.lastIndex) {
+                if (index < rows.lastIndex) {
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                     )

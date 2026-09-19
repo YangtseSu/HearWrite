@@ -5,7 +5,6 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,11 +23,9 @@ import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.data.LibraryCategory
 import org.yangtse.hearwrite.data.LibraryList
 import org.yangtse.hearwrite.data.LibrarySearchResult
-import org.yangtse.hearwrite.domain.WordKind
 import org.yangtse.hearwrite.domain.WordRow
-import org.yangtse.hearwrite.domain.parseWordLine
+import org.yangtse.hearwrite.domain.displayRow
 import org.yangtse.hearwrite.domain.prepareStartRows
-import org.yangtse.hearwrite.domain.rowToLine
 
 /** Search UI state: idle (no query), loading, or the finished result. */
 sealed interface LibrarySearchState {
@@ -140,12 +137,12 @@ class LibraryPreviewViewModel(
 
     private val app = application as HearWriteApplication
     private val repository = app.libraryRepository
-    private val dictionaryRepository = app.dictionaryRepository
+    private val lexiconRepository = app.lexiconRepository
     val category: String = checkNotNull(handle["category"])
     val label: String = checkNotNull(handle["label"])
 
     private val _entries = MutableStateFlow<List<WordRow>?>(null)
-    /** null = still loading. */
+    /** null = still loading. Rows carry the lexicon's 词性/释义 (or 拼音/组词). */
     val entries: StateFlow<List<WordRow>?> = _entries.asStateFlow()
 
     private val _shuffle = MutableStateFlow(false)
@@ -157,17 +154,10 @@ class LibraryPreviewViewModel(
     val startIndex: StateFlow<Int> = _startIndex.asStateFlow()
 
     private val _starting = MutableStateFlow(false)
-    /**
-     * True while [startRows] is preparing (awaits the lazy ECDICT enrich —
-     * hundreds of ms on a cold process). The button spins instead of looking
-     * dead, mirroring Home's 整理词表… state.
-     */
+    /** True while [startRows] is preparing (the lazy lexicon parse — hundreds
+     *  of ms on a cold process). The button spins instead of looking dead,
+     *  mirroring Home's 整理词表… state. */
     val starting: StateFlow<Boolean> = _starting.asStateFlow()
-
-    /** Completes once the initial enrich pass settled (done, skipped, or
-     *  failed) — [startRows] awaits it so a start in the enrich window still
-     *  ships the ECDICT meanings (朗读释义 needs them). */
-    private val enrichSettled = CompletableDeferred<Unit>()
 
     /** Serializes starts; claimed before the first suspension (AGENTS.md
      *  re-entry guard) so a double tap cannot queue two sessions. */
@@ -186,15 +176,14 @@ class LibraryPreviewViewModel(
     }
 
     /** Final rows for one start: slice from 起始序号, then 随机顺序 — the same
-     *  ordering Home applies (AGENTS.md playback engine stays dumb). Waits
-     *  for the initial ECDICT enrich to settle so a fast start does not drop
-     *  the spoken meanings; double invocations are rejected (not queued).
-     *  Returns null when another start is already in flight. */
+     *  ordering Home applies (AGENTS.md playback engine stays dumb). Rows are
+     *  already resolved (the list is read once), so a start never races the
+     *  dictionary. Double invocations are rejected (not queued); null when
+     *  another start is already in flight or the list failed to load. */
     suspend fun startRows(): List<WordRow>? {
         if (!startGate.tryLock()) return null
         _starting.value = true
         try {
-            enrichSettled.await()
             val current = _entries.value ?: return null
             return prepareStartRows(current, _startIndex.value, _shuffle.value)
         } finally {
@@ -205,40 +194,23 @@ class LibraryPreviewViewModel(
 
     init {
         viewModelScope.launch {
-            // enrichSettled MUST complete on every path (success, skip,
-            // asset failure) — startRows() awaits it and would hang forever
-            // on an uncompleted deferred.
             try {
-                loadAndEnrich()
+                // Parsed rows first so the list renders immediately; then the
+                // dictionary pass on IO (the lexicon parses lazily on first
+                // lookup — never on the startup path, AGENTS.md). A bare
+                // English word gains ECDICT 义项, a bare single Chinese char
+                // gains 拼音/组词 from `lexicon-hanzi.json`; a multi-char
+                // Chinese word has no offline source. A stale result is
+                // dropped if the list changed.
+                val parsed = repository.entries(LibraryList(category, label))
+                _entries.value = parsed
+                val resolved = lexiconRepository.resolve(parsed).map { it.displayRow() }
+                if (_entries.value == parsed) _entries.value = resolved
             } catch (e: Exception) {
-                // Asset/parse failure degrades to the plain list — the
-                // preview still shows the headwords (like Home's enrich).
-                Log.w("LibraryPreviewViewModel", "preview enrich failed for $category/$label", e)
-            } finally {
-                enrichSettled.complete(Unit)
+                // Asset/parse failure degrades to the plain list (or to the
+                // still-loading state) — the preview keeps working.
+                Log.w("LibraryPreviewViewModel", "preview resolve failed for $category/$label", e)
             }
         }
-    }
-
-    private suspend fun loadAndEnrich() {
-        val list = LibraryList(category, label)
-        // Parsed rows first so the list renders immediately; then enrich
-        // English headwords with the offline ECDICT meta on IO (the
-        // dictionary parses lazily on first lookup — never on the startup
-        // path, AGENTS.md). Only bare English words are touched: Chinese
-        // entries keep their pinyin/组词 columns and enriched lines stay
-        // unchanged. A stale result is dropped if the list changed.
-        val parsed = repository.entries(list)
-        _entries.value = parsed
-        // Bare English words get ECDICT meta; a bare single Chinese char gets
-        // 拼音/组词 from `dict/hanzi-meta.json`. Multi-char Chinese words have
-        // no offline source (and no columns to fill), so they never trigger it.
-        val needsEnrich = parsed.any {
-            it.pos == null && it.gloss == null && it.kind != WordKind.WORD
-        }
-        if (!needsEnrich) return
-        val enriched = dictionaryRepository.enrichLines(parsed.map(::rowToLine))
-            .map(::parseWordLine)
-        if (_entries.value == parsed) _entries.value = enriched
     }
 }

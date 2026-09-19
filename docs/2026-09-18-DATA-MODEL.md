@@ -269,6 +269,16 @@ data class ResolvedWord(
 
 **验收**：`check-assets.py` 0 error；`LexiconRepositoryTest` 钉住 仁爱覆盖词 / ipa-dict 词 / 双源缺失词。
 
+> **Phase 2 已完成（2026-09-19）**，验收两条均满足（`check-assets.py` 651 表 / 21,769 行 0 error；402 tests green，其中 `LexiconRepositoryTest` 17 条钉住 仁爱 / ipa-dict / 双源缺失 + 逐字段回退）。落地时的实测值与偏差：
+> - **音标源**：`scripts/data/renai-ipa.tsv` 实际 **1,476 行 / 1,470 词头**（不是 1,447）——提取器（`scripts/extract-renai-ipa.py`，随仓库提交，从本地 OCR 页重跑）比 §3.1 的一次性脚本多收三类：括号内的变体词头（`mom`、`kilogram`、`pl. men`）、一张 OCR 行里挤多个词条的行（`Indian … enemy … stone …`），并且**按音标组**而不是按行拒绝（`T-shirt /` 这种截断只丢掉它自己那一条，同一行其余 8 个词条照收）。覆盖 仁爱 1,796 个已提交词头中的 **1,443**；剩下的是教材没印音标的词组（`junk food`、`post office`…）与**没有 OCR 来源的 九上**两册（261 词头）。单音标 → `us = uk`（§3.1 的「两音相同」）。
+> - **`dict/lexicon-en.json`**：53,384 条（45,868 条带音标：1,470 仁爱 + 44,398 ipa-dict），6,508 KB raw / 1,773 KB deflate（zip -9）——比 §4 估的 +240 KB 大：§4 没把「4.4 万条 ECDICT 词也补上 ipa-dict 音标」算进去，且结构化义项比扁平串多一层字段；旧资产 3,473 KB / 1,214 KB，净 **+3,035 KB raw / +559 KB deflate**（debug APK 内两份资产 deflate 合计 2,120 KB）。`dict/lexicon-hanzi.json` 5,079 条 / 155 KB，内容与旧 `hanzi-meta.json` 逐条等价。
+> - **`LexiconRepository`**：`lookup(headword)` 返回 **§1.3 的 `ResolvedWord`**（不是 `LexEntry`）——两份资产的两种 schema（义项/IPA 与 拼音/组词）在同一个类型上会师，`resolve(row/rows)` 直接在其上做 §1.4 的逐字段回退。`enrichLines`/`enrichText`/`WordMeta`/`DictionaryRepository` 已删。
+> - **被迫提前的 Phase 3 条目**：删了 `enrich*` 就没人能编译，所以 **#14 / #15 / #17 随 Phase 2 一起落地**（展示态改成 `displayRows = resolve(草稿)`，草稿永不被改写；词库预览/抽词池改为 resolve，`needsEnrich`/`enrichSettled` 删除；`HearWriteApplication` 的 `WrongWordLineResolver` 接缝从「行文本」改成「已 resolve 的 rows」）。为了不动 UI，`ResolvedWord.displayRow()` 在展示边界把 senses 重新拼回 `pos | gloss`（含「非首个义项内联词性」的老写法），**Phase 3 #18/#19 让拨盘与列表直接消费 `ResolvedWord` 时删掉它**。
+> - **仍留给 Phase 3**：#16 Room v5（新写入的 history 行已经 `enriched_text = NULL`，列的删除与迁移测试在 #16）、#18、#19（音标显示 + 拨盘合成行）。
+> - **构建**：`kotlinx-serialization-json` 早已是依赖，但 **compiler plugin 一直没应用**（`@Serializable` 静默不生成序列化器，运行时才炸）——本阶段给 `app/build.gradle.kts` + 版本目录补上 `org.jetbrains.kotlin.plugin.serialization`。
+> - **真机实测（本次新增，debug 构建）**：`lexicon-en.json` 首次查询 **~745 ms**（`Dispatchers.IO`，首帧不等它，故冷启动不变：同机同数据 old 711/797/805 ms vs new 738/757/762 ms，`am start -W` TotalTime），解析期堆峰值 **+54 MB**、GC 后常驻 **+13 MB**（53,384 条）。**这条推翻了 §4 的「+4 MB」估算**（差 3 倍以上），也顺手改掉了一个更糟的初版：一开始用「整串读入 + DTO 中间层」，实测常驻 +23 MB、峰值 **+96 MB**（DTO 图 + 13 MB JSON 串各付一遍）——现在两份资产都改成**从流直接解到 domain 类型**（`@SerialName` 贴在 `Sense`/`LexEntry`/`HanziEntry` 上，`Ipa` 自带 `["us","uk"]` 序列化器），峰值与常驻同时减半。若日后常驻堆或峰值成为问题，§4 的「换预置 SQLite」是现成的退路（常驻≈0，按需查页）。
+> - **真机走查**（模拟器，API 37）：首页粘贴裸词 → 展示态显示 `n. 苹果, 家伙；苹果`，**切回编辑态草稿仍是 `apple\nbanana\nzzz`**（写回消失）；词库预览 中考1600 裸词显示义项、`基本字表 300` 裸字显示 `一 → yī 一些`；听写拨盘显示 `十 / shí / 十分`；错词本「七」经 resolver 恢复成 `qī / 七一`。
+
 ### Phase 3 · 管线切换（消掉所有写回）
 
 | # | 变更 |

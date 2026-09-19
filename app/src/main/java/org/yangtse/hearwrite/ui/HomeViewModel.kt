@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -38,6 +39,7 @@ import org.yangtse.hearwrite.domain.DEFAULT_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MAX_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.MIN_INTERVAL_SEC
 import org.yangtse.hearwrite.domain.WordRow
+import org.yangtse.hearwrite.domain.displayRow
 import org.yangtse.hearwrite.domain.parseWordRows
 import org.yangtse.hearwrite.domain.parseWords
 import org.yangtse.hearwrite.domain.prepareStartRows
@@ -106,12 +108,12 @@ data class WrongWordGroup(
 /**
  * Home: pasted word list with the persisted draft (500 ms debounce + flush on
  * dispose), start options 起始序号 (clamped when the list shrinks) and 随机顺序
- * (session-local Fisher–Yates). Starting enriches bare English words with the
- * offline ECDICT meta, records the list in history (enriched text attached,
- * cap 50), then slices/shuffles and hands the lines to the dictation session.
- * Also owns the 历史 / 收藏 drawer state and the 拍照识词 OCR flow (AGENTS.md
- * re-entry rule: a Mutex claimed synchronously before any suspension, so
- * fast double-taps can never start a second request).
+ * (session-local Fisher–Yates). The draft stays exactly as authored — 展示态
+ * and the started run read the offline lexicon's 词性/释义 (and 拼音/组词)
+ * resolved at that moment, and only the plain list is recorded in history
+ * (cap 50). Also owns the 历史 / 收藏 drawer state and the 拍照识词 OCR flow
+ * (AGENTS.md re-entry rule: a Mutex claimed synchronously before any
+ * suspension, so fast double-taps can never start a second request).
  */
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -120,7 +122,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val historyRepository = app.historyRepository
     private val favoritesRepository = app.favoritesRepository
     private val libraryRepository = app.libraryRepository
-    private val dictionaryRepository = app.dictionaryRepository
+    private val lexiconRepository = app.lexiconRepository
     private val ocrService = app.ocrService
     private val wrongWordsRepository = app.wrongWordsRepository
     private val wrongWordLines = app.wrongWordLineResolver
@@ -162,6 +164,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     /** Live parsed count of the draft. */
     val wordCount: StateFlow<Int> = _draft.map { parseWords(it).size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    /**
+     * 展示态 rows: the draft parsed and composed with the offline lexicon
+     * (row columns win, `docs/2026-09-18-DATA-MODEL.md` §1.4). The draft itself
+     * is never rewritten — entering 展示态 used to expand the ECDICT columns
+     * *into the stored draft*, which persisted looked-up data and left every
+     * row that already carried a column without its 音标 (§0).
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val displayRows: StateFlow<List<WordRow>> = combine(_draft, _displayMode) { text, display ->
+        if (display) text else null
+    }
+        .mapLatest { text -> if (text == null) emptyList() else resolveDisplay(parseWordRows(text)) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     // ---- 历史 / 收藏 drawer state ----------------------------------------
 
@@ -465,25 +481,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 编辑/完成 toggle. Entering 展示态 ("完成") enriches the draft with the
-     * offline ECDICT meta (alice behavior) so the list shows 词性/释义; a
-     * stale result (user switched back and typed meanwhile) is dropped.
+     * 编辑/完成 toggle. 展示态 renders [displayRows] — the draft resolved
+     * against the offline lexicon at read time; the draft text and its
+     * persisted copy stay exactly what the user typed (alice expanded the
+     * stored draft here, which is what the row/lexicon split removes).
      */
     fun setDisplayMode(value: Boolean) {
         _displayMode.value = value
-        if (value) enrichDraft()
-    }
-
-    private fun enrichDraft() {
-        viewModelScope.launch {
-            val original = _draft.value
-            if (parseWords(original).isEmpty()) return@launch
-            val enriched = enrich(original)
-            if (enriched != original && _draft.value == original) {
-                _draft.value = enriched
-                settings.setDraft(enriched)
-            }
-        }
     }
 
     /**
@@ -727,37 +731,48 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     // ------------------------------------------------------------- start
 
     /**
-     * Prepare the dictation list: enrich bare words with ECDICT meta, record
-     * the user list in history (deduped, cap 50), slice from the clamped
-     * 起始序号, then apply 随机顺序. Returns null when there is nothing to
-     * dictate or another start is already in flight.
+     * Prepare the dictation list: resolve the draft's rows against the
+     * offline lexicon (row columns win — the draft itself is recorded and
+     * persisted as authored), record the user list in history (deduped, cap
+     * 50), slice from the clamped 起始序号, then apply 随机顺序. Returns null
+     * when there is nothing to dictate or another start is already in flight.
      */
     suspend fun prepareAndRecord(): PreparedSession? {
         if (_starting.value) return null
         val text = _draft.value
-        val all = parseWords(text)
-        if (all.isEmpty()) return null
+        val rows = parseWordRows(text)
+        if (rows.isEmpty()) return null
         _starting.value = true
         try {
-            val enriched = enrich(text)
             // The row id becomes the run's wrong-word source (Roadmap #1) —
-            // marks from this dictation point back to the recorded list.
-            val historyId = historyRepository.add(text, enriched)
-            val rows = prepareStartRows(parseWordRows(enriched), _startIndex.value, _shuffle.value)
-            return PreparedSession(rows, historyId)
+            // marks from this dictation point back to the recorded list. The
+            // stored text is the plain one: 词性/释义 are read from the
+            // lexicon when they are shown, never baked into the row.
+            val historyId = historyRepository.add(text, null)
+            return PreparedSession(
+                prepareStartRows(resolveDisplay(rows), _startIndex.value, _shuffle.value),
+                historyId,
+            )
         } finally {
             _starting.value = false
         }
     }
 
     /**
-     * Offline ECDICT enrichment; any failure (asset missing, parse error)
-     * degrades to the plain text — never blocks the UI or dictation.
+     * Rows with their dictionary columns filled, for the surfaces that read
+     * `word | pos | gloss` rows (the display list, the dial, 朗读释义). Any
+     * failure (asset missing, parse error) degrades to the plain rows — never
+     * blocks the UI or dictation.
      */
-    private suspend fun enrich(text: String): String = try {
-        dictionaryRepository.enrichText(text)
+    private suspend fun resolveDisplay(rows: List<WordRow>): List<WordRow> = try {
+        lexiconRepository.resolve(rows).map { it.displayRow() }
+    } catch (e: CancellationException) {
+        // mapLatest cancels the previous pass when the draft changes; that
+        // cancellation must propagate, not degrade to a stale row list.
+        throw e
     } catch (e: Exception) {
-        text
+        Log.w(TAG, "lexicon resolve failed", e)
+        rows
     }
 
     // ------------------------------------------------------- 拍照识词 (OCR)

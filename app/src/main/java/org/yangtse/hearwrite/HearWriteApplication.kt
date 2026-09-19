@@ -11,12 +11,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import org.yangtse.hearwrite.data.BuiltinLibraryRepository
 import org.yangtse.hearwrite.data.CompoundRepository
 import org.yangtse.hearwrite.data.DictationSessionStore
-import org.yangtse.hearwrite.data.DictionaryRepository
 import org.yangtse.hearwrite.data.EdgeTts
 import org.yangtse.hearwrite.data.FavoritesRepository
 import org.yangtse.hearwrite.data.HearWriteDatabase
 import org.yangtse.hearwrite.data.HistoryRepository
 import org.yangtse.hearwrite.data.KeystoreCipher
+import org.yangtse.hearwrite.data.LexiconRepository
 import org.yangtse.hearwrite.data.LibraryList
 import org.yangtse.hearwrite.data.LibrarySelectionStore
 import org.yangtse.hearwrite.data.OcrService
@@ -29,7 +29,9 @@ import org.yangtse.hearwrite.data.TtsChainSpeaker
 import org.yangtse.hearwrite.data.WrongWordLineResolver
 import org.yangtse.hearwrite.data.WrongWordsRepository
 import org.yangtse.hearwrite.data.YoudaoTts
-import org.yangtse.hearwrite.domain.rowToLine
+import org.yangtse.hearwrite.domain.WordRow
+import org.yangtse.hearwrite.domain.displayRow
+import org.yangtse.hearwrite.domain.parseWordRows
 
 /**
  * Application-scoped singleton container (manual DI per AGENTS.md — no
@@ -146,24 +148,30 @@ class HearWriteApplication : Application() {
 
     /**
      * Restore 错词本 marks to their original word-list rows (Roadmap #7):
-     * built-in sources read the asset library (enriched with the offline
-     * ECDICT meta exactly like the list preview, so an English mark keeps its
-     * 词性/释义 and 朗读释义 still has something to speak), history sources the
-     * stored row — so 复习错词 / 听写错词 dictate enriched lines rather than
-     * bare words.
+     * built-in sources read the asset library, history sources the stored row.
+     * Both are **resolved** against the offline lexicon at read time — a mark
+     * keeps its 词性/释义 or 拼音/组词, and 朗读释义 still has something to
+     * speak, without a single dictionary column ever being written into a
+     * row (docs/2026-09-18-DATA-MODEL.md §0).
      */
     val wrongWordLineResolver: WrongWordLineResolver by lazy {
         WrongWordLineResolver(
-            builtinListLines = { category, label ->
-                val lines = libraryRepository.entries(LibraryList(category, label)).map(::rowToLine)
-                dictionaryRepository.enrichLines(lines)
+            builtinListRows = { category, label ->
+                resolveForDisplay(libraryRepository.entries(LibraryList(category, label)))
             },
-            historyText = { id ->
+            historyRows = { id ->
                 historyRepository.all().firstOrNull { it.id == id }
-                    ?.let { it.enrichedText ?: it.text }
+                    ?.let { resolveForDisplay(parseWordRows(it.text)) }
+                    .orEmpty()
             },
         )
     }
+
+    /** Rows with their dictionary columns filled, for the surfaces that still
+     *  read `word | pos | gloss` rows (the dial, the display lists, 错词本
+     *  restore). Row columns always win; nothing is persisted back. */
+    private suspend fun resolveForDisplay(rows: List<WordRow>): List<WordRow> =
+        lexiconRepository.resolve(rows).map { it.displayRow() }
 
     /** Favorite entry ids (`default_*` or history ids). */
     val favoritesRepository: FavoritesRepository by lazy {
@@ -175,10 +183,9 @@ class HearWriteApplication : Application() {
         SessionRepository(database.sessionDao())
     }
 
-    /** Offline ECDICT pos/meaning + hanzi 拼音/组词; parsed lazily on first lookup. */
-    val dictionaryRepository: DictionaryRepository by lazy {
-        DictionaryRepository { path ->
-            assets.open(path).bufferedReader().use { it.readText() }
-        }
+    /** The offline dictionary (义项/IPA + 拼音/组词); parsed lazily on first
+     *  lookup, never on the startup path. */
+    val lexiconRepository: LexiconRepository by lazy {
+        LexiconRepository { path -> assets.open(path) }
     }
 }

@@ -180,11 +180,11 @@ class DataFixtureTest {
     @Test
     fun `every curriculum char has an offline pinyin hint`() {
         // The lists are bare chars — their hints come entirely from
-        // `dict/hanzi-meta.json`. A char with no entry would dictate with an
-        // empty dial, so the shipped asset must cover the standard's 3500.
-        val meta = listFile("dict/hanzi-meta.json").readText()
+        // `dict/lexicon-hanzi.json`. A char with no entry would dictate with
+        // an empty dial, so the shipped asset must cover the standard's 3500.
+        val lexicon = listFile("dict/lexicon-hanzi.json").readText()
         val chars = zibiao("基本字表 300") + zibiao("常用字表1 2500") + zibiao("常用字表2 1000")
-        val missing = chars.filter { !meta.contains("\"$it\":") }
-        assertEquals("chars without a hanzi-meta entry", emptyList<String>(), missing)
+        val missing = chars.filter { !lexicon.contains("\"$it\":") }
+        assertEquals("chars without a lexicon-hanzi entry", emptyList<String>(), missing)
     }
 }

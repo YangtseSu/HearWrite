@@ -6,8 +6,6 @@ import org.yangtse.hearwrite.domain.WordRow
 import org.yangtse.hearwrite.domain.findRowByHeadword
 import org.yangtse.hearwrite.domain.multiSourceIds
 import org.yangtse.hearwrite.domain.parseBuiltinListId
-import org.yangtse.hearwrite.domain.parseWordLine
-import org.yangtse.hearwrite.domain.parseWordRows
 import org.yangtse.hearwrite.domain.wordRowOf
 
 /**
@@ -28,10 +26,10 @@ import org.yangtse.hearwrite.domain.wordRowOf
  * this file.
  */
 class WrongWordLineResolver(
-    /** A built-in list's canonical `word | pos | meaning` lines. */
-    private val builtinListLines: suspend (category: String, label: String) -> List<String>,
-    /** A history row's stored text, enriched (`word | pos | meaning`) when it has one. */
-    private val historyText: suspend (historyId: String) -> String?,
+    /** A built-in list's rows, dictionary columns filled. */
+    private val builtinListRows: suspend (category: String, label: String) -> List<WordRow>,
+    /** A history row's rows, dictionary columns filled. */
+    private val historyRows: suspend (historyId: String) -> List<WordRow>,
 ) {
 
     /**
@@ -78,9 +76,6 @@ class WrongWordLineResolver(
 
     private suspend fun builtinRows(id: String): List<WordRow> {
         val (category, label) = parseBuiltinListId(id) ?: return emptyList()
-        return builtinListLines(category, label).map(::parseWordLine)
+        return builtinListRows(category, label)
     }
-
-    private suspend fun historyRows(id: String): List<WordRow> =
-        historyText(id)?.let(::parseWordRows).orEmpty()
 }

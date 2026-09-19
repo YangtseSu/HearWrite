@@ -40,6 +40,13 @@ LATIN_RE = re.compile(r"[A-Za-z]")
 # Tone-marked / toneless 拼音: a–z plus ü and its four tone-marked forms.
 PINYIN_RE = re.compile(r"[a-züǖǘǚǜāáǎàēéěèīíǐìōóǒòūúǔù]+")
 
+# Lexicon keys: a lowercased headword — `let`, `you're`, `a.m.`, `ice cream`,
+# `why not...?`, `c/o` are all real ones.
+HEADWORD_RE = re.compile(r"[a-z][a-z0-9'’\- ./?]*")
+# The IPA repertoire the assets may carry: ipa-dict (US: ɫ ɹ ɝ ɐ ʲ; UK: ɹ …)
+# plus the 仁爱 textbook's own symbols.
+IPA_RE = re.compile(r"[a-zæðŋɐɑɒɔəɜɝɛɡɪɫɹʃʊʌʒθʊ̃ʲˈˌː()  -]+")
+
 # The 词性 column is NOT validated against a closed vocabulary: the sources
 # mix ECDICT spellings ("n.") with textbook compounds ("n. & v.", "v.aux.",
 # "pl, n") that are legitimate. `normalizePos` leaves unknown input as-is and
@@ -195,8 +202,8 @@ def check_library(report: Report) -> tuple[int, int]:
 
 def check_derived_assets(report: Report) -> None:
     """The generated assets must keep the shape the app parses."""
-    check_flat_map(ASSETS_DIR / "dict" / "ecdict-meta.json", report, key_check=None, value_check="pipe")
-    check_flat_map(ASSETS_DIR / "dict" / "hanzi-meta.json", report, key_check="cjk1", value_check="hanzi")
+    check_lexicon_en(ASSETS_DIR / "dict" / "lexicon-en.json", report)
+    check_lexicon_hanzi(ASSETS_DIR / "dict" / "lexicon-hanzi.json", report)
     check_compounds(ASSETS_DIR / "compounds" / "compounds.json", report)
 
 
@@ -212,35 +219,89 @@ def load_json(path: Path, report: Report) -> object | None:
         return None
 
 
-def check_flat_map(path: Path, report: Report, key_check: str | None, value_check: str | None) -> None:
+def lexicon_entries(path: Path, report: Report) -> dict | None:
+    """The `{"v": 2, "entries": {…}}` envelope both lexicons share."""
     label = f"{path.parent.name}/{path.name}"
     data = load_json(path, report)
     if data is None:
-        return
-    if not isinstance(data, dict) or not data:
-        report.error(label, "expected a non-empty JSON object")
+        return None
+    if not isinstance(data, dict) or set(data) != {"v", "entries"}:
+        report.error(label, "expected exactly the `v` and `entries` keys")
+        return None
+    if data["v"] != 2:
+        report.error(label, f"unsupported schema version {data['v']!r} (expected 2)")
+        return None
+    entries = data["entries"]
+    if not isinstance(entries, dict) or not entries:
+        report.error(label, "`entries` is not a non-empty object")
+        return None
+    return entries
+
+
+def check_ipa(text: object) -> bool:
+    return isinstance(text, str) and bool(text) and IPA_RE.fullmatch(text) is not None
+
+
+def check_lexicon_en(path: Path, report: Report) -> None:
+    """`headword → {s: [{p?, g}], i: [us, uk]}` — the English lexicon."""
+    label = f"{path.parent.name}/{path.name}"
+    entries = lexicon_entries(path, report)
+    if entries is None:
         return
     bad = 0
-    for key, value in data.items():
-        if not isinstance(value, str):
+    for key, entry in entries.items():
+        if not HEADWORD_RE.fullmatch(key) or key != key.lower():
+            report.error(label, f"key {key!r} is not a lowercased English headword")
+            return
+        if not isinstance(entry, dict) or not entry or set(entry) - {"s", "i"}:
             bad += 1
             continue
-        if key_check == "cjk1" and not (len(key) == 1 and CJK_RE.fullmatch(key)):
-            report.error(label, f"key {key!r} is not a single Chinese char")
-            return
-        if value_check == "pipe" and "|" not in value:
+        senses = entry.get("s")
+        if senses is not None:
+            if not isinstance(senses, list) or not senses:
+                bad += 1
+                continue
+            for sense in senses:
+                if not isinstance(sense, dict) or set(sense) - {"p", "g"} or not sense.get("g"):
+                    bad += 1
+                    break
+                if "p" in sense and not isinstance(sense["p"], str):
+                    bad += 1
+                    break
+        ipa = entry.get("i")
+        if ipa is not None and (
+            not isinstance(ipa, list) or len(ipa) != 2 or not all(check_ipa(part) for part in ipa)
+        ):
             bad += 1
-        if value_check == "hanzi":
-            pinyin, _, word = value.partition("|")
-            if not PINYIN_RE.fullmatch(pinyin):
-                bad += 1
-            elif word == "":
-                continue  # reading-only entry: the char has no derivable 组词
-            # 2–4 chars: the textbook 组词 wins even when it is longer than a
-            # 2-char word (红领巾 for 领); 组词朗读 simply falls back to a
-            # 2-char pool word for the spoken call.
-            elif not 2 <= len(word) <= 4 or not CJK_RE.search(word) or key not in word:
-                bad += 1
+    if bad:
+        report.error(label, f"{bad} malformed entries")
+
+
+def check_lexicon_hanzi(path: Path, report: Report) -> None:
+    """`char → {p: 拼音, c?: 组词}` — the bare-char lexicon."""
+    label = f"{path.parent.name}/{path.name}"
+    entries = lexicon_entries(path, report)
+    if entries is None:
+        return
+    bad = 0
+    for char, entry in entries.items():
+        if not (len(char) == 1 and CJK_RE.fullmatch(char)):
+            report.error(label, f"key {char!r} is not a single Chinese char")
+            return
+        if not isinstance(entry, dict) or set(entry) - {"p", "c"}:
+            bad += 1
+            continue
+        if not isinstance(entry.get("p"), str) or not PINYIN_RE.fullmatch(entry["p"]):
+            bad += 1
+            continue
+        word = entry.get("c")
+        if word is None:
+            continue  # reading-only entry: the char has no derivable 组词
+        # 2–4 chars: the textbook 组词 wins even when it is longer than a
+        # 2-char word (红领巾 for 领); 组词朗读 simply falls back to a
+        # 2-char pool word for the spoken call.
+        if not isinstance(word, str) or not 2 <= len(word) <= 4 or not CJK_RE.search(word) or char not in word:
+            bad += 1
     if bad:
         report.error(label, f"{bad} malformed entries")
 

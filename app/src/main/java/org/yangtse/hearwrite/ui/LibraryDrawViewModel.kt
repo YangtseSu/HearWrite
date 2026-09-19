@@ -13,10 +13,9 @@ import org.yangtse.hearwrite.HearWriteApplication
 import org.yangtse.hearwrite.data.LibraryList
 import org.yangtse.hearwrite.domain.dedupeByHeadword
 import org.yangtse.hearwrite.domain.WordRow
+import org.yangtse.hearwrite.domain.displayRow
 import org.yangtse.hearwrite.domain.multiSourceLabel
 import org.yangtse.hearwrite.domain.parseBuiltinListId
-import org.yangtse.hearwrite.domain.parseWordLine
-import org.yangtse.hearwrite.domain.rowToLine
 import org.yangtse.hearwrite.domain.sampleWords
 
 /** One ticked list of a 抽词听写 pool, with its loaded 词数. */
@@ -45,7 +44,7 @@ data class DrawSession(val rows: List<WordRow>, val sourceLabel: String)
 /**
  * 抽词听写 (Roadmap #9): the 多选词表 selection is loaded as one candidate pool
  * — lists in selection order, cross-list duplicates merged by speakable
- * headword, bare English headwords enriched with the offline ECDICT meta —
+ * headword, rows resolved against the offline lexicon (row columns win) —
  * then X rows are drawn without replacement. The pool is assembled before
  * the start entry points, so the result continues through the existing
  * staging into the unchanged playback engine.
@@ -54,7 +53,7 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
 
     private val app = application as HearWriteApplication
     private val repository = app.libraryRepository
-    private val dictionaryRepository = app.dictionaryRepository
+    private val lexiconRepository = app.lexiconRepository
     private val selection = app.librarySelection
 
     private val _pool = MutableStateFlow<DrawPoolState>(DrawPoolState())
@@ -153,21 +152,22 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
             }
             val deduped = dedupeByHeadword(raw)
             merged = raw.size - deduped.size
-            // Same enrichment as the list preview: the ECDICT 词性/释义 (and
-            // hanzi 拼音/组词) columns must ride into the dictation, or an
-            // English draw would dictate bare words with no hints at all.
-            val enriched = try {
-                dictionaryRepository.enrichLines(deduped.map(::rowToLine)).map(::parseWordLine)
+            // Same dictionary pass as the list preview: the 词性/释义 (and
+            // 拼音/组词) ride into the dictation, or an English draw would
+            // dictate bare words with no hints and no 朗读释义. The pool rows
+            // stay as authored — the lookup is read-time (§0).
+            val resolved = try {
+                lexiconRepository.resolve(deduped).map { it.displayRow() }
             } catch (e: Exception) {
-                Log.w("LibraryDrawViewModel", "pool enrich failed", e)
+                Log.w("LibraryDrawViewModel", "pool resolve failed", e)
                 deduped
             }
-            candidates = enriched
-            _count.value = enriched.size
+            candidates = resolved
+            _count.value = resolved.size
             _pool.value = DrawPoolState(
                 loading = false,
                 lists = lists,
-                poolSize = enriched.size,
+                poolSize = resolved.size,
                 mergedCount = merged,
                 failedLabels = failed,
             )
