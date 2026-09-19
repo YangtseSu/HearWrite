@@ -1,6 +1,6 @@
 # 数据模型重构（英文 + 中文）
 
-状态：✅ 已落地（Phase 1–3 全部完成，各 Phase 的验收与偏差见下方注记）；条目已归档至 [`implemented/2026-09-18-ROADMAP-DONE.md`](implemented/2026-09-18-ROADMAP-DONE.md) #17。Phase 4 的 `CHANGELOG.md` 段随发版补（版本号属发布决定）。
+状态：✅ 全部落地（Phase 1–4；各 Phase 的验收与偏差见下方注记）。条目已归档至 [`implemented/2026-09-18-ROADMAP-DONE.md`](implemented/2026-09-18-ROADMAP-DONE.md) #17，面向用户的版本说明见 [`CHANGELOG.md`](../CHANGELOG.md) `[0.9.0]`。
 来源：2026-09-18 音标方案评审；作者拍板两处（音标英美双套、行文本第 4/5 列），随后升级为整体数据模型重构——**抛弃历史兼容，只考虑作者自己**。
 
 ---
@@ -309,7 +309,7 @@ data class ResolvedWord(
 
 `CHANGELOG.md` 新版本段；commit 信息含体积/堆/解析三组前后实测值。
 
-> **2026-09-19**：文档与提交已落地 —— `AGENTS.md` 同步了运行时类型/展示规则/迁移清单，本条目的归档见 `implemented/2026-09-18-ROADMAP-DONE.md`，提交正文带真机（API 37 / 1080×2400 / debug）的体积、冷启动、堆与解析窗口实测。`CHANGELOG.md` 版本段留到打 tag 时写：`## [x.y.z]` 必须与 tag 一一对应，版本号是发布决定。
+> **2026-09-19**：文档与提交已落地 —— `AGENTS.md` 同步了运行时类型/展示规则/迁移清单，本条目的归档见 `implemented/2026-09-18-ROADMAP-DONE.md`，提交正文带真机（API 37 / 1080×2400 / debug）的体积、冷启动、堆与解析窗口实测。`CHANGELOG.md` 已追加 `## [0.9.0] — 2026-09-19` 用户小节，并同步 bump `versionCode 10 → 11` / `versionName 0.8.0 → 0.9.0`（`docs/DEVELOPMENT.md` §4.5 一并更新）——release workflow 会硬校验 tag == `versionName`、且缺 CHANGELOG 段直接失败，两者必须同时到位；打 tag 与发布仍是作者的动作。
 
 ---
 

@@ -53,8 +53,8 @@ android {
         // pre-release). versionCode = a monotonic integer, +1 per signed
         // release artifact, never reused or re-ordered. First signed release:
         // 1 / "0.1.0" (Phase 10).
-        versionCode = 10
-        versionName = "0.8.0"
+        versionCode = 11
+        versionName = "0.9.0"
     }
 
     // versionName is read once here (configuration phase) so the
