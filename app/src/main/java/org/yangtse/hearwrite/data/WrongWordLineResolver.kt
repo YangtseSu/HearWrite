@@ -23,8 +23,8 @@ import org.yangtse.hearwrite.domain.parseBuiltinListId
  *
  * The rows are **resolved** against the offline lexicon: the sources hand out
  * [ResolvedWord]s, the type every runtime consumer reads
- * (`docs/2026-09-18-DATA-MODEL.md` §1.3), so no lookup happens here and no
- * looked-up column is ever written back into a row (§0).
+ * (AGENTS.md *Built-in library*), so no lookup happens here and no
+ * looked-up column is ever written back into a row (AGENTS.md *Built-in library*).
  *
  * The two loaders are the seam: the application wires them to the asset
  * library and Room, JVM tests pass plain lambdas — no Android dependency in

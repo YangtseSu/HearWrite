@@ -157,7 +157,7 @@ class HearWriteApplication : Application() {
      * Both are **resolved** against the offline lexicon at read time — a mark
      * keeps its 词性/释义 (and 音标) or 拼音/组词, and 朗读释义 still has
      * something to speak, without a single dictionary column ever being
-     * written into a row (docs/2026-09-18-DATA-MODEL.md §0).
+     * written into a row (AGENTS.md *Built-in library*).
      */
     val wrongWordLineResolver: WrongWordLineResolver by lazy {
         WrongWordLineResolver(
@@ -174,7 +174,7 @@ class HearWriteApplication : Application() {
 
     /**
      * Rows composed with the offline lexicon (row columns win field by field,
-     * `docs/2026-09-18-DATA-MODEL.md` §1.4) — the single read-time pass behind
+     * AGENTS.md *Built-in library*) — the single read-time pass behind
      * every runtime consumer: the dial, the display lists, a staged session,
      * 错词本 restore. The authored rows are never rewritten; nothing is
      * persisted back.

@@ -139,9 +139,16 @@ python3 scripts/import-wordlist.py --lang zh --category 语文 --label "二下 �
 | `compounds/compounds.json` | `{compounds: {char: [[word, syllable], …]}, learned: {…}}`——syllable 用声调数字，`ü=v`，轻声不标 | 4,724 + 524 个键；`scripts/generate-compounds.py` |
 | `audio/tick.wav` / `chime.wav` | 倒数最后一秒的滴答（音量 0.5）、整场结束的提示音（音量 0.6） | 自产，非生成器产物 |
 
-打包体量：两份词典资产合计 **6,663 KB raw / 1,773 KB deflate**（被替换掉的旧一对是 3,473 / 1,214 KB，因此 APK +765 KB）；冷启动不变（首帧不等解析，实测中位 647 ms）。解析耗时/常驻堆与「不预置 SQLite」的取舍见 [`2026-09-18-DATA-MODEL.md`](2026-09-18-DATA-MODEL.md) §4。
+打包体量：两份词典资产合计 **6,663 KB raw / 1,773 KB deflate**（被替换掉的旧一对是 3,473 / 1,214 KB，因此 APK +765 KB）；冷启动不变（首帧不等解析，实测中位 647 ms）。解析耗时/常驻堆与「不预置 SQLite」的取舍见 [`implemented/2026-09-18-DATA-MODEL.md`](implemented/2026-09-18-DATA-MODEL.md) §4（归档版）。
 
 RN 前身的 `assets/silent.wav`（iOS 后台保活音）**刻意不移植**——Android 不需要。
+
+**字段语义与解析规则**：
+
+- `lexicon-en.json`：`v` = schema 版本（当前 2，改结构必须一起升）；`entries[headword] = { "s": [{"p": 词性, "g": 释义}], "i": [us, uk] }`。义项是**结构化列表**，不是 `"n. 苹果；v. 放"` 那种扁平串（内部 `；` 曾被有损折成 `，` 才能塞回词表行）。`i` 固定是 `[us, uk]`，某侧没有来源时**整项省略**（不写空槽），应用只打印存在的那一侧。
+- `lexicon-hanzi.json`：`entries[char] = { "p": 拼音, "c": 组词 }`；`c` 缺失 = 该字没有可取的组词，只补读音（不是"组词为空串"）。
+- **解析规则（应用侧）**：`行覆盖 > 词典`，**逐字段**——英文行的词性/释义、生字行的拼音/组词各自优先，缺哪个字段才取词典；**音标只来自词典**，词表行永不携带音标（课本行印了自己的释义，照样拿到词典音标）。补全只发生在读取时：草稿、历史行与暂存 session 只携带作者数据，**永不被改写**。
+- **音标来源优先级**：教材印刷过的词 > ipa-dict；`check-assets.py` 校验 `i` 的形状与缺侧语义。
 
 再生成源（`scripts/data/`，不打包、需随生成器一起提交）：
 

@@ -3,7 +3,7 @@ package org.yangtse.hearwrite.domain
 /**
  * Kind of one word-list row, decided from the **headword the engine speaks**
  * ([WordRow.speak] — the left side of an `=` expansion, [WordRow.display]
- * otherwise) at parse time (`docs/2026-09-18-DATA-MODEL.md` §1.1).
+ * otherwise) at parse time (AGENTS.md *Word-line format*).
  *
  * The previous model overloaded the `pos` column — 词性 for English, 拼音 for
  * 汉字 — and every consumer re-guessed the kind from a CJK regex on the raw

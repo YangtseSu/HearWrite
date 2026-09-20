@@ -14,7 +14,7 @@ import java.io.FileNotFoundException
 
 /**
  * Locks the lexicon's lookup/composition contract
- * (`docs/2026-09-18-DATA-MODEL.md` §1.3–1.4): lookup routes a headword to
+ * (AGENTS.md *Built-in library*; schema `docs/WORDLIST.md` §9): lookup routes a headword to
  * exactly one asset, and [LexiconRepository.resolve] lets the row win **field
  * by field** — the rule that finally gives a 仁爱 row (which prints its own
  * 词性/释义) its textbook IPA. Rows are never written back: the resolved entry
@@ -93,7 +93,7 @@ class LexiconRepositoryTest {
         val resolved = repository().resolve(parseWordLine("月"))
         assertEquals("yuè", resolved.pinyin)
         assertEquals("岁月", resolved.compound)
-        assertNull(resolved.ipa) // 汉字 rows carry no 音标 (§9)
+        assertNull(resolved.ipa) // 汉字 rows carry no 音标 (AGENTS.md *Word-line format*)
     }
 
     @Test

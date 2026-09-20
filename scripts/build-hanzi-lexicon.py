@@ -9,7 +9,7 @@ dial can only show that one character — no pinyin hint, no reading anchor for
 组词朗读. This script derives both from data already in the repo, exactly the
 way `scripts/build-lexicon.py` derives the English lexicon for bare English
 words. Renamed from `build-hanzi-meta.py` when the data model split rows from
-the dictionary (`docs/2026-09-18-DATA-MODEL.md` §2.2).
+the dictionary (schema: `docs/WORDLIST.md` §9).
 
 Run: python3 scripts/build-hanzi-lexicon.py
 

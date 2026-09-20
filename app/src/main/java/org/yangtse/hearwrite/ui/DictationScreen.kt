@@ -1292,7 +1292,7 @@ private fun DialCenter(
     }
     // One hint line carries both the 美式 音标 and the 词性 (`/ˈæpəl/ n.`): a
     // 音标 line of its own would cost the disc a fourth row and force a two-line
-    // word down to ~25 sp (docs/2026-09-18-DATA-MODEL.md §4.1). The solver gets
+    // word down to ~25 sp (AGENTS.md *Built-in library*: the dial's single hint line). The solver gets
     // its text, not just its presence: the line is drawn clamped to one line, so
     // a hint wider than the box loses its 词性 tail, and only measuring it can
     // put the 展开全部 entry behind it.
@@ -1460,7 +1460,7 @@ private fun DialDetailDialog(
     // The card is where a 音标 the dial could not fit still gets read: both
     // accents on one line of their own (`英 /let/ · 美 /let/`), labelled — the
     // dial shows 美式 alone because it has one line to spend
-    // (docs/2026-09-18-DATA-MODEL.md §4.2). A missing accent is simply absent.
+    // (display rules: AGENTS.md *Built-in library*). A missing accent is simply absent.
     val ipaLine = ipaLabels(row.ipa)
     val gloss = row.glossText()
     AlertDialog(

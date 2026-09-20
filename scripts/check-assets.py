@@ -241,8 +241,7 @@ def lexicon_entries(path: Path, report: Report) -> dict | None:
 def check_ipa(text: object) -> bool:
     """One transcription: a non-empty string inside the IPA repertoire. JSON
     `null` is not a transcription — callers treat it as "that accent is
-    absent" (`Ipa.us`/`Ipa.uk` are nullable, `docs/2026-09-18-DATA-MODEL.md`
-    §4.2: 只查到一套时显示一套)."""
+    absent" (`Ipa.us`/`Ipa.uk` are nullable, `docs/WORDLIST.md` §9: 只查到一套时显示一套)."""
     return isinstance(text, str) and bool(text) and IPA_RE.fullmatch(text) is not None
 
 

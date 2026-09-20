@@ -32,7 +32,7 @@ private val OCR_NOISE_RE = Regex("""[^a-z0-9\s'\-./]""")
 
 /**
  * The offline dictionary — the shared lookup table the word-model rewrite
- * split out of the word lists (`docs/2026-09-18-DATA-MODEL.md` §1.2). Two
+ * split out of the word lists (schema: `docs/WORDLIST.md` §9). Two
  * assets, each parsed lazily on first lookup on [Dispatchers.IO] and kept in a
  * process-lifetime memory singleton, never on the startup path (AGENTS.md
  * "Built-in library"):
@@ -54,7 +54,7 @@ private val OCR_NOISE_RE = Regex("""[^a-z0-9\s'\-./]""")
  *
  * Nothing here writes back: [resolve] composes a row with its entry into a
  * [ResolvedWord] the caller consumes, and the row itself — the draft, a
- * history row, a staged session — stays exactly as authored (§0).
+ * history row, a staged session — stays exactly as authored (AGENTS.md *Built-in library*).
  */
 class LexiconRepository(private val readAssetStream: (String) -> InputStream) {
 
@@ -81,7 +81,7 @@ class LexiconRepository(private val readAssetStream: (String) -> InputStream) {
     // `decodeFromStream` is still experimental in kotlinx-serialization (the
     // `Json.decodeFromStream` overload carries `@ExperimentalSerializationApi`);
     // the app pins it deliberately — the asset decodes from the stream rather
-    // than through a whole-file JSON string (~96 MB → ~54 MB peak, §1.2).
+    // than through a whole-file JSON string (~96 MB → ~54 MB peak; `docs/WORDLIST.md` §9).
     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private fun parseEnglish(): Map<String, LexEntry> =
         readAssetStream(EN_PATH).use { JSON.decodeFromStream<EnglishLexicon>(it).entries }
@@ -182,7 +182,7 @@ class LexiconRepository(private val readAssetStream: (String) -> InputStream) {
     // ------------------------------------------------------------ resolve
 
     /**
-     * 行覆盖 + 词典回填 (`§1.4`): the row's own columns win **field by field**,
+     * 行覆盖 + 词典回填 (AGENTS.md *Built-in library*): the row's own columns win **field by field**,
      * the lexicon fills what it left empty — the rule that finally gives a
      * 仁爱 row (which prints its own 词性/释义) the textbook IPA. The
      * composition itself is [resolveWord]; this only does the two lookups.

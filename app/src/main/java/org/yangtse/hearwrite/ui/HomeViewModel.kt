@@ -168,10 +168,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * 展示态 rows: the draft parsed and composed with the offline lexicon
-     * (row columns win, `docs/2026-09-18-DATA-MODEL.md` §1.4). The draft itself
+     * (row columns win, AGENTS.md *Built-in library*). The draft itself
      * is never rewritten — entering 展示态 used to expand the ECDICT columns
      * *into the stored draft*, which persisted looked-up data and left every
-     * row that already carried a column without its 音标 (§0).
+     * row that already carried a column without its 音标 (AGENTS.md *Built-in library*).
      */
     @OptIn(ExperimentalCoroutinesApi::class)
     val displayRows: StateFlow<List<ResolvedWord>> = combine(_draft, _displayMode) { text, display ->

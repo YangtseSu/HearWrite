@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build `app/src/main/assets/dict/lexicon-en.json` — the English lexicon.
 
-Replaces `build-ecdict-meta.py` (docs/2026-09-18-DATA-MODEL.md §2.2). The
+Replaces `build-ecdict-meta.py` (schema: docs/WORDLIST.md §9). The
 dictionary is a shared, read-time lookup table; word-list rows stay author
 data and are never rewritten, so this file carries everything the app needs
 to render a row's 词性/释义 and 音标:
@@ -19,11 +19,11 @@ to render a row's 词性/释义 and 音标:
   one. A source that prints only one accent writes `null` for the other, and
   the app prints only the accents that exist: copying the one side onto the
   other would fabricate a second accent for the 11,438 ipa-dict words that
-  have exactly one (review §4.1, docs/2026-09-18-DATA-MODEL.md §4.2). 仁爱
+  have exactly one (review §4.1; display rules: AGENTS.md *Built-in library*). 仁爱
   textbook first, ipa-dict otherwise: a headword the textbook prints keeps the
   textbook's symbols, both sides exactly as the tsv carries them (a single
   printed reading means the textbook considers them equal), because the
-  student compares the app against the printed page (§3.2).
+  student compares the app against the printed page (docs/WORDLIST.md §6/§9).
 
 Sources:
 - [ECDICT](https://github.com/skywind3000/ECDICT) (MIT) — 词性 + 中文释义;

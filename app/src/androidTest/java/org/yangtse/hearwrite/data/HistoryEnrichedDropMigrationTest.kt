@@ -13,8 +13,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Room v4 → v5 migration (data-model Phase 3, `docs/2026-09-18-DATA-MODEL.md`
- * §0): `history` drops `enrichedText`, the column that held ECDICT-expanded
+ * Room v4 → v5 migration (data-model Phase 3, `docs/implemented/2026-09-18-DATA-MODEL.md` §0): `history` drops `enrichedText`, the column that held ECDICT-expanded
  * lines written back into a stored row. Nothing writes it any more — the
  * dictionary is resolved at read time — so the migration is the column's
  * removal, and the authored list must survive it untouched.

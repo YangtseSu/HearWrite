@@ -1,6 +1,7 @@
 # 数据模型重构（英文 + 中文）
 
-状态：✅ 全部落地（Phase 1–4；各 Phase 的验收与偏差见下方注记）。条目已归档至 [`implemented/2026-09-18-ROADMAP-DONE.md`](implemented/2026-09-18-ROADMAP-DONE.md) #17，面向用户的版本说明见 [`CHANGELOG.md`](../CHANGELOG.md) `[0.9.0]`。
+**归档**（2026-09-20 移入 `implemented/`）：条目 **#17** 已完成（Phase 1–4），编号与正文照原样保留；仍然生效的规则已提炼进 [`../../AGENTS.md`](../../AGENTS.md)（行/词典分离、lexicon 加载与拨盘显示）、[`../WORDLIST.md`](../WORDLIST.md) §6/§9（资产格式与来源）与 [`../OCR.md`](../OCR.md)（拍照识词/批改），各 Phase 的验收与偏差见下方注记。完成条目索引：[`2026-09-18-ROADMAP-DONE.md`](2026-09-18-ROADMAP-DONE.md) #17；面向用户的版本说明：[`CHANGELOG.md`](../../CHANGELOG.md) `[0.9.0]`。
+
 来源：2026-09-18 音标方案评审；作者拍板两处（音标英美双套、行文本第 4/5 列），随后升级为整体数据模型重构——**抛弃历史兼容，只考虑作者自己**。
 
 ---
@@ -196,6 +197,8 @@ data class ResolvedWord(
 
 **后续（2026-09-19，Phase 3 之后，真机实测）**：首次英文解析的 ~745 ms 已从"用户打开第一份英文词表时"前移到"浏览到英文分类页时"——`LibraryListsViewModel` 复用 `wordCount` 已解析并缓存的 rows 判语言（`isCjkRun`，零额外 IO），英文分类触发 `warmEnglishLexicon()`（`applicationScope` + 400 ms 延迟 + 进程内单飞，与真实查找共用同一守卫），中文分类不触发。真机（API 37 / 1080×2400 / debug）实测：英文分类的 heap 解析窗口出现在分类页打开后 0.1–1.9 s（分类页打开 t=14.6 s → 预热窗口 14.7–16.5 s → 点列表 t=19.4 s 时已就绪，无跳变）；中文分类全程 Java heap 14–16 MB、无窗口；冷启动中位 647 ms（预热不在启动路径上）。**资产、schema、CI 契约零改动**——这正是"收益面只是一次后台解析、代价是 APK/设备存储 + 生成器与查询复杂度"的具体形状，也是本轮仍不迁预置 SQLite 的直接理由。
 
+**资产解析实测（真机，debug，流式解码路径）**：`lexicon-en.json`（6.5 MB / ~53k 条）的首次查找 ≈**745 ms**（`Dispatchers.IO`），GC 后常驻 **~13 MB**，解析峰值 **~54 MB**；因为资产是**从流直接解到领域类型**（不建 JSON 字符串、不建 DTO 图），旧 DTO 路径实测常驻 ~23 MB、峰值 ~96 MB。两份词典资产的打包体量为 6,663 KB raw / 1,773 KB deflate（旧的一对 3,473 / 1,214，APK +765 KB），冷启动不受影响（首帧不等解析）。**迁库阈值不变**：只要实测冷启动或峰值越过 500 ms / 堆预算，就只把**词典**迁到预置 SQLite（Room `createFromAsset`），词表继续留作资产——见 `../AGENTS.md` 的 *Built-in library*（预算与回退）。
+
 **字体不是风险**：实际会用到的 52 个 IPA 字符，设备上 Roboto 全部覆盖（`Roboto-Regular.ttf` / `RobotoStatic-Regular.ttf` 缺失 0 个）。
 
 ### 4.1 拨盘显示
@@ -349,5 +352,3 @@ data class ResolvedWord(
 - 不让视觉模型输出音标（会幻觉），OCR 提示语保持原样。
 - 不提交 ipa-dict / 仁爱原始页面到仓库（只提交提取产物 `renai-ipa.tsv`）。
 - 不加 `tags` / `Row.id` / `LexEntry.kind` 字段（理由见 §五）。
-
-**资产解析实测（真机，debug，流式解码路径）**：`lexicon-en.json`（6.5 MB / ~53k 条）的首次查找 ≈**745 ms**（`Dispatchers.IO`），GC 后常驻 **~13 MB**，解析峰值 **~54 MB**；因为资产是**从流直接解到领域类型**（不建 JSON 字符串、不建 DTO 图），旧 DTO 路径实测常驻 ~23 MB、峰值 ~96 MB。两份词典资产的打包体量为 6,663 KB raw / 1,773 KB deflate（旧的一对 3,473 / 1,214，APK +765 KB），冷启动不受影响（首帧不等解析）。**迁库阈值不变**：只要实测冷启动或峰值越过 500 ms / 堆预算，就只把**词典**迁到预置 SQLite（Room `createFromAsset`），词表继续留作资产——见 AGENTS.md。

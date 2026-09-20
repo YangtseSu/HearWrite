@@ -1,7 +1,7 @@
 package org.yangtse.hearwrite.domain
 
 /**
- * One row of a word list — author data (`docs/2026-09-18-DATA-MODEL.md` §1.1):
+ * One row of a word list — author data (AGENTS.md *Word-line format*):
  * ordered, hand-editable, diffable, and **never rewritten by the app**. The
  * dictionary is a shared lookup table resolved at read time, so no consumer
  * ever writes a looked-up column back into a row (the old model's

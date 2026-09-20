@@ -37,7 +37,7 @@ renai = _load()
 class ParseLineTest(unittest.TestCase):
     def test_semicolon_group_keeps_both_readings_in_printed_order(self) -> None:
         # 七上 Unit 4: `clothes /kləʊdz; kləʊz/ n. 衣服; 服装` — British first,
-        # then US (§3.1: `uk = readings[0]`, `us = readings[1]`).
+        # then US (docs/WORDLIST.md §9: `uk = readings[0]`, `us = readings[1]`).
         self.assertEqual(
             [("clothes", ["kləʊdz", "kləʊz"])],
             renai.parse_line("clothes /kləʊdz; kləʊz/ n. 衣服; 服装"),

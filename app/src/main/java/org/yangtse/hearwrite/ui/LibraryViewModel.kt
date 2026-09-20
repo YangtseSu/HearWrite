@@ -194,7 +194,7 @@ class LibraryPreviewViewModel(
     /**
      * The list's authored rows, kept for [draftLines]: 载入草稿 hands the draft
      * the list as the asset holds it, never a row the dictionary has been
-     * written into (`docs/2026-09-18-DATA-MODEL.md` §0).
+     * written into (AGENTS.md *Built-in library*).
      */
     @Volatile
     private var parsedRows: List<WordRow> = emptyList()

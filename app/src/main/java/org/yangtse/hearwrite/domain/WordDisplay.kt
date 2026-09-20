@@ -2,11 +2,11 @@ package org.yangtse.hearwrite.domain
 
 /**
  * How a [ResolvedWord] becomes text on a display surface
- * (`docs/2026-09-18-DATA-MODEL.md` §4.1/§4.2) — pure, so every surface stitches
+ * (AGENTS.md *Built-in library*, display rules) — pure, so every surface stitches
  * the same segments instead of re-deriving them.
  *
  * The 音标 is never a placeholder: an accent the lexicon does not carry simply
- * leaves its segment out. Two transcription rules, both from §4.2:
+ * leaves its segment out. Two transcription rules, both from AGENTS.md *Built-in library*:
  * - the dial shows **美式** alone — the accent the TTS chain speaks;
  * - the lists and the 详情卡 label every accent the lexicon carries, **英 first**
  *   (the order the 仁爱 textbook prints them).
@@ -48,8 +48,8 @@ fun ResolvedWord.glossText(): String? = when (kind) {
 /**
  * The dial's single hint line. An English row composes its 美式 音标 **and** its
  * 词性 into one line (`/ˈæpəl/ n.`) — a 音标 line of its own would push a
- * two-line word past what a 204 dp disc affords (§4.1). A single 汉字 shows its
- * 拼音 (Chinese rows carry no 音标 by design, §9); a 词语 shows nothing.
+ * two-line word past what a 204 dp disc affords (same rule). A single 汉字 shows its
+ * 拼音 (Chinese rows carry no 音标 by design, AGENTS.md *Word-line format*); a 词语 shows nothing.
  */
 fun ResolvedWord.dialHint(): String? = when (kind) {
     WordKind.HANZI -> pinyin

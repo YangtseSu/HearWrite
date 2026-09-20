@@ -5,8 +5,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * Locks how a [ResolvedWord] becomes text (`docs/2026-09-18-DATA-MODEL.md`
- * §4.2): the dial's **one** hint line (`音标 + 词性`), the lists' 2-line meta
+ * Locks how a [ResolvedWord] becomes text (AGENTS.md *Built-in library*, display rules): the dial's **one** hint line (`音标 + 词性`), the lists' 2-line meta
  * (both accents, 英 first) and the 释义/组词 text. Every row surface stitches
  * these segments, so a change here is a change on four screens at once.
  */

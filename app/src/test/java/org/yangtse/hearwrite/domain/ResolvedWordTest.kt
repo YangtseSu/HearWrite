@@ -7,8 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Locks the composition rule's **degraded** half (`docs/2026-09-18-DATA-MODEL.md`
- * §1.4): with no dictionary behind a row, the row's own columns are what is
+ * Locks the composition rule's **degraded** half (AGENTS.md *Built-in library*): with no dictionary behind a row, the row's own columns are what is
  * left, and a 错词本 mark whose source is gone still becomes a usable row.
  * Three production call sites depend on it — the display pass, the library
  * preview's first frame and the 抽词听写 pool all fall back to it when the

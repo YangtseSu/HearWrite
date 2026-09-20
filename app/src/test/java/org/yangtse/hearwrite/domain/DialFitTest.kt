@@ -240,7 +240,7 @@ class DialFitTest {
         assertEquals(Int.MAX_VALUE, wrappedLineCount("a".repeat(120), 50.0))
     }
 
-    // --- the hint line (§4.3) ---
+    // --- the hint line (review §4.3) ---
 
     @Test
     fun `a hint wider than the box asks for the card`() {

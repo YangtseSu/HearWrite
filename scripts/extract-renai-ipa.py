@@ -6,7 +6,7 @@ text of the 仁爱版英语 七上 / 七下 / 八上 unit word lists (one `.txt`
 page) and writes the committed `scripts/data/renai-ipa.tsv`
 (`headword<TAB>us<TAB>uk`), which `scripts/build-lexicon.py` merges into
 `dict/lexicon-en.json`. The tsv ships in the repository so regenerating the
-lexicon never depends on the OCR directory (docs/2026-09-18-DATA-MODEL.md §3).
+lexicon never depends on the OCR directory (docs/WORDLIST.md §6/§9).
 
 Source shape — the textbook prints one IPA per entry, or two when the accents
 differ, British first (`/dɑːns/; /dæns/`, `hot /hɒt; hɑt/`):
@@ -64,7 +64,7 @@ PAGE_FILE_RE = re.compile(r"^\d+\.txt$")
 
 CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 GROUP_RE = re.compile(r"/([^/]{1,40})/")
-# The IPA repertoire the textbook uses (docs/2026-09-18-DATA-MODEL.md §3.1).
+# The IPA repertoire the textbook uses (docs/WORDLIST.md §9).
 IPA_CHARS = set("abcdefghijklmnopqrstuvwxyzɪʊʌɒɔəæɑɜɛʃʒθðŋɡɹɫˈˌː() -")
 # `word`, `hard-working`, `a.m.`, `ice cream` — what a headword looks like.
 HEAD_RE = re.compile(r"^[A-Za-z][A-Za-z'’\-]*(?:[ .][A-Za-z'’\-]+)*\.?$")

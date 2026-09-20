@@ -98,7 +98,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | 路径 | 用途 |
 | --- | --- |
 | `app/` | Android 应用（单一 `:app` 模块：`ui/` Compose 界面、`domain/` 纯 Kotlin 逻辑、`data/` 仓库与网络）；词表与内置资源本体在 `app/src/main/assets/`（原样打包，**只读**，禁止手工重新生成） |
-| `docs/` | 文档与设计源：本指南；`WORDLIST.md`（词库数据规范与贡献指南）；`TTS.md`（发音链路协议/音色/缓存）；`OCR.md`（拍照识词与拍照批改）；`ROADMAP.md`（**只记未完成项**）；`2026-09-18-DATA-MODEL.md`（行/词典分离 + 音标 spec）；`2026-09-20-REVIEW-0.9.0.md`（`v0.8.0..HEAD` 提交复核）；`ERRATA.md`（已发布提交信息的更正）；`implemented/`（归档文档：`2026-09-12-UI-AUDIT.md`、`2026-09-18-ROADMAP-DONE.md`、`2026-09-04-PHASES.md`）；README 截图（按需）；图标设计源 `hearwrite.svg`（自适应图标各层由它生成到 `app/src/main/res/`） |
+| `docs/` | 文档与设计源：本指南；`WORDLIST.md`（词库数据规范与贡献指南）；`TTS.md`（发音链路协议/音色/缓存）；`OCR.md`（拍照识词与拍照批改）；`ROADMAP.md`（**只记未完成项**）；`2026-09-20-REVIEW-0.9.0.md`（`v0.8.0..HEAD` 提交复核）；`ERRATA.md`（已发布提交信息的更正）；`implemented/`（归档文档：`2026-09-12-UI-AUDIT.md`、`2026-09-18-DATA-MODEL.md`（行/词典分离 + 音标 spec，规则已提炼进 AGENTS.md / WORDLIST.md）、`2026-09-18-ROADMAP-DONE.md`、`2026-09-04-PHASES.md`）；README 截图（按需）；图标设计源 `hearwrite.svg`（自适应图标各层由它生成到 `app/src/main/res/`） |
 | `scripts/` | 数据再生成工具与源：`generate-compounds.py`（组词表）、`build-lexicon.py` / `build-hanzi-lexicon.py`（两份词典表）、`extract-renai-ipa.py`（仁爱教材音标，一次性）、`check-assets.py`（资产树校验，CI 门禁）、`import-wordlist.py`（外部词表规范化）、`verify-kebiao-scan.py`（课标字表 vs 影印件位次核对）、`scripts/data/` 频率表与音标源（均不随 APK 打包） |
 
 ## 4. 签名与打包发布

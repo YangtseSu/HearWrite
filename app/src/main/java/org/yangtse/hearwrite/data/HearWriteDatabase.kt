@@ -37,7 +37,7 @@ data class WrongWordEntity(
 /** One user-pasted word list (built-in lists are never persisted — they ship
  *  as assets). `text` is the authored list, exactly as the user typed it: the
  *  词性/释义 (and 音标) are read from the offline lexicon at display time and
- *  are never written into the row (`docs/2026-09-18-DATA-MODEL.md` §0 — the
+ *  are never written into the row (AGENTS.md *Persistence* — the
  *  `enrichedText` column this replaced is dropped in v5). */
 @Entity(tableName = "history")
 data class HistoryEntity(
@@ -317,10 +317,10 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
 }
 
 /**
- * v4 → v5 (data-model Phase 3, `docs/2026-09-18-DATA-MODEL.md` §6): `history`
+ * v4 → v5 (data-model Phase 3, `docs/implemented/2026-09-18-DATA-MODEL.md` §6): `history`
  * drops `enrichedText`. The column held ECDICT-expanded lines written back
  * into the row; nothing writes it any more (the dictionary is resolved at read
- * time and a row is never rewritten, §0), so it is dead weight that would
+ * time and a row is never rewritten — AGENTS.md *Persistence*), so it is dead weight that would
  * otherwise have to be kept in sync with a lookup table it duplicates.
  *
  * The column is dropped by rebuilding the table, **not** by

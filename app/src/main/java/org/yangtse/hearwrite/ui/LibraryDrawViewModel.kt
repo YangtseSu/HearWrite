@@ -156,7 +156,7 @@ class LibraryDrawViewModel(application: Application) : AndroidViewModel(applicat
             // Same dictionary pass as the list preview: the 音标/词性/释义 (and
             // 拼音/组词) ride into the dictation, or an English draw would
             // dictate bare words with no hints and no 朗读释义. The pool rows
-            // stay as authored — the lookup is read-time (§0).
+            // stay as authored — the lookup is read-time (AGENTS.md *Built-in library*).
             val resolved = try {
                 lexiconRepository.resolve(deduped)
             } catch (e: Exception) {

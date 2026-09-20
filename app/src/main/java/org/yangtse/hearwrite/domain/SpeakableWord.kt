@@ -2,7 +2,7 @@ package org.yangtse.hearwrite.domain
 
 /**
  * What a **run-level** rule reads off a word: its speakable headword (the
- * 错词本 key) and its [WordKind] (`docs/2026-09-18-DATA-MODEL.md` §1.1).
+ * 错词本 key) and its [WordKind] (AGENTS.md *Word-line format*).
  *
  * A parsed [WordRow] and a resolved [ResolvedWord] both answer it, which is
  * what lets the rules that only ever look at the headword run on either side
