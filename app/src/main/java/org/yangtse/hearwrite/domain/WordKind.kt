@@ -1,8 +1,9 @@
 package org.yangtse.hearwrite.domain
 
 /**
- * Kind of one word-list row, decided from the headword at parse time
- * (`docs/2026-09-18-DATA-MODEL.md` §1.1).
+ * Kind of one word-list row, decided from the **headword the engine speaks**
+ * ([WordRow.speak] — the left side of an `=` expansion, [WordRow.display]
+ * otherwise) at parse time (`docs/2026-09-18-DATA-MODEL.md` §1.1).
  *
  * The previous model overloaded the `pos` column — 词性 for English, 拼音 for
  * 汉字 — and every consumer re-guessed the kind from a CJK regex on the raw
@@ -20,12 +21,14 @@ enum class WordKind {
 }
 
 /**
- * Kind of a display headword: no 汉字 → [WordKind.EN]; exactly one 汉字 →
- * [WordKind.HANZI]; anything longer → [WordKind.WORD]. The headword alone
- * decides — a Chinese gloss column never makes an English row Chinese.
+ * Kind of a speakable headword ([WordRow.speak]): no 汉字 → [WordKind.EN];
+ * exactly one 汉字 → [WordKind.HANZI]; anything longer → [WordKind.WORD]. The
+ * headword alone decides — a Chinese gloss column never makes an English row
+ * Chinese, and neither does a Chinese `=` expansion tail (`apple = 苹果` is
+ * an English row).
  */
-fun kindOf(display: String): WordKind = when {
-    !CJK_RE.containsMatchIn(display) -> WordKind.EN
-    display.length == 1 -> WordKind.HANZI
+fun kindOf(headword: String): WordKind = when {
+    !CJK_RE.containsMatchIn(headword) -> WordKind.EN
+    headword.length == 1 -> WordKind.HANZI
     else -> WordKind.WORD
 }

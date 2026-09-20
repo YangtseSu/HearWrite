@@ -12,6 +12,9 @@ package org.yangtse.hearwrite.domain
  * - [WordKind.EN] — `pos` = part of speech, `gloss` = 中文释义;
  * - [WordKind.HANZI] — `pos` = pinyin with tone marks, `gloss` = 组词;
  * - [WordKind.WORD] — bare word, spoken as-is.
+ *
+ * [kind] describes [speak], not [display]: an `=` expansion tail is gloss-like
+ * text the engine never says, so `apple = 苹果` is an [WordKind.EN] row.
  */
 data class WordRow(
     /** 展示/作答/错词键 — as printed in the list (`you're = you are`). */
@@ -77,9 +80,16 @@ internal fun speakOf(display: String): String {
     return left.ifEmpty { text }
 }
 
-/** Build a row from a bare headword: [WordRow.speak] and [WordRow.kind] derive. */
-fun wordRowOf(display: String, pos: String? = null, gloss: String? = null): WordRow =
-    WordRow(display, speakOf(display), kindOf(display), pos, gloss)
+/**
+ * Build a row from a display headword: [WordRow.speak] is the left side of an
+ * `=` expansion, and [WordRow.kind] is read off **that** speakable side — the
+ * text the engine actually says, so `apple = 苹果` stays `EN` (a display tail
+ * never decides how a row is spoken or looked up).
+ */
+fun wordRowOf(display: String, pos: String? = null, gloss: String? = null): WordRow {
+    val speak = speakOf(display)
+    return WordRow(display, speak, kindOf(speak), pos, gloss)
+}
 
 /**
  * Split multiline word-list input into lines (one per non-empty line).
@@ -90,8 +100,8 @@ fun parseWords(text: String): List<String> =
 /**
  * Parse a single line into a [WordRow]. Format: `word | pos | meaning`
  * (fullwidth `｜` accepted). Only `word` is required; missing/blank columns
- * are null. `word | pinyin` (two columns) is the hint-only 生字 shape the
- * enrichment emits for a char with no 组词. Extra pipe-separated columns
+ * are null. `word | pinyin` (two columns) is the hint-only 生字 shape an
+ * author writes for a char whose 组词 is unknown. Extra pipe-separated columns
  * beyond `meaning` are ignored.
  */
 fun parseWordLine(line: String): WordRow {

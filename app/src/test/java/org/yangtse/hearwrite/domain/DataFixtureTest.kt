@@ -50,7 +50,7 @@ class DataFixtureTest {
     }
 
     @Test
-    fun `enriched textbook rows keep blank pos and gloss spaces`() {
+    fun `textbook rows keep blank pos and gloss spaces`() {
         val file = listFile("初中2182/第一册 常见.txt")
         val lines = file.readLines().filter { it.isNotBlank() }
         val entries = lines.map(::parseWordLine)
@@ -154,8 +154,9 @@ class DataFixtureTest {
             val lines = zibiao(label)
             assertEquals("$label row count", count, lines.size)
             assertEquals("$label unique chars", count, lines.toSet().size)
-            // Bare single Han chars: the app fills 拼音/组词 from hanzi-meta at
-            // display time, and a stray column here would ship as literal text.
+            // Bare single Han chars: the app fills 拼音/组词 from
+            // `dict/lexicon-hanzi.json` at display time, and a stray column
+            // here would ship as literal text.
             lines.forEach { line ->
                 assertEquals("$label row $line", 1, line.length)
                 assertTrue("$label row $line", parseWordLine(line).pos == null)

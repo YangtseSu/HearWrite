@@ -141,10 +141,10 @@ class WordLineParserTest {
         assertEquals("a", parseWordLine("a = b = c").speak)
     }
 
-    // --- kind: decided by the headword alone ---
+    // --- kind: decided by the speakable headword alone ---
 
     @Test
-    fun `kind follows the display headword`() {
+    fun `kind follows the speakable headword`() {
         assertEquals(WordKind.EN, parseWordLine("apple").kind)
         assertEquals(WordKind.EN, parseWordLine("good morning | n. | 早上好").kind)
         assertEquals(WordKind.HANZI, parseWordLine("月").kind)
@@ -157,6 +157,8 @@ class WordLineParserTest {
     fun `a chinese gloss column never makes an english row chinese`() {
         assertEquals(WordKind.EN, parseWordLine("apple | n. | 苹果").kind)
         assertEquals(WordKind.EN, parseWordLine("you're = you are | v.").kind)
+        // A Chinese `=` tail is gloss-like text too — it must not re-kind a row.
+        assertEquals(WordKind.EN, parseWordLine("apple = 苹果").kind)
     }
 
     @Test
@@ -165,9 +167,19 @@ class WordLineParserTest {
         assertEquals(WordKind.EN, kindOf("apple"))
         assertEquals(WordKind.HANZI, kindOf("月"))
         assertEquals(WordKind.WORD, kindOf("月亮"))
-        // A Chinese headword stays Chinese whatever its expansion reads.
-        assertEquals(WordKind.WORD, kindOf("你 = you"))
-        assertEquals("你", wordRowOf("你 = you").speak)
+        // It classifies the *speakable* text it is handed: a two-char Chinese
+        // expansion left side is WORD, not HANZI.
+        assertEquals(WordKind.HANZI, kindOf("你"))
+        assertEquals(WordKind.WORD, kindOf("你好"))
+        // `wordRowOf` reads the kind off `speak`, so the `= ` tail never counts.
+        with(wordRowOf("你 = you")) {
+            assertEquals(WordKind.HANZI, kind)
+            assertEquals("你", speak)
+        }
+        with(wordRowOf("apple = 苹果")) {
+            assertEquals(WordKind.EN, kind)
+            assertEquals("apple", speak)
+        }
     }
 
     // --- rowToLine: canonical serialization, round-trip stable ---
@@ -182,8 +194,8 @@ class WordLineParserTest {
         assertEquals("apple | n. | 苹果", rowToLine(wordRowOf("apple", "n.", "苹果")))
         assertEquals("what's |  | what is 的缩写形式", rowToLine(wordRowOf("what's", null, "what is 的缩写形式")))
         // A missing trailing column is dropped: the hint-only 生字 shape
-        // (`字 | 拼音`) is what the CJK enrichment emits for a char with no
-        // 组词, and a dangling `| ` would ship as a visible empty column.
+        // (`字 | 拼音`) is what an author writes for a char with no 组词, and a
+        // dangling `| ` would ship as a visible empty column.
         assertEquals("apple | n.", rowToLine(wordRowOf("apple", "n.", null)))
         assertEquals("很 | hěn", rowToLine(wordRowOf("很", "hěn", null)))
     }
