@@ -18,7 +18,7 @@ import org.junit.Test
  * accent no source covers is a JSON `null` inside the two-element array, and
  * the round-trip must preserve exactly which side is absent — that is what
  * makes [LexEntry.ipa]'s nullability the live capability it documents rather
- * than dead code (review §4.1).
+ * than dead code (docs/implemented/2026-09-20-REVIEW-0.9.0.md §4.1).
  */
 class ResolvedWordTest {
 

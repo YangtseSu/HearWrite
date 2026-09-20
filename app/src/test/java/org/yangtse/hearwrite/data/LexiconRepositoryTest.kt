@@ -246,7 +246,7 @@ class LexiconRepositoryTest {
         // The two ipa-dict files cover different word sets, and neither covers
         // `abstract` in both. The absent side must stay absent: fabricating it
         // by copying the one that exists puts a 美 reading the source never
-        // gave on a word that has only a 英 one (review §4.1), and the display
+        // gave on a word that has only a 英 one (docs/implemented/2026-09-20-REVIEW-0.9.0.md §4.1), and the display
         // then prints a second accent it cannot back.
         val usOnly = assetRepository().lookup("abstract")?.ipa
         assertEquals("ˈæbˌstɹækt", usOnly?.us)
@@ -262,7 +262,7 @@ class LexiconRepositoryTest {
         // 七上 prints `clothes /kləʊdz; kləʊz/` — one group carrying both
         // accents. The extractor used to validate the group whole, `;` is not
         // in the textbook's repertoire, and the word fell through to ipa-dict
-        // (review §4.2). The textbook symbols must be the ones the student
+        // (docs/implemented/2026-09-20-REVIEW-0.9.0.md §4.2). The textbook symbols must be the ones the student
         // sees, 英 first (`uk = readings[0]`).
         assertEquals(Ipa(us = "kləʊz", uk = "kləʊdz"), assetRepository().lookup("clothes")?.ipa)
     }

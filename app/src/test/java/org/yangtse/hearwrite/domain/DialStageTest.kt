@@ -178,7 +178,7 @@ class DialStageTest {
         }
     }
 
-    // --- the beside width budget (review §5.1) ---
+    // --- the beside width budget (docs/implemented/2026-09-20-REVIEW-0.9.0.md §5.1) ---
 
     @Test
     fun `a wide short window splits only when the real row fits`() {

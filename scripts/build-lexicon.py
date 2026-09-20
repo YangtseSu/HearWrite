@@ -19,7 +19,7 @@ to render a row's 词性/释义 and 音标:
   one. A source that prints only one accent writes `null` for the other, and
   the app prints only the accents that exist: copying the one side onto the
   other would fabricate a second accent for the 11,438 ipa-dict words that
-  have exactly one (review §4.1; display rules: AGENTS.md *Built-in library*). 仁爱
+  have exactly one (docs/implemented/2026-09-20-REVIEW-0.9.0.md §4.1; display rules: AGENTS.md *Built-in library*). 仁爱
   textbook first, ipa-dict otherwise: a headword the textbook prints keeps the
   textbook's symbols, both sides exactly as the tsv carries them (a single
   printed reading means the textbook considers them equal), because the
@@ -428,7 +428,7 @@ def main() -> None:
         # A source that prints only one accent leaves the other side absent:
         # the asset writes JSON `null` and the app prints the accents that
         # exist. Copying the one side onto the other fabricated a second
-        # accent for 11,438 words that have exactly one (review §4.1).
+        # accent for 11,438 words that have exactly one (docs/implemented/2026-09-20-REVIEW-0.9.0.md §4.1).
         us = us or None
         uk = uk or None
         entry: dict[str, object] = {}

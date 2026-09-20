@@ -5,7 +5,7 @@ Locks the group-splitting rule the 仁爱 import depends on. The textbook prints
 both accents `;`-separated inside one group (`clothes /kləʊdz; kləʊz/`), and
 `;` is not in its IPA repertoire — so validating the group whole, before the
 split, silently dropped exactly the readings whose two accents differ most
-(review §4.2). Each case below is a real OCR line shape or the extractor's own
+(docs/implemented/2026-09-20-REVIEW-0.9.0.md §4.2). Each case below is a real OCR line shape or the extractor's own
 documented one.
 
 Run:
