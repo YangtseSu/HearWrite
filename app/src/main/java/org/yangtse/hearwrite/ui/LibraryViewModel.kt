@@ -97,8 +97,16 @@ class LibraryListsViewModel(
     val favoriteIds: StateFlow<Set<String>> = _favoriteIds.asStateFlow()
 
     /**
-     * Once-per-process guard for the lexicon probe: the warm-up it triggers is
-     * idempotent, this only stops a 230-list category from asking 230 times.
+     * Once-per-ViewModel guard for the lexicon probe, claimed by the first
+     * list whose rows read successfully — whatever that list's language. The
+     * claim is settled *before* the language is consulted, so a category is
+     * probed once rather than once per list (the old order claimed it only on
+     * the English branch, so a pure-Chinese 230-list category asked every one
+     * of them), and an unreadable list leaves the probe to the next list
+     * instead of closing it. Which list wins is immaterial: a category is one
+     * textbook set, so its lists share a language — and a wrong guess costs
+     * only the warm-up, since the parse still happens lazily on the first real
+     * lookup.
      */
     private val lexiconProbeDone = AtomicBoolean(false)
 
@@ -115,13 +123,16 @@ class LibraryListsViewModel(
         if (lexiconProbeDone.get()) return
         val rows = try {
             repository.entries(list)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             // The probe is an optimisation; an unreadable list just skips it.
             return
         }
-        if (!isCjkRun(rows) && lexiconProbeDone.compareAndSet(false, true)) {
-            app.warmEnglishLexicon()
-        }
+        // Claim first, ask after: exactly one caller proceeds to the language
+        // decision, and only an English category reaches the warm-up.
+        if (!lexiconProbeDone.compareAndSet(false, true)) return
+        if (!isCjkRun(rows)) app.warmEnglishLexicon()
     }
 
     init {

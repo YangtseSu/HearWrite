@@ -106,6 +106,30 @@ class CropViewportTest {
         assertTrue(v.offsetY >= m - 0.01f)
         assertEquals(500f, v.offsetY + v.height / 2f, 0.01f)
     }
+
+    @Test
+    fun `a panned image stops on the margin line, never on the screen edge`() {
+        // [clamped]'s pan limit counts the margin, so a travelled image ends up
+        // exactly where an unpanned one sits: the near edge on the margin line
+        // (40 dp), the far side overflowing the viewport (which is what keeps
+        // the viewport covered). Deliberate, not a slip: the margin-less limit
+        // would put that same edge at **0** — the screen edge, where the
+        // system's back/home gesture owns the touch and a selection handle
+        // cannot be grabbed, which is exactly what the margin exists to prevent.
+        val m = 40f
+        val v = CropViewport(1000f, 1000f, 4096, 4096, margin = m).zoomBy(2f, 500f, 500f)
+        val overflowPerSide = (v.width - 1000f) / 2f
+        assertEquals(420f, overflowPerSide, 0.01f)
+        val far = v.panBy(9999f, 9999f)
+        // The limit is the overflow *plus the margin*, so the near edge of the
+        // travelled image lands exactly where an unpanned one leaves it (40 dp)
+        // rather than on the screen edge (0).
+        assertEquals(overflowPerSide + m, far.panX, 0.01f)
+        assertEquals(m, far.offsetX, 0.01f)
+        // The mirrored drag is symmetric, so the contract holds from both
+        // directions.
+        assertEquals(-(overflowPerSide + m), v.panBy(-9999f, -9999f).panX, 0.01f)
+    }
 }
 
 /**

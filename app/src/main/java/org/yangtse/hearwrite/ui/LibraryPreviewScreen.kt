@@ -80,7 +80,8 @@ fun LibraryPreviewScreen(
     val startIndex by viewModel.startIndex.collectAsState()
     val starting by viewModel.starting.collectAsState()
     val current = entries
-    // startRows awaits the lazy ECDICT enrich — launch off the click handler.
+    // startRows is suspend (it claims the start gate), so the click handler
+    // cannot call it directly — hand it to the screen's scope.
     val startScope = rememberCoroutineScope()
     // 载入草稿 hands the list to Home's draft and returns to this category
     // (B8: Home is four taps away, the browsing position is not). Confirming
@@ -202,8 +203,9 @@ fun LibraryPreviewScreen(
                         }
                         Button(
                             onClick = {
-                                // startRows awaits the lazy ECDICT enrich; run it
-                                // off the click so the button never blocks the UI.
+                                // startRows only slices and shuffles the rows the
+                                // preview already resolved; run it off the click
+                                // so the button never blocks the UI.
                                 startScope.launch {
                                     viewModel.startRows()?.let(onStartDictation)
                                 }
@@ -249,7 +251,7 @@ fun LibraryPreviewScreen(
                 else -> {
                     // Expansion lives at the list level so it survives rows
                     // scrolling out of the LazyColumn cache window (Home parity);
-                    // resets with the entries (the parsed → enriched swap).
+                    // keyed on the entries, so it resets if they are swapped.
                     var expanded by remember(current) { mutableStateOf(setOf<Int>()) }
                     LazyColumn(
                         modifier = Modifier

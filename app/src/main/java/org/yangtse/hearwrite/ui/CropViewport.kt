@@ -20,9 +20,14 @@ const val CROP_MAX_ZOOM = 8f
  *
  * [panX]/[panY] are clamped to the pannable range: forced to zero on an axis
  * where the scaled image still fits (it stays centred there), otherwise capped
- * at ±(display − area)/2 so the image always covers the viewport with no gap.
- * [clamped] is what enforces that; every transform funnels through it, so an
- * instance obtained from [zoomBy]/[panBy]/[reset] is always legal.
+ * so the image always **covers the inner box** — the viewport minus [margin].
+ * The margin ring itself is deliberately *not* travelled into: it is the
+ * gesture keep-out the margin exists for (an image edge sitting on the screen
+ * edge puts its selection handle under the system back/home gesture), so the
+ * pan stops with that edge on the margin line, exactly where an unpanned image
+ * leaves it. [clamped] is what enforces all of this; every transform funnels
+ * through it, so an instance obtained from [zoomBy]/[panBy]/[reset] is always
+ * legal.
  *
  * [scale]/[width]/[height]/[offsetX]/[offsetY] are derived once per instance —
  * the crop canvas reads them on every drag frame.
@@ -99,8 +104,10 @@ data class CropViewport(
     fun clamped(): CropViewport {
         val z = zoom.coerceIn(1f, CROP_MAX_ZOOM)
         val probe = copy(zoom = z)
-        // A pan may use the margin too: the image is allowed to travel until
-        // its own edge reaches the viewport edge.
+        // The image may travel until its own edge reaches the margin line — the
+        // same line an unpanned image leaves it on. Travelling the extra
+        // `margin` past that would put the edge (and the selection handle on it)
+        // on the screen edge, inside the system's back/home gesture strip.
         val limitX = max(0f, (probe.width + 2f * margin - areaW) / 2f)
         val limitY = max(0f, (probe.height + 2f * margin - areaH) / 2f)
         return copy(

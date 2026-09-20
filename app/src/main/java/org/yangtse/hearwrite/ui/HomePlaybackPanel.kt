@@ -58,9 +58,10 @@ fun HomePlaybackPanel(
     /**
      * Non-null while the start button is held busy — the spinner plus this
      * label replace the normal caption and the button is disabled. The screen
-     * owns the wording (整理词表… while enriching/recording, 读取草稿… until
-     * the persisted draft lands, 识别中… while OCR is writing a new one), so
-     * the button never shows an enabled 0-word state whose tap answers
+     * owns the wording (整理词表… while the start action resolves the list
+     * against the lexicon and records it in history, 读取草稿… until the
+     * persisted draft lands, 识别中… while OCR is writing a new one), so the
+     * button never shows an enabled 0-word state whose tap answers
      * 请先输入单词列表 for a list that is about to appear.
      */
     startBusyLabel: String?,

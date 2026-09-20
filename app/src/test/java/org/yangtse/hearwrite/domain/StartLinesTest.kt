@@ -1,7 +1,6 @@
 package org.yangtse.hearwrite.domain
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -69,6 +68,5 @@ class StartLinesTest {
         val pool = rows("a", "b", "c").toMutableList()
         prepareStartRows(pool, 1, shuffle = true)
         assertEquals(rows("a", "b", "c"), pool)
-        assertTrue(pool is MutableList<ResolvedWord>)
     }
 }
