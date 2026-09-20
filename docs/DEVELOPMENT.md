@@ -75,7 +75,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 模拟器覆盖不依赖真实硬件的验证：Room 迁移 instrumentation 测试（`./gradlew :app:connectedDebugAndroidTest`）、进程死亡恢复、UI 走查。**迁移测试必须在应用的 SQLite 下限上跑一次**——框架 SQLite 版本随 API 等级走（API 33 → 3.32、API 34 → 3.39），而迁移的正确性取决于最老的那个引擎：`MIGRATION_4_5` 曾用 `ALTER TABLE … DROP COLUMN`（要 3.35），在 API 33 上直接抛错、库再也打不开，而当时 CI 跑在 API 36 上全绿（CI 现已固定为 **API 33**）。本机只有一个 API 37 的 AVD 时，用 `sdkmanager "system-images;android-33;google_apis;x86_64"` + `avdmanager create avd -n <名字> -k "system-images;android-33;google_apis;x86_64"` 临时建一个。音频焦点 / 来电中断 / 各家 TTS 音色仍必须真机验证——模拟器常常没有可用的 TTS 引擎与音色。
 
-真机则直接（实机调试的常见坑见 `AGENTS.md` 的 *adb device-driving notes*）：
+真机则直接（实机调试的常见坑见 §7）：
 
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -98,8 +98,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | 路径 | 用途 |
 | --- | --- |
 | `app/` | Android 应用（单一 `:app` 模块：`ui/` Compose 界面、`domain/` 纯 Kotlin 逻辑、`data/` 仓库与网络）；词表与内置资源本体在 `app/src/main/assets/`（原样打包，**只读**，禁止手工重新生成） |
-| `docs/` | 本指南、README 截图（按需）；图标设计源 `hearwrite.svg`（自适应图标各层由它生成到 `app/src/main/res/`） |
-| `scripts/` | 数据再生成工具与源：`generate-compounds.py`（组词表）、`build-lexicon.py` / `build-hanzi-lexicon.py`（两份词典表）、`extract-renai-ipa.py`（仁爱教材音标，一次性）、`scripts/data/` 频率表与音标源（均不随 APK 打包） |
+| `docs/` | 文档与设计源：本指南；`WORDLIST.md`（词库数据规范与贡献指南）；`TTS.md`（发音链路协议/音色/缓存）；`OCR.md`（拍照识词与拍照批改）；`ROADMAP.md`（**只记未完成项**）；`2026-09-18-DATA-MODEL.md`（行/词典分离 + 音标 spec）；`2026-09-20-REVIEW-0.9.0.md`（`v0.8.0..HEAD` 提交复核）；`ERRATA.md`（已发布提交信息的更正）；`implemented/`（归档文档：`2026-09-12-UI-AUDIT.md`、`2026-09-18-ROADMAP-DONE.md`、`2026-09-04-PHASES.md`）；README 截图（按需）；图标设计源 `hearwrite.svg`（自适应图标各层由它生成到 `app/src/main/res/`） |
+| `scripts/` | 数据再生成工具与源：`generate-compounds.py`（组词表）、`build-lexicon.py` / `build-hanzi-lexicon.py`（两份词典表）、`extract-renai-ipa.py`（仁爱教材音标，一次性）、`check-assets.py`（资产树校验，CI 门禁）、`import-wordlist.py`（外部词表规范化）、`verify-kebiao-scan.py`（课标字表 vs 影印件位次核对）、`scripts/data/` 频率表与音标源（均不随 APK 打包） |
 
 ## 4. 签名与打包发布
 
@@ -201,3 +201,17 @@ TTS / OCR 服务商密钥写入 DataStore 前经 `data/KeystoreCipher.kt` 用 **
 - **JVM 单测**：Android Keystore 在 JVM 上不存在，测试用内存 AES-GCM 假实现走 `SecretCipher` 接缝（`ProviderConfigSealTest`）验证封印/解封/明文透传契约。
 - **数据备份排除**：`data_extraction_rules.xml` 已排除 `datastore/` 与数据库，密钥密文不随云备份/设备迁移外流（README「所有数据只保存在本机」）。
 - 加密是尽力而为的静态防护：Keystore 由系统锁屏凭据保护，`adb backup`/root 读取 DataStore 只能拿到密文；应用进程内运行时仍需明文密钥发请求。
+
+## 7. 真机调试：adb 驱动要点
+
+每次验收都要在**真实界面**上跑一遍（模拟器或真机，见 §1.5），用 `adb` 驱动。以下每条都真的坑过人：
+
+- **等 UI，不要只等设备**：`adb wait-for-device` 在界面起来之前就返回（冷启动要一两分钟）。截图或注入输入前先等 `adb shell getprop sys.boot_completed`（或匹配 `[0-9]` 的 `sys.boot_completed=1`），否则拍到的是黑屏。
+- **屏幕会睡**：黑屏截图、`uiautomator dump` 为空、`input text` 悄无声息——多半是屏幕超时，不是崩溃。先看 `adb shell dumpsys window | grep mCurrentFocus` 与 logcat 再排查；长时间驱动期间用 `adb shell svc power stayon true` 保持唤醒，结束后 `adb shell svc power stayon false` 恢复。
+- **默认输入法是中文键盘**：zh-CN 设备上 Gboard 拼音模式会拦下 `adb shell input text`——注入的 ASCII 落进候选缓冲，永远到不了输入框。先禁用它（`adb shell ime disable <ime-id>`，id 从 `adb shell ime list -s` 取），让输入走硬件键盘通路，用完 `adb shell ime enable <ime-id>` 还原。
+- **滑动方向**：`adb shell input swipe x y1 x y2` 从顶部区域**向下**拖会拉出通知栏/锁屏，后续输入还会被吃掉——列表滚动一律从下往上（例如 `540 1900 540 500`）。
+- **`unzip -l` 会把中文资产名显示成乱码**（终端字符集解码所致），并且 `grep -c 'assets/.*\.txt$'` 数出 0——但条目本身是正确的 UTF-8。验证打包结果请用 Python：
+
+  ```bash
+  python3 -c "import zipfile; z=zipfile.ZipFile('app/build/outputs/apk/debug/app-debug.apk'); print([n for n in z.namelist() if n.startswith('assets/')])"
+  ```

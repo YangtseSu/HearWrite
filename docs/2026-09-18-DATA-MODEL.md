@@ -349,3 +349,5 @@ data class ResolvedWord(
 - 不让视觉模型输出音标（会幻觉），OCR 提示语保持原样。
 - 不提交 ipa-dict / 仁爱原始页面到仓库（只提交提取产物 `renai-ipa.tsv`）。
 - 不加 `tags` / `Row.id` / `LexEntry.kind` 字段（理由见 §五）。
+
+**资产解析实测（真机，debug，流式解码路径）**：`lexicon-en.json`（6.5 MB / ~53k 条）的首次查找 ≈**745 ms**（`Dispatchers.IO`），GC 后常驻 **~13 MB**，解析峰值 **~54 MB**；因为资产是**从流直接解到领域类型**（不建 JSON 字符串、不建 DTO 图），旧 DTO 路径实测常驻 ~23 MB、峰值 ~96 MB。两份词典资产的打包体量为 6,663 KB raw / 1,773 KB deflate（旧的一对 3,473 / 1,214，APK +765 KB），冷启动不受影响（首帧不等解析）。**迁库阈值不变**：只要实测冷启动或峰值越过 500 ms / 堆预算，就只把**词典**迁到预置 SQLite（Room `createFromAsset`），词表继续留作资产——见 AGENTS.md。

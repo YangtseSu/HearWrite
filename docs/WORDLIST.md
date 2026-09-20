@@ -127,3 +127,26 @@ python3 scripts/import-wordlist.py --lang zh --category 语文 --label "二下 �
 
 `--dry-run` 先看结果再落盘；写盘后仍需 `python3 scripts/check-assets.py` 与 `./gradlew :app:testDebugUnitTest`。
 
+
+## 9. 生成资产清单（格式与体量）
+
+词表之外，`app/src/main/assets/` 下还有四类**派生资产**——由第 6 节列出的生成器从词表与外部来源重新生成，**禁止手改**（`scripts/check-assets.py` 校验其结构，但不校验它与词表是否同步，见第 5 节）：
+
+| 资产 | 格式 | 体量 / 生成器 |
+|---|---|---|
+| `dict/lexicon-en.json` | `{"v":2,"entries":{word:{"s":[{p,g}],"i":[us,uk]}}}`——结构化义项 + 英美两套音标 | 53,384 条，45,868 条带音标，6.5 MB；`scripts/build-lexicon.py` |
+| `dict/lexicon-hanzi.json` | `{"v":2,"entries":{char:{"p":拼音,"c":组词}}}`——拼音带调（如 `yuè`）；`c` 缺省 = 只有提示行的条目 | 5079 个键，155 KB；`scripts/build-hanzi-lexicon.py` |
+| `compounds/compounds.json` | `{compounds: {char: [[word, syllable], …]}, learned: {…}}`——syllable 用声调数字，`ü=v`，轻声不标 | 4,724 + 524 个键；`scripts/generate-compounds.py` |
+| `audio/tick.wav` / `chime.wav` | 倒数最后一秒的滴答（音量 0.5）、整场结束的提示音（音量 0.6） | 自产，非生成器产物 |
+
+打包体量：两份词典资产合计 **6,663 KB raw / 1,773 KB deflate**（被替换掉的旧一对是 3,473 / 1,214 KB，因此 APK +765 KB）；冷启动不变（首帧不等解析，实测中位 647 ms）。解析耗时/常驻堆与「不预置 SQLite」的取舍见 [`2026-09-18-DATA-MODEL.md`](2026-09-18-DATA-MODEL.md) §4。
+
+RN 前身的 `assets/silent.wav`（iOS 后台保活音）**刻意不移植**——Android 不需要。
+
+再生成源（`scripts/data/`，不打包、需随生成器一起提交）：
+
+| 文件 | 格式 | 来源 |
+|---|---|---|
+| `xiandaihanyuchangyongcibiao.txt` | `word\tpinyin\tlevel` | 《现代汉语常用词表（草案）》(教育部, 商务印书馆 2008)，56,008 词，取自 [`liangqi/chinese-frequency-word-list`](https://github.com/liangqi/chinese-frequency-word-list)（文件名里的拼音笔误已改）；`generate-compounds.py` 与 `build-hanzi-lexicon.py` 的频率输入 |
+| `renai-ipa.tsv` | `headword\tus\tuk`（教材只印一套读音时两侧相同） | 仁爱版英语 七上/七下/八上 各单元词表自带的音标，由 `extract-renai-ipa.py` 从扫描页 OCR 文本提取；教材对其印刷过的词具有权威性，`build-lexicon.py` 优先于 ipa-dict。1,476 行 / 1,470 词头——**只提交提取产物，从不提交扫描页** |
+| `hanzi-meta-overrides.tsv` | 见生成器 | 轻声虚词与频率表缺字的读音/组词人工修正，`build-hanzi-lexicon.py` 的最高优先级来源 |

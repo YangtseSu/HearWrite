@@ -93,8 +93,10 @@ you're = you are         ← 只朗读左侧
 
 ## 相关文档
 
-- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — 开发者：环境搭建、构建、**签名与打包发布**
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — 开发者：环境搭建、构建、**签名与打包发布**、真机调试要点
 - [`docs/WORDLIST.md`](docs/WORDLIST.md) — 词库数据规范、校验方式与贡献流程
+- [`docs/TTS.md`](docs/TTS.md) — 发音链路：四条发音来源的协议、音色与缓存
+- [`docs/OCR.md`](docs/OCR.md) — 拍照识词与拍照批改：取图裁剪、提取规则、判定算法
 - [`AGENTS.md`](AGENTS.md) — 架构、工具链版本与行为契约（开发者）
 
 ## 关于开发方式
