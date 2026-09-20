@@ -9,7 +9,7 @@
 
 This is a **from-scratch Kotlin + Jetpack Compose app** for Chinese dictation training. **[alice](https://github.com/vvenv/alice)** is a third-party Expo/React Native dictation app (MIT, original author vvenv) the author has forked and contributed to (github.com/YangtseSu/alice); it serves as the **behavioral reference only** — nothing in this repo reads, builds against, or consults the alice code, and **this file is the sole behavioral contract**. This is **not** a port or line-by-line translation: idiomatic Kotlin/Compose; predecessor behavior is reflected here **only where this file specifies it**. Data asset provena...
 
-**Non-goals (do not build):** iOS / Web / desktop; backend server; the paid-features stack of the original (Credits, Recharge, model tiers — **excluded entirely**); Expo/RN code reuse. Platform targets: `minSdk 33`, `targetSdk 37`, `compileSdk 37`. All user-facing UI strings are hardcoded Chinese.
+**Non-goals (do not build):** iOS / Web / desktop; backend server; the paid-features stack of the original (Credits, Recharge, model tiers — **excluded entirely**); Expo/RN code reuse. Platform targets: `minSdk 33`, `targetSdk 37`, `compileSdk 37.2`. All user-facing UI strings are hardcoded Chinese.
 
 **Roadmap**: feature ideas and specs live in `docs/ROADMAP.md` — status 💡 idea / 📋 spec / ✅ done, **unfinished items only**: a finished entry's body moves to `docs/implemented/` with its number untouched, so `Roadmap #N` references (here, in KDoc, in build script comments) keep resolving.
 

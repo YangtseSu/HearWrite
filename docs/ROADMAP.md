@@ -216,7 +216,7 @@
 
 - **快捷方式 / 桌面小组件** — 静态 shortcuts（开始听写 / 复习错词）成本低；Glance 小组件建议等"今日复习"落地后再做。
   建议：**中低**。
-- **大字号 2.0× 走查与固定高度文本容器** — TalkBack 面已闭环（33 处图标按钮全带中文 `contentDescription`，角色 / `liveRegion` / `heading` / `clearAndSetSemantics` 到位；1.5× 字号已在拨盘、横屏舞台、统计图上走查），故本条只余字号侧：**2.0× 未走查**，而若干文本容器是固定 dp 高度（`ui/DictationScreen.kt:139`/`:149` 的 40 / 52 dp、`ui/HomeDrawers.kt:267` 的 36 dp、`ui/HomePlaybackPanel.kt:214` 的 52 dp——舞台只把倒计时那一行按 `fontScale` 计入高度），文字随系统放大时会裁切；`ui/Wordmark.kt:52`/`:64`/`:72` 的标题 `maxLines = 1` + Ellipsis 会先行省略；`ui/HomeDrawers.kt:267` 的「查看词表」36 dp 还低于 48 dp 触达最小。Android 17 的 CJKV 无障碍事件 / `TextAttribute` API 未接（全仓无 `textInputSession`）。
+- **大字号 2.0× 走查与固定高度文本容器** — TalkBack 面已闭环（33 处图标按钮全带中文 `contentDescription`，角色 / `liveRegion` / `heading` / `clearAndSetSemantics` 到位；1.5× 字号已在拨盘、横屏舞台、统计图上走查），故本条只余字号侧：**2.0× 未走查**，而若干文本容器是固定 dp 高度（`ui/DictationScreen.kt` 的 `DIAL_DETAIL_ROW_HEIGHT` 40 dp 与 `STAGE_ACTION_HEIGHT` 52 dp、`ui/HomeDrawers.kt:267` 的 36 dp、`ui/HomePlaybackPanel.kt:214` 的 52 dp——舞台只把倒计时那一行按 `fontScale` 计入高度），文字随系统放大时会裁切；`ui/Wordmark.kt:52`/`:64`/`:72` 的标题 `maxLines = 1` + Ellipsis 会先行省略；`ui/HomeDrawers.kt:267` 的「查看词表」36 dp 还低于 48 dp 触达最小。Android 17 的 CJKV 无障碍事件 / `TextAttribute` API 未接（全仓无 `textInputSession`）。
   建议：**中低**。跑一遍 2.0× 走查，把固定高度改成 `heightIn(min = …)` + 内容自适应，并把那个 36 dp 按钮提到 48 dp。
 - **应用内更新检查** — GitHub Releases 分发没有自动更新通道；可查 GitHub API 提示新版本。
   建议：**中低**。注意这会新增一个网络出口，需同步更新 AGENTS.md 的"四个出网点"清单。
