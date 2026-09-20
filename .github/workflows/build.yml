@@ -84,11 +84,11 @@ jobs:
   #
   # No `strategy.matrix` here, deliberately: the branch protection rule
   # required-status context is "Instrumented tests (emulator)", and a matrix
-  # makes GitHub report the check as "<job name> (<matrix values>)" —
-  # "Instrumented tests (emulator) (36)" — which no required context can
-  # match, leaving main unmergeable for anyone without admin bypass. One API
-  # level means the matrix buys nothing; if a second one is ever added, keep
-  # the context stable with an aggregate job rather than re-adding a matrix.
+  # makes GitHub report the check as "<job name> (<matrix values>)" — which no
+  # required context can match, leaving main unmergeable for anyone without
+  # admin bypass. One API level means the matrix buys nothing; if a second one
+  # is ever added, keep the context stable with an aggregate job rather than
+  # re-adding a matrix.
   instrumented:
     name: Instrumented tests (emulator)
     runs-on: ubuntu-latest
@@ -114,12 +114,13 @@ jobs:
       - name: Run instrumentation tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          # Quoted: the action stringifies this value, and an unquoted YAML
-          # number would lose a trailing `.0` (String(37.0) is "37", which
-          # turns into the non-existent `platforms;android-37`). Harmless for
-          # the current value, kept so a future minor-versioned API level does
-          # not silently break the SDK install.
-          api-level: "36"
+          # The app's minSdk floor (see the job comment): the oldest SQLite the
+          # app can meet, hence the strictest migration test. Quoted history:
+          # the action stringifies this value, and an unquoted YAML number would
+          # lose a trailing `.0` (String(37.0) is "37", which turns into the
+          # non-existent `platforms;android-37`); kept so a future
+          # minor-versioned API level does not silently break the SDK install.
+          api-level: "33"
           arch: x86_64
           target: google_apis
           force-avd-creation: false

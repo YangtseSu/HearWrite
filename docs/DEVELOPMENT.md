@@ -73,7 +73,7 @@ adb wait-for-device                              # 启动等到 boot_completed �
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-模拟器覆盖不依赖真实硬件的验证：Room 迁移 instrumentation 测试（`./gradlew :app:connectedDebugAndroidTest`）、进程死亡恢复、UI 走查。音频焦点 / 来电中断 / 各家 TTS 音色仍必须真机验证——模拟器常常没有可用的 TTS 引擎与音色。
+模拟器覆盖不依赖真实硬件的验证：Room 迁移 instrumentation 测试（`./gradlew :app:connectedDebugAndroidTest`）、进程死亡恢复、UI 走查。**迁移测试必须在应用的 SQLite 下限上跑一次**——框架 SQLite 版本随 API 等级走（API 33 → 3.32、API 34 → 3.39），而迁移的正确性取决于最老的那个引擎：`MIGRATION_4_5` 曾用 `ALTER TABLE … DROP COLUMN`（要 3.35），在 API 33 上直接抛错、库再也打不开，而当时 CI 跑在 API 36 上全绿（CI 现已固定为 **API 33**）。本机只有一个 API 37 的 AVD 时，用 `sdkmanager "system-images;android-33;google_apis;x86_64"` + `avdmanager create avd -n <名字> -k "system-images;android-33;google_apis;x86_64"` 临时建一个。音频焦点 / 来电中断 / 各家 TTS 音色仍必须真机验证——模拟器常常没有可用的 TTS 引擎与音色。
 
 真机则直接（实机调试的常见坑见 `AGENTS.md` 的 *adb device-driving notes*）：
 
@@ -184,7 +184,8 @@ adb install -r app/build/dist/HearWrite-0.3.0.apk
 
 - **触发**（`.github/workflows/build.yml`）：`pull_request`（含 fork）+ `push` 仅 `main`。逐分支 push 曾让每个 PR 提交把两个 job 各跑两遍（两个云模拟器）；tag push 不再触发 CI——Release 工作流会在该 tag 上构建并 `apksigner` 验签。
 - **检查项**：`Build, unit tests & lint`（含 `scripts/check-assets.py` 数据门禁）与 `Instrumented tests (emulator)`。作业名**就是**分支保护的必需上下文，两边必须逐字一致。
-- ⚠️ **不要给 `instrumented` job 加 `strategy.matrix`**：矩阵会让 GitHub 上报 `Instrumented tests (emulator) (36)`，没有任何必需上下文能匹配，main 会对所有没有 admin 绕过的人永久不可合并。将来真要多 API 级别，用汇总 job 保住上下文不变。
+- ⚠️ **不要给 `instrumented` job 加 `strategy.matrix`**：矩阵会让 GitHub 上报 `<作业名> (<矩阵值>)`，没有任何必需上下文能匹配，main 会对所有没有 admin 绕过的人永久不可合并。将来真要多 API 级别，用汇总 job 保住上下文不变。
+- `Instrumented tests (emulator)` 的 **`api-level` 固定为 33**（应用 `minSdk` 下限 = 应用会遇到的最老 SQLite）。调高它会让"只在较新 SQLite 上成立"的迁移重新蒙混过关，见 §1.5 与 `MIGRATION_4_5` 的 KDoc。
 - **保护分两层并存**，各管一半：
   - **经典分支保护** — 两项必需检查（`strict`，要求分支与 base 同步后再合并）。`enforce_admins: false`：管理员（目前只有作者）直接 push main 时绕过，**协作者与 PR 仍受门禁约束**；PR 必须两项检查通过才能合并。
   - **规则集 `main：禁止强推与删除`**（`bypass_actors: []`）— 禁止 force push 与删除 main，**对管理员同样生效**。经典保护无法这样拆分：它的 `allow_force_pushes`/`allow_deletions` 也会随 `enforce_admins: false` 一并豁免管理员。

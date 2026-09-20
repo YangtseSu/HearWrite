@@ -287,7 +287,7 @@ data class ResolvedWord(
 |---|---|
 | 14 | `HomeViewModel`：删 `enrichDraft()`；展示态直接 `resolve(parseDraft(text), lexicon)`，**草稿永不被改写** |
 | 15 | `LibraryViewModel` / `LibraryDrawViewModel`：删 `needsEnrich` / `enrichSettled`；直接 resolve |
-| 16 | Room v5：`ALTER TABLE history DROP COLUMN enriched_text`（SQLite ≥ 3.35 / API 33+） |
+| 16 | Room v5：`history` 删 `enrichedText` 列，**靠表重建**（见下） |
 | 17 | `HearWriteApplication`：resolver 不再 enrich，直接 resolve |
 | 18 | `WrongWordLineResolver` / `AnswerGrading` / `DictationGradePane`：消费 `ResolvedWord` |
 | 19 | `ui/DictationScreen`：拨盘合成行 + 详情卡并列 `/英/ /美/` |
@@ -296,9 +296,9 @@ data class ResolvedWord(
 
 > **Phase 3 已完成（2026-09-19）**，两条验收均满足。落地实测与偏差：
 > - **验收 2（真机走查）**：仁爱 `七上 Unit 1 导入` 的 `let` 行显示 `英 /let/ · 美 /let/ · v. · 让；允许`（教材记号）；中考1600 `A.txt` 的 `ability`/`abroad` 行显示 ipa-dict 记号（`英 /ɐbˈɪlətˌi/ · 美 /əˈbɪɫəˌti/`）；拨盘拨到该 `let` 行显示单行 `/let/ v.` + 释义行 `让；允许`；`school`（长释义）走 展开全部 → 详情卡，卡内独立一行 `英 /skˈuːl/ · 美 /ˈskuɫ/`。
-> - **验收 1（写回消失）**：`main` 下无 `enrichLines`/`enrichText` 命中，`displayRow()` 与 `enriched_text` 列已删。残留的 `enrichedText` 只有三类，都是"点名被删的东西"所必需：Room v5 的 `ALTER TABLE … DROP COLUMN`、v≤4 老库的构造 SQL（迁移测试的种子）、以及记录删除原因的 KDoc/测试注释。管线里没有任何写回路径。
+> - **验收 1（写回消失）**：`main` 下无 `enrichLines`/`enrichText` 命中，`displayRow()` 与 `enrichedText` 列已删。残留的 `enrichedText` 只有三类，都是"点名被删的东西"所必需：Room v5 的表重建（`history_new` 只 SELECT `id`/`text`/`createdAt`，被删的列不再出现）、v≤4 老库的构造 SQL（迁移测试的种子）、以及记录删除原因的 KDoc/测试注释。管线里没有任何写回路径。
 > - **运行时类型切换**：`ResolvedWord` 成为唯一消费类型 —— `DictationSessionStore`（暂存**已 resolve** 的 rows）、`DictationEngine`、`StartLines.prepareStartRows`、`AnswerGrading`、`CjkWordSpeech`、`WrongWordLineResolver`、`HomeViewModel.displayRows`、`LibraryViewModel`/`LibraryPreviewViewModel`/`LibraryDrawViewModel`，以及三个展示面（首页展示行、词库预览、抽词预览）。#18 的 `DictationGradePane` 无需改动：它只消费 `GradeResult`，其中的 `expected` 本来就由 rows 得来（走查中复核）。
-> - **#16 Room v5**：`history` 删列（`MIGRATION_4_5`，SQLite ≥ 3.35 = API 33+，不必重建表），`app/schemas/…/5.json` 已提交；新增 `HistoryEnrichedDropMigrationTest`（v4 种子 → 迁移 → 真 Room 往返：读取、去重 bump、新插）。
+> - **#16 Room v5**：`history` 删列（`MIGRATION_4_5`）。删法必须是**表重建**（`CREATE history_new` → `INSERT SELECT id, text, createdAt` → `DROP history` → `RENAME`），不能是 `ALTER TABLE … DROP COLUMN`：该语句要 SQLite ≥ 3.35，而框架 SQLite 在 API 33 上是 **3.32**（AOSP 的 `android/database/sqlite` 版本表；3.35 随 API 34 才到），本工程不自带 SQLite。`DROP COLUMN` 在 API 33 上抛 `near "DROP": syntax error`，迁移一抛库就永远打不开——恰与本版"升级不丢数据"相反。重建也是 Room 自己为删列生成的形状，且与 SQLite 版本无关。`app/schemas/…/5.json` 已提交；新增 `HistoryEnrichedDropMigrationTest`（v4 种子 → 迁移 → 真 Room 往返：读取、去重 bump、新插），CI 的仪器测试跑在 **API 33**（应用下限 = 应用会遇到的最老 SQLite）。
 > - **新增展示层 `domain/WordDisplay.kt`**：`dialHint`（美式音标 + 词性合成一行）、`glossText`、`listMeta`、`ipaLabels`（英在前）、`dialIpa`、`findResolvedByHeadword`。§4.2 的列表行规则按字面实现（`英 /…/ · 美 /…/ · 词性 · 释义`）；§4.1 表里的 `/音标/ pos meaning` 是同一件事的简写。
 > - **几何零改动**：`DialMetrics`/`tailDp`/`dialContentWidthDp`/`dialStageGeometry` 未动，只把 `dialFit` 的 `hasPos` 正名为 `hasHint`（§4.1），并把 `DialMetrics.wordPosGapDp` 一起改为 `wordHintGapDp`（同一行现在是 `/音标/ 词性`，旧名会误导）。**未**给 `DialFit` 增加"提示行截断"字段：§4 实测合成提示行 p99 113 dp < 204 dp 盘的 147.5 dp，0 溢出。
 > - **有意的一处行为改动**：词库预览的 载入草稿 现在载入**作者行**（asset 原样），而不是 resolve 后的行 —— 把词典列灌进用户草稿正是 §0 要消灭的写回；首页展示态照旧 resolve 显示。

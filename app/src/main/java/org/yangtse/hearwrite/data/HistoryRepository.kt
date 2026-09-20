@@ -19,7 +19,7 @@ data class HistoryEntry(
  *
  * The stored text is the authored list and nothing else: 词性/释义 are read
  * from the offline lexicon when they are shown, never baked into a row
- * (`docs/2026-09-18-DATA-MODEL.md` §0 — the `enriched_text` column this
+ * (`docs/2026-09-18-DATA-MODEL.md` §0 — the `enrichedText` column this
  * repository used to write was dropped in Room v5).
  */
 class HistoryRepository(

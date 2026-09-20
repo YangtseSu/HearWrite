@@ -38,7 +38,7 @@ data class WrongWordEntity(
  *  as assets). `text` is the authored list, exactly as the user typed it: the
  *  词性/释义 (and 音标) are read from the offline lexicon at display time and
  *  are never written into the row (`docs/2026-09-18-DATA-MODEL.md` §0 — the
- *  `enriched_text` column this replaced is dropped in v5). */
+ *  `enrichedText` column this replaced is dropped in v5). */
 @Entity(tableName = "history")
 data class HistoryEntity(
     @PrimaryKey val id: String,
@@ -318,18 +318,38 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
 
 /**
  * v4 → v5 (data-model Phase 3, `docs/2026-09-18-DATA-MODEL.md` §6): `history`
- * drops `enriched_text`. The column held ECDICT-expanded lines written back
+ * drops `enrichedText`. The column held ECDICT-expanded lines written back
  * into the row; nothing writes it any more (the dictionary is resolved at read
  * time and a row is never rewritten, §0), so it is dead weight that would
  * otherwise have to be kept in sync with a lookup table it duplicates.
  *
- * `DROP COLUMN` needs SQLite ≥ 3.35 (API 33+, which is this app's floor), so no
- * table rebuild is required: the stored `text` is the authored list and is
- * untouched.
+ * The column is dropped by rebuilding the table, **not** by
+ * `ALTER TABLE … DROP COLUMN`: that statement arrived in SQLite 3.35 and the
+ * framework SQLite on the app's own floor is older — API 33 ships 3.32 (AOSP's
+ * `android/database/sqlite` version table; 3.35 only lands with API 34), and
+ * this app bundles no SQLite of its own. `DROP COLUMN` there fails with
+ * `near "DROP": syntax error`, and a migration that throws leaves the database
+ * unopenable — every 错词本/收藏/历史/听写统计 read then fails, which is the
+ * opposite of this version's "升级不丢数据" promise. The rebuild is also what
+ * Room itself generates for a dropped column, and it is version-independent.
+ *
+ * The stored `text` is the authored list and is copied over untouched; nothing
+ * else in the schema changes, so the resulting table matches the exported
+ * `5.json` exactly.
  */
 val MIGRATION_4_5 = object : Migration(4, 5) {
     override fun migrate(db: SupportSQLiteDatabase) {
-        db.execSQL("ALTER TABLE `history` DROP COLUMN `enrichedText`")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `history_new` (" +
+                "`id` TEXT NOT NULL, `text` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, " +
+                "PRIMARY KEY(`id`))",
+        )
+        db.execSQL(
+            "INSERT INTO `history_new` (`id`, `text`, `createdAt`) " +
+                "SELECT `id`, `text`, `createdAt` FROM `history`",
+        )
+        db.execSQL("DROP TABLE `history`")
+        db.execSQL("ALTER TABLE `history_new` RENAME TO `history`")
     }
 }
 
