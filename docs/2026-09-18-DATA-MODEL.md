@@ -33,17 +33,19 @@
 data class WordRow(
     val display: String,       // 展示/作答/错词键。可含 "you're = you are"
     val speak: String,         // TTS 真正念的串（解析时从 display 的 "=" 左侧得出）
-    val kind: WordKind,        // EN | HANZI | WORD — 解析时由词头唯一决定
+    val kind: WordKind,        // EN | HANZI | WORD — 解析时由**可朗读词头**（speak）唯一决定
     val pos: String?,          // 该表权威：词性(EN) / 拼音(HANZI)
     val gloss: String?,        // 该表权威：释义(EN) / 组词(HANZI)
 )
 
 enum class WordKind { EN, HANZI, WORD }
 
-fun kindOf(display: String): WordKind = when {
-    !display.contains(CJK_RE)   -> WordKind.EN
-    display.length == 1         -> WordKind.HANZI
-    else                        -> WordKind.WORD
+// 判据是 speak（`=` 展开的左侧），不是 display：`apple = 苹果` 是可朗读的英文行，
+// 用 display 判会被 `=` 右侧的成绩带成 WORD，连带 TTS 语言、朗读释义支路与查表全部漂移。
+fun kindOf(speak: String): WordKind = when {
+    !speak.contains(CJK_RE)   -> WordKind.EN
+    speak.length == 1         -> WordKind.HANZI
+    else                      -> WordKind.WORD
 }
 ```
 

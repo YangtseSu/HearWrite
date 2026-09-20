@@ -102,6 +102,14 @@ data class DialStageGeometry(
  * [besideReadoutsHeightDp] their height beside the ring (a row) — the whole
  * reason the landscape stage fits is that the row is far shorter than the
  * column.
+ *
+ * [readoutsWidthDp] is the same row's **width**, and it is the full width the
+ * beside arrangement consumes next to the ring: the gap between the two, the
+ * 展开全部 slot, the seconds slot and the actions block, with the gaps that
+ * separate them. It is measured from those controls rather than estimated, so
+ * the BESIDE verdict and the rendered row cannot disagree — a budget that
+ * omitted the gaps or the fixed-width actions would admit a split whose row
+ * then does not fit the window.
  */
 fun dialStageGeometry(
     availableWidthDp: Double,

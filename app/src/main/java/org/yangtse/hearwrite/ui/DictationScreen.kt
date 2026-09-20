@@ -81,6 +81,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import org.yangtse.hearwrite.ui.theme.hearWriteSemantics
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -88,9 +89,14 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -150,13 +156,8 @@ private const val STAGE_COUNTDOWN_LINE_SP = 42.0
 private val STAGE_ACTIONS_TOP_GAP = 16.dp
 private val STAGE_ACTION_HEIGHT = 52.dp
 
-/**
- * Width the beside row needs before the stage splits into two columns: the two
- * word actions at their minimum (each a 48 dp target plus label) plus the
- * 展开全部 / seconds block. Below this the row would squeeze the actions, so the
- * window is simply too narrow to split.
- */
-private val STAGE_READOUTS_WIDTH = 220.dp
+/** Gap between the readouts' controls: the two word actions, and the row's slots. */
+private val STAGE_READOUT_GAP = 12.dp
 
 /** Widest the readout stack grows to — beyond this the two actions drift apart. */
 private val STAGE_ACTIONS_MAX_WIDTH = 420.dp
@@ -177,6 +178,47 @@ private const val WRONG_CHIP_CAP = 24
 
 /** Width the countdown slot reserves: the widest readout it ever shows. */
 private val COUNTDOWN_SLOT_TEXT = "${MAX_INTERVAL_SEC.toInt()} 秒"
+
+/**
+ * Width the beside readout row needs, measured from the controls it draws
+ * rather than assumed (AUDIT C6): the dial's gap, then 展开全部, the seconds and
+ * the fixed actions block, separated by the row's own gaps.
+ *
+ * The two text slots are measured at the styles they render at — the `TextButton`
+ * label style and `displaySmall` — through the same [TextMeasurer] the text
+ * renderer uses, so a 1.5× font scale is budgeted honestly and a style change
+ * moves the budget with it. Each slot then adds its widget's own horizontal
+ * padding, and the button never comes out below its own minimum width, exactly
+ * as the rendered `TextButton` cannot (Material wraps the label in
+ * `defaultMinSize` inside the content padding).
+ *
+ * 展开全部 is measured whether or not this word needs it: `needsDetail` is not
+ * known before the solve, and the widest the row can get is the safe side to
+ * budget. The caller `remember`s the result against the measurement's inputs —
+ * [density] (which carries `fontScale`), the [labelStyle]/[secondsStyle]
+ * instances, [layoutDirection] and the [textMeasurer] itself.
+ */
+private fun besideRowWidthDp(
+    textMeasurer: TextMeasurer,
+    density: Density,
+    labelStyle: TextStyle,
+    secondsStyle: TextStyle,
+    layoutDirection: LayoutDirection,
+): Double = with(density) {
+    val labelWidth = textMeasurer.measure(text = "展开全部", style = labelStyle).size.width.toDp()
+    val labelPadding = ButtonDefaults.TextButtonContentPadding
+    val detailWidthDp = maxOf(
+        ButtonDefaults.MinWidth,
+        labelWidth + labelPadding.calculateLeftPadding(layoutDirection) +
+            labelPadding.calculateRightPadding(layoutDirection),
+    )
+    val secondsWidthDp =
+        textMeasurer.measure(text = COUNTDOWN_SLOT_TEXT, style = secondsStyle).size.width.toDp()
+    (
+        DIAL_STAGE_BESIDE_GAP + detailWidthDp + STAGE_READOUT_GAP + secondsWidthDp +
+            STAGE_READOUT_GAP + STAGE_ACTIONS_MAX_WIDTH
+        ).value.toDouble()
+}
 
 /**
  * Length of the stage's pane fade (AUDIT D1 动-1). Short enough that a student
@@ -869,6 +911,9 @@ private fun DictationStage(
     var detailOpen by rememberSaveable(row?.display) { mutableStateOf(false) }
     val density = LocalDensity.current
     val fontScale = density.fontScale.toDouble()
+    // The beside row's budget is measured, not assumed, so the stage owns the
+    // same measurer the text renderer will use for the controls it budgets.
+    val textMeasurer = rememberTextMeasurer()
     // What the readouts cost, in the same units the renderer will use: the
     // seconds slot is a font-scale-driven line box, and the actions scale with
     // it too — assuming a dp figure here would break at font_scale 1.5.
@@ -900,12 +945,27 @@ private fun DictationStage(
         val preferredRingDp =
             if (availableHeightDp >= DIAL_STAGE_TALL) DIAL_RING_EXPANDED else DIAL_RING_PHONE
 
+        // Width the beside row actually needs, measured from the very controls
+        // the stage draws rather than guessed: [DIAL_STAGE_BESIDE_GAP] + the
+        // 展开全部 slot + a gap + the seconds slot + a gap + the actions block.
+        // The budget used to be a hand-guessed 220 dp, which omitted the beside
+        // gap, both 12 dp gaps and the 420 dp actions block — so a wide-but-short
+        // window could pick BESIDE for a row that then did not fit. AUDIT C6's
+        // own claim is that "the dial fits" is arithmetic, so the arithmetic has
+        // to be handed the real row.
+        val labelStyle = MaterialTheme.typography.labelLarge
+        val secondsStyle = MaterialTheme.typography.displaySmall
+        val layoutDirection = LocalLayoutDirection.current
+        val readoutsWidthDp = remember(textMeasurer, density, labelStyle, secondsStyle, layoutDirection) {
+            besideRowWidthDp(textMeasurer, density, labelStyle, secondsStyle, layoutDirection)
+        }
+
         val geometry = dialStageGeometry(
             availableWidthDp = maxWidth.value.toDouble(),
             availableHeightDp = availableHeightDp,
             stackedReadoutsHeightDp = stackedReadoutsHeightDp,
             besideReadoutsHeightDp = besideReadoutsHeightDp,
-            readoutsWidthDp = STAGE_READOUTS_WIDTH.value.toDouble(),
+            readoutsWidthDp = readoutsWidthDp,
             twoColumnsAllowed = wideWindow,
             preferredRingDp = preferredRingDp,
         )
@@ -914,8 +974,13 @@ private fun DictationStage(
         val metrics = remember(geometry.discDp, fontScale) {
             dialMetrics(geometry.discDp, fontScale)
         }
+        // The composed hint line, measured like the word and the gloss: it is
+        // drawn as one line, so a row whose `/音标/ 词性` does not fit needs the
+        // card just as much as one whose word does not (AUDIT C2's invariant).
+        // Computed once and handed to both the solver and the dial.
+        val hint = row?.dialHint()
         val needsDetail = showWord && row != null &&
-            dialFit(row.display, row.glossText(), row.dialHint() != null, metrics).needsDetail
+            dialFit(row.display, row.glossText(), hint, metrics).needsDetail
 
         val dial: @Composable () -> Unit = {
             DialRing(
@@ -1057,11 +1122,13 @@ private fun DictationStage(
         }
         // Beside: everything on one row, so the stage only needs its tallest
         // control (52 dp) instead of their sum. 展开全部 and the seconds share
-        // the leading block.
+        // the leading block. The gaps are [STAGE_READOUT_GAP] — the same
+        // constant the solver's budget adds — so the measured row and the drawn
+        // row stay one number.
         val readoutsRow: @Composable () -> Unit = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(STAGE_READOUT_GAP),
             ) {
                 Box(contentAlignment = Alignment.Center) { detailEntry() }
                 secondsText()
@@ -1225,11 +1292,13 @@ private fun DialCenter(
     }
     // One hint line carries both the 美式 音标 and the 词性 (`/ˈæpəl/ n.`): a
     // 音标 line of its own would cost the disc a fourth row and force a two-line
-    // word down to ~25 sp (docs/2026-09-18-DATA-MODEL.md §4.1). The solver only
-    // needs to know a hint line is there, not what it says.
+    // word down to ~25 sp (docs/2026-09-18-DATA-MODEL.md §4.1). The solver gets
+    // its text, not just its presence: the line is drawn clamped to one line, so
+    // a hint wider than the box loses its 词性 tail, and only measuring it can
+    // put the 展开全部 entry behind it.
     val hint = row?.dialHint()
     val gloss = row?.glossText()
-    val fit = dialFit(row?.display, gloss, hint != null, metrics)
+    val fit = dialFit(row?.display, gloss, hint, metrics)
     val stateText = if (playing) "听写中" else "已暂停"
 
     Surface(
@@ -1271,7 +1340,7 @@ private fun DialCenter(
                         maxLines = fit.wordLines,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (hint != null) {
+                    if (!hint.isNullOrEmpty()) {
                         Text(
                             hint,
                             style = MaterialTheme.typography.bodyMedium,

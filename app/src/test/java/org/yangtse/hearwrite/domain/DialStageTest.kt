@@ -23,6 +23,17 @@ class DialStageTest {
     /** The phone dial, and the value every window without room to grow uses. */
     private val phone = 248.0
 
+    /**
+     * The beside-row width budget the screen hands the solver, at font_scale 1:
+     * the 16 dp beside gap, the 展开全部 slot (≈80 dp: the 14 sp label plus its
+     * 12 dp content padding on each side), the 12 dp row gap, the seconds slot
+     * (≈85 dp: `10 秒` at displaySmall's 34 sp), 12 dp again, and the actions
+     * block pinned to its 420 dp maximum — ≈625 dp in all. The screen *measures*
+     * the two text slots with a `TextMeasurer`; a JVM test cannot, so it uses
+     * those slot figures, which is what makes 923 dp fit and 600 dp not.
+     */
+    private val besideRowWidth = 16.0 + 80.0 + 12.0 + 85.0 + 12.0 + 420.0
+
     /** The stage box a landscape phone actually leaves: 2424×1080 px at 420 dpi. */
     private val landscapeHeight = 103.0
 
@@ -38,7 +49,7 @@ class DialStageTest {
         availableHeightDp = height,
         stackedReadoutsHeightDp = stacked,
         besideReadoutsHeightDp = beside,
-        readoutsWidthDp = 220.0,
+        readoutsWidthDp = besideRowWidth,
         twoColumnsAllowed = twoColumns,
         preferredRingDp = preferred,
     )
@@ -165,5 +176,35 @@ class DialStageTest {
         for (ring in listOf(80.0, 103.0, 200.0, 248.0, 320.0)) {
             assertTrue(metrics.discDp(ring) < ring)
         }
+    }
+
+    // --- the beside width budget (§5.1) ---
+
+    @Test
+    fun `a wide short window splits only when the real row fits`() {
+        // The stage only makes BESIDE work when ring + the *whole* beside row
+        // fits sideways. The row is 16 + the 展开全部 slot + 12 + the seconds
+        // slot + 12 + the 420 dp actions block (≈625 dp at font_scale 1), and a
+        // 600 dp window is narrower than that plus any ring: the honest answer
+        // is the shrunk stacked arrangement, not a split that squeezes the two
+        // actions into a fixed 52 dp height.
+        val geometry = solve(width = 600.0, height = 300.0, twoColumns = true)
+        assertEquals(DialStageLayout.STACKED, geometry.layout)
+        assertEquals(300.0 - stackedReadouts, geometry.ringDp, 1e-6)
+        assertFalse(geometry.scrolls)
+        // The budget really is what it claims: ring + row does not fit 600 dp.
+        assertTrue(besideRowWidth + geometry.ringDp > 600.0)
+    }
+
+    @Test
+    fun `the real landscape phone still splits and fits`() {
+        // The device case AUDIT C6 was verified on: 923 dp wide is wider than
+        // the ring (103 dp) plus the real row, so BESIDE still wins there and
+        // still needs no scrolling.
+        val geometry = solve(width = 923.0, height = landscapeHeight, twoColumns = true)
+        assertEquals(DialStageLayout.BESIDE, geometry.layout)
+        assertEquals(103.0, geometry.ringDp, 1e-6)
+        assertFalse(geometry.scrolls)
+        assertTrue(besideRowWidth + geometry.ringDp <= 923.0 + 1e-6)
     }
 }

@@ -29,6 +29,16 @@ import kotlin.math.sqrt
  * The two disagree: `0.6 + 0.6 + 0.6` units fits two 1.0-wide lines by total
  * width but wraps to three lines in practice, so a total-width bound would call
  * a word shown that is in fact ellipsized.
+ *
+ * The **hint line** (音标 + 词性, or a 汉字's 拼音) is measured too, as one
+ * unwrapped width. It is drawn with `maxLines = 1`, so it cannot trade a line
+ * for width the way the word and the gloss do: a hint wider than the box is
+ * gone from its tail onward, and the 词性 is what falls off it. Measuring only
+ * the length of the word and the gloss let 125 shipped English rows compose a
+ * hint too wide for the box while both of those fit, so no 展开全部 entry
+ * appeared and the part of speech was simply eaten. Every text the dial draws
+ * is now measured, and [DialFit.needsDetail] is set when any of them does not
+ * hold what it is shown as holding.
  */
 data class DialMetrics(
     /** Diameter of the disc the content is clipped to. */
@@ -85,9 +95,22 @@ data class DialFit(
     val wordTruncated: Boolean,
     /** The gloss does not hold [glossLines] lines — read it in the detail card. */
     val glossTruncated: Boolean,
+    /**
+     * The hint line does not fit the box's width — read it in the detail card.
+     * The hint is drawn as exactly one line (`maxLines = 1`, ellipsized), so it
+     * is judged by its total width rather than by [wrappedLineCount]: it has no
+     * line to spill onto, and however well the word and the gloss above and
+     * below it fit, the tail of a wide one is simply gone.
+     */
+    val hintTruncated: Boolean,
 ) {
-    /** True when something is cut off and the 展开全部 entry is needed. */
-    val needsDetail: Boolean get() = wordTruncated || glossTruncated
+    /**
+     * True when something is cut off and the 展开全部 entry is needed — the word,
+     * its gloss, and the 音标/拼音/词性 hint line between them alike. Every
+     * [DialFit] the screen renders comes from here, so this is the single flag
+     * that decides whether a student can read what the dial drew.
+     */
+    val needsDetail: Boolean get() = wordTruncated || glossTruncated || hintTruncated
 }
 
 /**
@@ -327,16 +350,23 @@ private fun textTokens(text: String?): List<Token> {
  * When no candidate is clean, the layout that shows the most text is returned
  * with its truncation flags set — a whole word first, since the word is what is
  * being dictated and a gloss is annotation — and the screen offers the card.
- * Nothing that truncates is ever shown without [DialFit.needsDetail] being true.
+ * Nothing that truncates is ever shown without [DialFit.needsDetail] being true:
+ * the word, the gloss and [hint] are each measured against the box this layout
+ * resolves to, so "the dial drew it whole" is a property of the arithmetic.
+ *
+ * [hint] is the composed hint line the dial renders
+ * ([org.yangtse.hearwrite.domain.dialHint]) — its text, not a boolean, because
+ * the solver has to measure it: it is drawn as one line and its tail is what
+ * the student loses. Null and empty both mean "no hint line is drawn".
  */
-fun dialFit(word: String?, gloss: String?, hasHint: Boolean, metrics: DialMetrics): DialFit {
+fun dialFit(word: String?, gloss: String?, hint: String?, metrics: DialMetrics): DialFit {
     val glossSteps = if (gloss.isNullOrEmpty()) listOf(0) else metrics.glossMaxLines downTo 0
     var best: DialFit? = null
     var bestScore = 0.0
     var bestWholeWord = false
     for (wordLines in 1..metrics.wordMaxLines) {
         for (glossLines in glossSteps) {
-            val fit = layoutDial(word, gloss, hasHint, wordLines, glossLines, metrics)
+            val fit = layoutDial(word, gloss, hint, wordLines, glossLines, metrics)
             if (!fit.needsDetail && fit.contentWidthDp >= metrics.minBoxWidthDp) return fit
             // Nothing is clean, so rank by how much text each layout shows: the
             // dp each text occupies inside its box at the size this layout
@@ -359,22 +389,25 @@ fun dialFit(word: String?, gloss: String?, hasHint: Boolean, metrics: DialMetric
             }
         }
     }
-    return best ?: layoutDial(word, gloss, hasHint, 1, 0, metrics)
+    return best ?: layoutDial(word, gloss, hint, 1, 0, metrics)
 }
 
 private fun layoutDial(
     word: String?,
     gloss: String?,
-    hasHint: Boolean,
+    hint: String?,
     wordLines: Int,
     glossLines: Int,
     m: DialMetrics,
 ): DialFit {
     val hintLineDp = m.hintLineHeightSp * m.fontScale
+    // A null or empty hint is one with no line at all: the renderer draws
+    // nothing for either, so neither may cost the stack a gap and a line box.
+    val drawsHint = !hint.isNullOrEmpty()
     // Only what is drawn inside the disc counts: 展开全部 lives under the dial,
     // outside the clip, so it costs the content no height (AUDIT C2 — inside
     // the disc it was what pushed the stack past the rim).
-    val tailDp = (if (hasHint) m.wordHintGapDp + hintLineDp else 0.0) +
+    val tailDp = (if (drawsHint) m.wordHintGapDp + hintLineDp else 0.0) +
         (if (glossLines > 0) m.glossGapDp + glossLines * hintLineDp else 0.0)
 
     // A bigger word is a taller stack, hence a narrower box, hence a word that
@@ -406,11 +439,18 @@ private fun layoutDial(
     val heightDp = areaDpPerSp * fontSizeSp + tailDp
     val widthDp = (dialContentWidthDp(m.diameterDp, heightDp) - m.marginDp).coerceAtLeast(0.0)
     val unitsPerWordLine = if (fontSizeSp > 0.0) widthDp / (fontSizeSp * m.fontScale) else 0.0
-    val unitsPerGlossLine = if (m.hintFontSizeSp > 0.0) {
+    // The hint and the gloss render at [DialMetrics.hintFontSizeSp], so the box
+    // holds the same units of either per line. What differs is how each is
+    // drawn: the gloss wraps and is counted in lines, the hint is clamped to one
+    // line (`maxLines = 1`) and is judged by its total width — it has no second
+    // line to spill onto. A degenerate hint font size fits nothing, the same
+    // answer a zero-width box gives.
+    val unitsPerHintLine = if (m.hintFontSizeSp > 0.0) {
         widthDp / (m.hintFontSizeSp * m.fontScale)
     } else {
         0.0
     }
+
     return DialFit(
         wordFontSizeSp = fontSizeSp,
         wordLineHeightSp = fontSizeSp * m.wordLineRatio,
@@ -421,7 +461,12 @@ private fun layoutDial(
         wordTruncated = wordUnits > 0.0 &&
             wrappedLineCount(word, unitsPerWordLine) > wordLines,
         glossTruncated = !gloss.isNullOrEmpty() &&
-            wrappedLineCount(gloss, unitsPerGlossLine) > glossLines,
+            wrappedLineCount(gloss, unitsPerHintLine) > glossLines,
+        // Any hint at all is wider than a box of zero width — the disc that
+        // affords no rectangle at this stack height (AUDIT C6's short landscape
+        // stage) holds no hint, not a fitting one.
+        hintTruncated = !hint.isNullOrEmpty() &&
+            (unitsPerHintLine <= 0.0 || displayWidth(hint) > unitsPerHintLine),
     )
 }
 
