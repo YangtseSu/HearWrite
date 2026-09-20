@@ -16,10 +16,14 @@ to render a row's 词性/释义 and 音标:
   (the old flat `"pos|gloss"` had to fold every internal `;` into `，` to keep
   `；` as the sense separator). Omitted when the word has no senses.
 - `i` — `[us, uk]`, the two accent readings, omitted when neither source has
-  one. 仁爱 textbook first, ipa-dict otherwise: a headword the textbook prints
-  keeps the textbook's symbols for *both* accents (a single printed reading
-  means the textbook considers them equal), because the student compares the
-  app against the printed page (docs/2026-09-18-DATA-MODEL.md §3.2).
+  one. A source that prints only one accent writes `null` for the other, and
+  the app prints only the accents that exist: copying the one side onto the
+  other would fabricate a second accent for the 11,438 ipa-dict words that
+  have exactly one (review §4.1, docs/2026-09-18-DATA-MODEL.md §4.2). 仁爱
+  textbook first, ipa-dict otherwise: a headword the textbook prints keeps the
+  textbook's symbols, both sides exactly as the tsv carries them (a single
+  printed reading means the textbook considers them equal), because the
+  student compares the app against the printed page (§3.2).
 
 Sources:
 - [ECDICT](https://github.com/skywind3000/ECDICT) (MIT) — 词性 + 中文释义;
@@ -410,6 +414,8 @@ def main() -> None:
     out_entries: dict[str, dict] = {}
     ipa_from_renai = 0
     ipa_from_dict = 0
+    us_only = 0
+    uk_only = 0
     for key in entries:
         senses = entries[key]["senses"]
         if key in renai:
@@ -419,11 +425,21 @@ def main() -> None:
             us, uk = ipa_us.get(key), ipa_uk.get(key)
             if us or uk:
                 ipa_from_dict += 1
+        # A source that prints only one accent leaves the other side absent:
+        # the asset writes JSON `null` and the app prints the accents that
+        # exist. Copying the one side onto the other fabricated a second
+        # accent for 11,438 words that have exactly one (review §4.1).
+        us = us or None
+        uk = uk or None
         entry: dict[str, object] = {}
         if senses:
             entry["s"] = senses
         if us or uk:
-            entry["i"] = [us or uk, uk or us]
+            entry["i"] = [us, uk]
+            if not us:
+                uk_only += 1
+            elif not uk:
+                us_only += 1
         if entry:
             out_entries[key] = entry
 
@@ -435,9 +451,12 @@ def main() -> None:
     )
     size_kb = OUT_JSON.stat().st_size / 1024
     with_ipa = ipa_from_renai + ipa_from_dict
+    equal = sum(1 for e in out_entries.values() if "i" in e and e["i"][0] == e["i"][1])
     print(
         f"wrote {len(out_entries)} entries ({with_ipa} with IPA: "
-        f"{ipa_from_renai} 仁爱 + {ipa_from_dict} ipa-dict) → {OUT_JSON} ({size_kb:.0f} KB)"
+        f"{ipa_from_renai} 仁爱 + {ipa_from_dict} ipa-dict; "
+        f"{us_only} US-only + {uk_only} UK-only, {equal} with equal accents) "
+        f"→ {OUT_JSON} ({size_kb:.0f} KB)"
     )
 
 

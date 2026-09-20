@@ -242,9 +242,37 @@ class LexiconRepositoryTest {
     }
 
     @Test
+    fun `a word only one ipa-dict file covers leaves the other accent null`() = runTest {
+        // The two ipa-dict files cover different word sets, and neither covers
+        // `abstract` in both. The absent side must stay absent: fabricating it
+        // by copying the one that exists puts a 美 reading the source never
+        // gave on a word that has only a 英 one (review §4.1), and the display
+        // then prints a second accent it cannot back.
+        val usOnly = assetRepository().lookup("abstract")?.ipa
+        assertEquals("ˈæbˌstɹækt", usOnly?.us)
+        assertNull(usOnly?.uk)
+
+        val ukOnly = assetRepository().lookup("abase")?.ipa
+        assertEquals("ɐbˈeɪs", ukOnly?.uk)
+        assertNull(ukOnly?.us)
+    }
+
+    @Test
+    fun `a textbook reading printed as one semicolon group reaches the asset`() = runTest {
+        // 七上 prints `clothes /kləʊdz; kləʊz/` — one group carrying both
+        // accents. The extractor used to validate the group whole, `;` is not
+        // in the textbook's repertoire, and the word fell through to ipa-dict
+        // (review §4.2). The textbook symbols must be the ones the student
+        // sees, 英 first (`uk = readings[0]`).
+        assertEquals(Ipa(us = "kləʊz", uk = "kləʊdz"), assetRepository().lookup("clothes")?.ipa)
+    }
+
+    @Test
     fun `a word missing from both ipa sources keeps its senses without an ipa`() = runTest {
-        val entry = assetRepository().lookup("taikonaut")
-        assertEquals(listOf(Sense("n.", "中国太空人")), entry?.senses)
+        // 仁爱 八上 Unit 3 导入 prints `junk food` with no reading, and neither
+        // ipa-dict file has the phrase — the row still gets its 义项.
+        val entry = assetRepository().lookup("junk food")
+        assertEquals(listOf(Sense("n.", "垃圾食品, 无营养食品")), entry?.senses)
         assertNull(entry?.ipa)
     }
 

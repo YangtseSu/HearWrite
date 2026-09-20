@@ -7,6 +7,7 @@ import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.builtins.serializer
 
 /**
@@ -29,19 +30,26 @@ data class Sense(
 
 /**
  * IPA of one headword, `us` / `uk` — either side nullable, because a source
- * may print only one (the 仁爱 textbook prints a single symbol when both
- * accents read the same). Not part of a word-list row: a reading belongs to
- * the word, not to the list that happens to contain it.
+ * may print only one: the two ipa-dict files cover different word sets
+ * (`abase` is UK-only, `aargh` US-only) and the 仁爱 textbook prints a single
+ * symbol when both accents read the same. A missing accent is a JSON `null`
+ * on the wire, and every display surface prints only the accents that exist
+ * ([ipaLabels] leads with 英). Not part of a word-list row: a reading belongs
+ * to the word, not to the list that happens to contain it.
  *
- * On the wire it is the two-element array `[us, uk]`; an entry with no
- * transcription omits the field entirely.
+ * On the wire it is the two-element array `[us, uk]`, either element perhaps
+ * `null`; an entry with no transcription omits the field entirely.
  */
 @Serializable(with = IpaSerializer::class)
 data class Ipa(val us: String?, val uk: String?)
 
-/** `["us","uk"]` ⇄ [Ipa]; exact length 2 — the asset never writes a hole. */
+/**
+ * `["us", null]` ⇄ [Ipa]; exactly two elements — a side no source covers is a
+ * JSON `null`, never `""` (an empty string is not a transcription and would
+ * read as one).
+ */
 object IpaSerializer : KSerializer<Ipa> {
-    private val delegate = ListSerializer(String.serializer())
+    private val delegate = ListSerializer(String.serializer().nullable)
 
     override val descriptor: SerialDescriptor = delegate.descriptor
 
@@ -52,7 +60,7 @@ object IpaSerializer : KSerializer<Ipa> {
     }
 
     override fun serialize(encoder: Encoder, value: Ipa) {
-        encoder.encodeSerializableValue(delegate, listOf(value.us.orEmpty(), value.uk.orEmpty()))
+        encoder.encodeSerializableValue(delegate, listOf(value.us, value.uk))
     }
 }
 
@@ -133,7 +141,9 @@ fun resolveWord(row: WordRow, entry: LexEntry?, hanzi: HanziEntry?): ResolvedWor
  * One English dictionary entry — the value of `dict/lexicon-en.json`
  * (`docs/2026-09-18-DATA-MODEL.md` §1.2). A shared lookup table's value, not
  * a word-list row: the same entry answers for every list that contains the
- * word. [senses] is empty when ECDICT has no row for the headword.
+ * word. [senses] is empty when ECDICT has no row for the headword; [ipa] is
+ * null when neither source transcribes it, with either side of an existing
+ * [Ipa] null when only one source does.
  */
 @Serializable
 data class LexEntry(

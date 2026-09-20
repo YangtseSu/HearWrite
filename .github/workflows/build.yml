@@ -59,23 +59,42 @@ jobs:
       - name: Validate bundled word lists
         run: python3 scripts/check-assets.py
 
+      # The 仁爱 IPA extractor's own contract (`clothes /kləʊdz; kləʊz/` is one
+      # head with two readings, not a dropped line). Cheap and stdlib-only, and
+      # it is the only guard on a script whose output is committed as data — a
+      # regression there is invisible to check-assets.py, which validates the
+      # shape of whatever the tsv happened to contain.
+      - name: Test the 仁爱 IPA extractor
+        run: python3 scripts/test_extract_renai_ipa.py
+
       - name: Build debug APK, run unit tests and lint
         run: ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
 
   # Room migrations and DAO behavior are verified by instrumentation tests
   # (app/src/androidTest) — they need a real Android runtime, so they run on
-  # a GitHub-hosted emulator. Previously they only ever ran locally.
+  # a GitHub-hosted emulator.
   #
-  # API 36, not 37. Two API 37 images were tried and neither booted here:
+  # API 33 — the app's own `minSdk` floor, and the point of the choice: a
+  # migration is only correct if it runs on the OLDEST SQLite the app can meet,
+  # and the framework SQLite version is a function of the API level (3.32 on
+  # API 33, 3.35 only from API 34 — see `MIGRATION_4_5`'s KDoc). Running these
+  # on API 36 is what let a v4→v5 migration using `ALTER TABLE … DROP COLUMN`
+  # ship green: SQLite 3.50 accepted a statement Android 13 rejects outright
+  # (`near "DROP": syntax error`, and the database then never opens). Newer
+  # engines are strictly more permissive here, so the floor is the strictest
+  # test and the one to run.
+  #
+  # API 36, not 37: two API 37 images were tried and neither booted here:
   # `android-37.1;google_apis_ps16k` (16 KB pages) and `android-37.0;
   # google_apis` (plain), both stable-channel. In each run the emulator
   # printed its userspace boot properties and then produced no further
-  # output until the action's 600 s boot timeout killed it. The 37.0 attempt
-  # rules out page size — it is the same plain `google_apis` type as the 36
-  # image this job runs, which boots in ~41 s. Both API 37 images also boot
-  # fine locally (the 37.1 one in ~33 s, with the identical emulator version
-  # and flags), so this is an API 37-image/runner incompatibility, not a
-  # workflow misconfiguration. See docs/ROADMAP.md.
+  # output until the action's 600 s boot timeout killed it. Both API 37
+  # images also boot fine locally (the 37.1 one in ~33 s, with the identical
+  # emulator version and flags), so this is an API 37-image/runner
+  # incompatibility, not a workflow misconfiguration. See docs/ROADMAP.md.
+  # (Moot for the floor choice above, recorded so nobody "upgrades" the job
+  # back: any API level ≥ 34 would reopen the class of bug this job now
+  # catches.)
   #
   # 37.2 has no stable image at all (its stable-channel entries are `-betaN`
   # builds; the plain 37.2 image is dev-channel). The app's own compileSdk

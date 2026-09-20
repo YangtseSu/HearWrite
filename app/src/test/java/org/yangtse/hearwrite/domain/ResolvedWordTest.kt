@@ -1,5 +1,6 @@
 package org.yangtse.hearwrite.domain
 
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -13,8 +14,56 @@ import org.junit.Test
  * preview's first frame and the 抽词听写 pool all fall back to it when the
  * lexicon cannot be read. The dictionary-backed half (row wins field by field,
  * IPA filled in) runs through the asset seam in `LexiconRepositoryTest`.
+ *
+ * Also the `Ipa` wire format, which is a [IpaSerializer] concern here: an
+ * accent no source covers is a JSON `null` inside the two-element array, and
+ * the round-trip must preserve exactly which side is absent — that is what
+ * makes [LexEntry.ipa]'s nullability the live capability it documents rather
+ * than dead code (review §4.1).
  */
 class ResolvedWordTest {
+
+    @Test
+    fun `an accent no source covers survives the wire as null, on either side`() {
+        val ukOnly = Json.decodeFromString(
+            LexEntry.serializer(),
+            """{"s":[{"g":"贬抑"}],"i":[null,"ɐbˈeɪs"]}""",
+        ).ipa
+        assertEquals(Ipa(us = null, uk = "ɐbˈeɪs"), ukOnly)
+
+        val usOnly = Json.decodeFromString(
+            LexEntry.serializer(),
+            """{"s":[{"g":"啊"}],"i":["ˈɑɹɡ",null]}""",
+        ).ipa
+        assertEquals(Ipa(us = "ˈɑɹɡ", uk = null), usOnly)
+    }
+
+    @Test
+    fun `serializing writes an absent accent as null, never as an empty string`() {
+        val entry = LexEntry.serializer()
+        assertEquals(
+            """{"i":[null,"ɐbˈeɪs"]}""",
+            Json.encodeToString(entry, LexEntry(ipa = Ipa(null, "ɐbˈeɪs"))),
+        )
+        assertEquals(
+            """{"i":["ˈɑɹɡ",null]}""",
+            Json.encodeToString(entry, LexEntry(ipa = Ipa("ˈɑɹɡ", null))),
+        )
+        // Both sides present is unchanged by the nullable delegate.
+        assertEquals(
+            """{"i":["bəˈnænə","bəˈnɑːnə"]}""",
+            Json.encodeToString(entry, LexEntry(ipa = Ipa("bəˈnænə", "bəˈnɑːnə"))),
+        )
+    }
+
+    @Test
+    fun `an ipa array of the wrong length is rejected, not silently truncated`() {
+        assertTrue(
+            runCatching {
+                Json.decodeFromString(LexEntry.serializer(), """{"i":["ˈæpl"]}""")
+            }.isFailure,
+        )
+    }
 
     @Test
     fun `an english row keeps its own 词性 and 释义 with no dictionary behind it`() {

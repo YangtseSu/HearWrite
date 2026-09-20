@@ -78,9 +78,15 @@ class LexiconRepository(private val readAssetStream: (String) -> InputStream) {
         }
     }
 
+    // `decodeFromStream` is still experimental in kotlinx-serialization (the
+    // `Json.decodeFromStream` overload carries `@ExperimentalSerializationApi`);
+    // the app pins it deliberately — the asset decodes from the stream rather
+    // than through a whole-file JSON string (~96 MB → ~54 MB peak, §1.2).
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private fun parseEnglish(): Map<String, LexEntry> =
         readAssetStream(EN_PATH).use { JSON.decodeFromStream<EnglishLexicon>(it).entries }
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private fun parseHanzi(): Map<String, HanziEntry> =
         readAssetStream(HANZI_PATH).use { JSON.decodeFromStream<HanziLexicon>(it).entries }
 
@@ -178,8 +184,7 @@ class LexiconRepository(private val readAssetStream: (String) -> InputStream) {
     /**
      * 行覆盖 + 词典回填 (`§1.4`): the row's own columns win **field by field**,
      * the lexicon fills what it left empty — the rule that finally gives a
-     * 仁爱 row (which prints its own 词性/释义) the textbook IPA it never could
-     * get while enrichment skipped any row that already carried a column. The
+     * 仁爱 row (which prints its own 词性/释义) the textbook IPA. The
      * composition itself is [resolveWord]; this only does the two lookups.
      */
     suspend fun resolve(row: WordRow): ResolvedWord = withContext(Dispatchers.IO) { resolveIn(row) }

@@ -25,13 +25,18 @@ Rules (each one exists because a real page needs it):
   stripped of the OCR's leading junk (`(85)`, `*`, `pl.`, a POS token); a
   trailing `(to)` — `according (to)` — is dropped, the list headword is
   `according`.
+- One group may carry both accents, printed `;`-separated inside the slashes
+  (`clothes /kləʊdz; kləʊz/`, `hot /hɒt; hɑt/`): the group is split on `;`
+  first, and the valid parts become that head's readings in printed order —
+  British first, so `uk = readings[0]`, `us = readings[1]`.
 - One printed reading means the textbook considers both accents the same
   (`mall /mɔːl/`): `us` and `uk` are written identically.
-- A group whose symbols leave the IPA repertoire (the appendix page prints
-  pre-2015 notation: `hi:`, `'veri`) or whose head cannot be read (a
+- A reading whose symbols leave the IPA repertoire (the appendix page prints
+  pre-2015 notation: `hi:`, `'veri`) or a group whose head cannot be read (a
   continuation line, `/ˌɪnˈlænd/ adv. …`) is dropped on its own — one mangled
-  group must not cost the valid entries sharing its OCR line. The word then
-  falls back to ipa-dict in `build-lexicon.py`.
+  reading must not cost the valid readings sharing its group, nor the valid
+  entries sharing its OCR line. The word then falls back to ipa-dict in
+  `build-lexicon.py`.
 - `**` marks OCR contamination of a second reading (`artist /ˈɑːtɪst/;
   **ˈɑːtɪst/`); an unterminated `/` does the same for `be /biː/; biː/`. Both
   drop that reading, keeping the group that parsed.
@@ -83,22 +88,30 @@ def head_before(before: str) -> str:
 
 
 def parse_line(line: str) -> list[tuple[str, list[str]]]:
-    """`(head, [readings])` entries of one OCR line, damaged groups dropped."""
+    """`(head, [readings])` entries of one OCR line, damaged readings dropped."""
     entries: list[list] = []
     previous_end = 0
     for index, match in enumerate(GROUP_RE.finditer(line)):
         before = line[previous_end : match.start()]
         previous_end = match.end()
-        reading = match.group(1).strip()
-        if set(reading) - IPA_CHARS:
+        # One group may print both accents — `clothes /kləʊdz; kləʊz/` — so
+        # split on `;` *before* validating: `;` is not in IPA_CHARS, and
+        # checking the whole group first rejected the very words whose two
+        # accents differ most. Each part is validated on its own, so a mangled
+        # part costs only its own reading.
+        readings = [
+            part for part in (p.strip() for p in match.group(1).split(";"))
+            if part and not set(part) - IPA_CHARS
+        ]
+        if not readings:
             continue
         if index > 0 and entries and SEPARATOR_RE.fullmatch(before):
-            entries[-1][1].append(reading)
+            entries[-1][1].extend(readings)
             continue
         head = head_before(before)
         if not HEAD_RE.match(head):
             continue
-        entries.append([head, [reading]])
+        entries.append([head, readings])
     return [(head, readings) for head, readings in entries]
 
 

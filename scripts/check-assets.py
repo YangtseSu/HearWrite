@@ -239,11 +239,27 @@ def lexicon_entries(path: Path, report: Report) -> dict | None:
 
 
 def check_ipa(text: object) -> bool:
+    """One transcription: a non-empty string inside the IPA repertoire. JSON
+    `null` is not a transcription — callers treat it as "that accent is
+    absent" (`Ipa.us`/`Ipa.uk` are nullable, `docs/2026-09-18-DATA-MODEL.md`
+    §4.2: 只查到一套时显示一套)."""
     return isinstance(text, str) and bool(text) and IPA_RE.fullmatch(text) is not None
 
 
 def check_lexicon_en(path: Path, report: Report) -> None:
-    """`headword → {s: [{p?, g}], i: [us, uk]}` — the English lexicon."""
+    """`headword → {s: [{p?, g}], i: [us?, uk?]}` — the English lexicon.
+
+    The checks mirror what the runtime decoder actually accepts, because a
+    violation the decoder rejects ships as a lookup-time
+    `SerializationException` and takes every English list down with it:
+
+    - `"s": null` is **fatal** — `LexEntry.senses` is a non-null `List<Sense>`
+      (its default only covers an *absent* key), so an explicit null throws;
+    - `"i": null` is **safe** — `LexEntry.ipa` is `Ipa?`, so an explicit null
+      decodes to "this word has no transcription" and is accepted here;
+    - a side of `"i"` may be null (one accent exists, the other does not) but
+      not both, and never a non-string.
+    """
     label = f"{path.parent.name}/{path.name}"
     entries = lexicon_entries(path, report)
     if entries is None:
@@ -256,21 +272,37 @@ def check_lexicon_en(path: Path, report: Report) -> None:
         if not isinstance(entry, dict) or not entry or set(entry) - {"s", "i"}:
             bad += 1
             continue
-        senses = entry.get("s")
-        if senses is not None:
+        if "s" in entry:
+            senses = entry["s"]
             if not isinstance(senses, list) or not senses:
                 bad += 1
                 continue
+            broken = False
             for sense in senses:
-                if not isinstance(sense, dict) or set(sense) - {"p", "g"} or not sense.get("g"):
+                if (
+                    not isinstance(sense, dict)
+                    or set(sense) - {"p", "g"}
+                    or not isinstance(sense.get("g"), str)
+                    or not sense["g"]
+                ):
                     bad += 1
+                    broken = True
                     break
                 if "p" in sense and not isinstance(sense["p"], str):
                     bad += 1
+                    broken = True
                     break
+            if broken:
+                continue
         ipa = entry.get("i")
-        if ipa is not None and (
-            not isinstance(ipa, list) or len(ipa) != 2 or not all(check_ipa(part) for part in ipa)
+        if ipa is None:
+            continue  # absent, or an explicit null — both mean "no IPA"
+        if not isinstance(ipa, list) or len(ipa) != 2:
+            bad += 1
+            continue
+        us, uk = ipa
+        if (us is None and uk is None) or not all(
+            part is None or check_ipa(part) for part in (us, uk)
         ):
             bad += 1
     if bad:
