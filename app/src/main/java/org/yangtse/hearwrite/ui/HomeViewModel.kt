@@ -204,7 +204,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _libraryTitles = MutableStateFlow<Map<String, String>>(emptyMap())
 
     private val _starting = MutableStateFlow(false)
-    /** True while the start action enriches/records the list (button spin). */
+    /**
+     * True while [prepareAndRecord] is running: the start action resolves the
+     * draft's rows against the offline lexicon (a cold process pays the lazy
+     * asset parse) and records the list in history, so the button spins
+     * instead of looking dead.
+     */
     val starting: StateFlow<Boolean> = _starting.asStateFlow()
 
     // ---- 拍照识词 (OCR import) state --------------------------------------
@@ -285,26 +290,24 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     // ---- 选定识别区域 (crop step) ------------------------------------------
 
+    /**
+     * The decode half of the crop step — session id, decode job, the bitmap
+     * slot and its recycle discipline ([CropSessionHost]). Only the half
+     * **below** is Home's own: confirming here replaces the draft with the
+     * recognized lines, where DictationViewModel grades a student's sheet.
+     */
+    private val cropHost = CropSessionHost { uri -> ocrService.decodeCropSource(uri) }
+
+    /** Decoded source shown in the crop overlay (EXIF-rotated, ≤ 4096 px). */
+    val cropBitmap: StateFlow<Bitmap?> = cropHost.bitmap
+
+    /** True while the picked image is being decoded for the crop overlay. */
+    val cropLoading: StateFlow<Boolean> = cropHost.loading
+
     /** Reclaim the decode bitmap whenever the ViewModel goes away. */
     override fun onCleared() {
-        cropDecodeJob?.cancel()
-        cropDecodeJob = null
-        _cropBitmap.value?.recycle()
-        _cropBitmap.value = null
+        cropHost.recycle()
     }
-
-    private var cropDecodeJob: Job? = null
-
-    /** Crop session id: bumped on start/cancel so stale decode results die. */
-    private var cropSession = 0
-
-    private val _cropBitmap = MutableStateFlow<Bitmap?>(null)
-    /** Decoded source shown in the crop overlay (EXIF-rotated, ≤ 4096 px). */
-    val cropBitmap: StateFlow<Bitmap?> = _cropBitmap.asStateFlow()
-
-    private val _cropLoading = MutableStateFlow(false)
-    /** True while the picked image is being decoded for the crop overlay. */
-    val cropLoading: StateFlow<Boolean> = _cropLoading.asStateFlow()
 
     init {
         // Seed the draft from the persisted value, then watch for changes.
@@ -538,8 +541,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Apply a history/favorite entry to the draft (enriched text when the row
-     * has it, else the original text) — the upstream "已载入" behavior.
+     * Apply a history/favorite entry to the draft — the entry's own authored
+     * text (a row is never enriched; 词性/释义 are read from the lexicon at
+     * display time), the upstream "已载入" behavior.
      */
     fun applyEntry(linesText: String) {
         _draft.value = linesText
@@ -579,7 +583,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * 撤销 a [deleteHistory]: re-insert the exact row (id, text, enrichment,
+     * 撤销 a [deleteHistory]: re-insert the exact row (id, authored text,
      * timestamp) and its star, so a 错词本 source or favorite pointing at it
      * resolves again. No-op when nothing was deleted (or 撤销 already ran).
      */
@@ -785,35 +789,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      * 读取失败 message and the overlay closes itself ([cropBitmap] stays null).
      */
     fun startOcrCrop(uri: Uri) {
-        cropDecodeJob?.cancel()
-        val session = ++cropSession
-        _cropBitmap.value?.recycle()
-        _cropBitmap.value = null
         _ocrError.value = null
-        _cropLoading.value = true
-        cropDecodeJob = viewModelScope.launch {
-            val decoded = ocrService.decodeCropSource(uri)
-            if (session != cropSession) {
-                decoded?.recycle()
-                return@launch
-            }
-            _cropLoading.value = false
-            if (decoded == null) {
-                _ocrError.value = "读取图片失败，请重新拍摄或选择"
-            } else {
-                _cropBitmap.value = decoded
-            }
+        cropHost.start(viewModelScope, uri) {
+            _ocrError.value = "读取图片失败，请重新拍摄或选择"
         }
     }
 
     /** Leave the crop step without recognizing; recycles the decoded source. */
     fun cancelOcrCrop() {
-        cropSession++
-        cropDecodeJob?.cancel()
-        cropDecodeJob = null
-        _cropLoading.value = false
-        _cropBitmap.value?.recycle()
-        _cropBitmap.value = null
+        cropHost.cancel()
     }
 
     /**
@@ -826,8 +810,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
      * its pixels).
      */
     fun confirmOcrCrop(rect: NormalizedRect, lang: OcrLang) {
-        val source = _cropBitmap.value ?: return
-        _cropBitmap.value = null
+        val source = cropHost.take() ?: return
         ocrJob = viewModelScope.launch {
             if (!ocrGate.tryLock()) {
                 source.recycle()

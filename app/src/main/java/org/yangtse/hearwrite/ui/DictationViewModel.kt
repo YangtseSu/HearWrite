@@ -673,8 +673,6 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
      */
     private val gradeGate = Mutex()
 
-    private var gradeCropJob: Job? = null
-
     /**
      * The in-flight answer-sheet recognition ([cancelGrade] abandons it). The
      * pane's progress row offers 取消 because a vision call is a 30 s round
@@ -684,9 +682,6 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
      */
     private var gradeJob: Job? = null
 
-    /** Crop session id: bumped on start/close so a stale decode dies. */
-    private var gradeCropSession = 0
-
     /** dataUrl + lang of the last compressed sheet — the 重试 target. */
     private var lastGradeRun: Pair<String, OcrLang>? = null
 
@@ -694,13 +689,19 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     /** True while the 拍照批改 pane replaces the score card. */
     val gradePane: StateFlow<Boolean> = _gradePane.asStateFlow()
 
-    private val _cropBitmap = MutableStateFlow<Bitmap?>(null)
-    /** Answer-sheet source shown in the crop overlay (decode in flight = null). */
-    val cropBitmap: StateFlow<Bitmap?> = _cropBitmap.asStateFlow()
+    /**
+     * The decode half of the crop step — the same [CropSessionHost] 拍照识词
+     * uses, because a phone photo of a notebook needs its region picked or the
+     * vision model reads the desk around it. Only the confirmation half below
+     * is this screen's own (it grades the run instead of replacing a draft).
+     */
+    private val cropHost = CropSessionHost { uri -> app.ocrService.decodeCropSource(uri) }
 
-    private val _cropLoading = MutableStateFlow(false)
+    /** Answer-sheet source shown in the crop overlay (decode in flight = null). */
+    val cropBitmap: StateFlow<Bitmap?> = cropHost.bitmap
+
     /** True while the picked answer-sheet photo is being decoded. */
-    val cropLoading: StateFlow<Boolean> = _cropLoading.asStateFlow()
+    val cropLoading: StateFlow<Boolean> = cropHost.loading
 
     private val _gradeBusy = MutableStateFlow(false)
     /** True while the vision call recognizes the answer sheet. */
@@ -794,12 +795,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
 
     /** Drop the crop overlay without touching the reading behind it. */
     fun cancelCrop() {
-        gradeCropSession++
-        gradeCropJob?.cancel()
-        gradeCropJob = null
-        _cropLoading.value = false
-        _cropBitmap.value?.recycle()
-        _cropBitmap.value = null
+        cropHost.cancel()
     }
 
     fun clearGradeNotice() {
@@ -812,22 +808,9 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
      * its region picked or the vision model reads the desk around it.
      */
     fun startCrop(uri: Uri) {
-        cancelCrop()
-        val session = ++gradeCropSession
         _gradeError.value = null
-        _cropLoading.value = true
-        gradeCropJob = viewModelScope.launch {
-            val decoded = app.ocrService.decodeCropSource(uri)
-            if (session != gradeCropSession) {
-                decoded?.recycle()
-                return@launch
-            }
-            _cropLoading.value = false
-            if (decoded == null) {
-                _gradeError.value = "读取图片失败，请重新拍摄或选择"
-            } else {
-                _cropBitmap.value = decoded
-            }
+        cropHost.start(viewModelScope, uri) {
+            _gradeError.value = "读取图片失败，请重新拍摄或选择"
         }
     }
 
@@ -837,8 +820,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
      * only [confirmGrade] writes to the 错词本.
      */
     fun confirmCrop(rect: NormalizedRect) {
-        val source = _cropBitmap.value ?: return
-        _cropBitmap.value = null
+        val source = cropHost.take() ?: return
         gradeJob = viewModelScope.launch {
             if (!gradeGate.tryLock()) {
                 source.recycle()
@@ -1033,7 +1015,7 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     )
 
     override fun onCleared() {
-        cancelCrop() // reclaim the answer-sheet decode, if any
+        cropHost.recycle() // reclaim the answer-sheet decode, if any
         cancelGrade() // abandon a recognition still in flight
         engine.dispose() // leaving the screen stops playback
     }
