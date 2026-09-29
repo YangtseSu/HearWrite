@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # 勘误记录
 
 已发布的**提交信息**无法在不改写 `origin/main` 历史的前提下更正，因此把复核出的错误陈述记在这里：树内容是正确的，只有措辞与事实不符。

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Yangtse Su
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Build `app/src/main/assets/dict/lexicon-en.json` — the English lexicon.
 
 Replaces `build-ecdict-meta.py` (schema: docs/WORDLIST.md §9). The

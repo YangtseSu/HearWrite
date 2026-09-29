@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Yangtse Su
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Regenerate app/src/main/assets/compounds/compounds.json — per-character
 word-compound data for single-char dictation ("生" → "生活的生").
 

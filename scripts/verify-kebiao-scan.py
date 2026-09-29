@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Yangtse Su
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Cross-check the shipped 课标 字表 against the official scanned PDF.
 
 The MOE PDF (`http://www.moe.gov.cn/.../W020220420582344386456.pdf`) is an

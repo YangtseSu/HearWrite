@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package org.yangtse.hearwrite.domain
 
 /** Shared by the speech-text rules of this file, [kindOf] and [cjkWordSpeech]. */

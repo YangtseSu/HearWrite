@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Yangtse Su
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Unit tests for `scripts/extract-renai-ipa.py`'s `parse_line`.
 
 Locks the group-splitting rule the 仁爱 import depends on. The textbook prints

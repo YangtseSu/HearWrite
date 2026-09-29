@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package org.yangtse.hearwrite.data
 
 import android.security.keystore.KeyGenParameterSpec

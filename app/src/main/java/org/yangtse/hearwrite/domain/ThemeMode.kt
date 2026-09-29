@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package org.yangtse.hearwrite.domain
 
 /** App theme preference (DataStore `theme`): follow the system, or force one mode. */

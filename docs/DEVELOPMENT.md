@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # 开发指南（构建 · 签名 · 打包）
 
 面向开发者。架构、工具链版本策略与行为契约见 [`../AGENTS.md`](../AGENTS.md)。本文记录：机器环境搭建、日常命令、以及**签名与打包发布**的完整流程。
@@ -88,6 +91,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | `./gradlew :app:assembleDebug` | 构建 Debug APK |
 | `./gradlew :app:testDebugUnitTest` | 单元测试（domain 逻辑门禁） |
 | `./gradlew :app:lintDebug` | Android lint |
+| `reuse lint` | 校验每个文件的版权/许可声明（REUSE 规范，CI 门禁；声明来源：文件头 SPDX 标签 + `REUSE.toml`） |
 | `./gradlew :app:assembleRelease` | 构建签名 Release APK（见下节） |
 | `python3 scripts/generate-compounds.py` | 重新生成 `compounds/compounds.json`（输入：`scripts/data/` 频率表 + `app/src/main/assets/人教版小学语文/`） |
 | `python3 scripts/build-lexicon.py` | 重新生成 `dict/lexicon-en.json`（首次自动下载 ECDICT csv 与 ipa-dict 到 `.cache/`；仁爱音标读 `scripts/data/renai-ipa.tsv`） |
@@ -99,6 +103,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 | --- | --- |
 | `app/` | Android 应用（单一 `:app` 模块：`ui/` Compose 界面、`domain/` 纯 Kotlin 逻辑、`data/` 仓库与网络）；词表与内置资源本体在 `app/src/main/assets/`（原样打包，**只读**，禁止手工重新生成） |
 | `docs/` | 文档与设计源：本指南；`WORDLIST.md`（词库数据规范与贡献指南）；`TTS.md`（发音链路协议/音色/缓存）；`OCR.md`（拍照识词与拍照批改）；`ROADMAP.md`（**只记未完成项**）；`ERRATA.md`（已发布提交信息的更正）；`implemented/`（归档文档：`2026-09-12-UI-AUDIT.md`、`2026-09-18-DATA-MODEL.md`（行/词典分离 + 音标 spec，规则已提炼进 AGENTS.md / WORDLIST.md）、`2026-09-18-ROADMAP-DONE.md`、`2026-09-20-REVIEW-0.9.0.md`（`v0.8.0..HEAD` 提交复核）、`2026-09-04-PHASES.md`）；README 截图（按需）；图标设计源 `hearwrite.svg`（自适应图标各层由它生成到 `app/src/main/res/`） |
+| `LICENSES/`、`REUSE.toml` | 许可文本与机器可读的许可元数据（[REUSE](https://reuse.software) 规范）：`LICENSES/<SPDX 标识>.txt` 放用到的许可全文，`GPL-3.0-or-later.txt` 指向根目录 `LICENSE`（那才是权威文本）；`REUSE.toml` 兜底声明数据/生成/二进制文件（GPL-3.0-or-later），并单独标注 `gradlew*`/`gradle/wrapper`（Apache-2.0）、`assets/licenses/`（FSF 文本）与 `io/edge/`（LGPL-3.0-or-later）。改动任何文件的头两行记得跑 `reuse lint` |
 | `scripts/` | 数据再生成工具与源：`generate-compounds.py`（组词表）、`build-lexicon.py` / `build-hanzi-lexicon.py`（两份词典表）、`extract-renai-ipa.py`（仁爱教材音标，一次性）、`check-assets.py`（资产树校验，CI 门禁）、`import-wordlist.py`（外部词表规范化）、`verify-kebiao-scan.py`（课标字表 vs 影印件位次核对）、`scripts/data/` 频率表与音标源（均不随 APK 打包） |
 
 ## 4. 签名与打包发布

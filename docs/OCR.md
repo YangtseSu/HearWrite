@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # 拍照识词与拍照批改（BYOK 视觉）
 
 本文是 [`AGENTS.md`](../AGENTS.md) *OCR import (拍照识词)* 与 *拍照批改* 两节的展开：取图/裁剪/编码、回复提取、服务商预设，以及手写答案的判定算法。用户可见的行为与规则以 AGENTS.md 为准。

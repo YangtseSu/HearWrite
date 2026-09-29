@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 <resources>
     <!-- Dark twin of Theme.HearWrite so the window background matches before
          the first Compose frame (no white flash in 深色 mode). -->

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025 rany <rany@riseup.net> and contributors
+// SPDX-License-Identifier: LGPL-3.0-or-later
+
 /*
  * NOTE (HearWrite): UNNECESSARY_SAFE_CALL is suppressed on purpose — this file is
  * vendored verbatim (see the provenance notice) and stays compilable against the

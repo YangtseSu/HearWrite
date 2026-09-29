@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # 词库规范与贡献指南
 
 内置词库随 APK 原样打包（`app/src/main/assets/`），是应用的**唯一**词表来源；一份坏行会立刻发给所有用户。本文是词表的数据契约、校验方式与贡献流程。架构与行为契约见 [`../AGENTS.md`](../AGENTS.md)，功能规划见 [`ROADMAP.md`](ROADMAP.md)。

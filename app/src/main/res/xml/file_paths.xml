@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 <paths>
     <!-- 拍照识词 full-res camera captures; one fixed file, overwritten per shot. -->
     <cache-path name="ocr_capture" path="ocr/" />

@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 <!-- Privacy posture: BYOK provider keys, dictation history, drafts and the
      wrong-word book never leave the device (README "所有数据只保存在本机").
      DataStore lives in files/datastore/, Room in the database domain. -->

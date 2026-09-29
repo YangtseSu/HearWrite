@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 <!-- The 拍照识词 Ollama preset (OcrProviderConfig.kt) is a BYOK local
      endpoint at http://localhost:11434 — targetSdk 37 blocks cleartext by
      default, so loopback hosts are opted in explicitly; everything else

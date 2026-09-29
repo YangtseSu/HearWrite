@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Yangtse Su
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # CI — assemble + unit tests + lint on every pull request, plus instrumentation
 # tests on a cloud emulator (androidTest infra lives in app/src/androidTest and
 # must run on device — GitHub-hosted emulator). Public-repo reproducibility
@@ -19,10 +22,33 @@ on:
 jobs:
   build:
     name: Build, unit tests & lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+
+      # Licensing is a repository-wide contract (AGENTS.md → Repo hygiene):
+      # `reuse lint` checks every tracked file's copyright/license declaration,
+      # from the in-file SPDX headers or from REUSE.toml. It needs nothing from
+      # the JDK or the Android SDK, so it runs first and fails fast.
+      #
+      # Every job here runs on the 26.04 image (not `ubuntu-latest`, which still
+      # points at 24.04 — actions/runner-images#14748 moves the label in
+      # November 2026) because that is where the archive ships a `reuse` that
+      # understands `REUSE.toml`: resolute has 5.0.2, verified to lint this tree
+      # green, while noble's 2.1.0 predates the file. A distro package also
+      # keeps the linter's version fixed per image instead of floating with
+      # PyPI. Dev machines running the distro build may detect encodings with
+      # charset-normalizer, whose 2 KiB probe misreads a CJK-heavy file as
+      # binary when the cut splits a UTF-8 character — REUSE.toml's
+      # project-wide fallback covers that, so `reuse lint` passes either way.
+      - name: Install reuse (REUSE linter)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y reuse
+
+      - name: Lint licensing (REUSE)
+        run: reuse lint
 
       - name: Set up JDK 26
         uses: actions/setup-java@v6
@@ -110,7 +136,7 @@ jobs:
   # re-adding a matrix.
   instrumented:
     name: Instrumented tests (emulator)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Check out repository
         uses: actions/checkout@v7

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package org.yangtse.hearwrite.domain
 
 /** Prefix of a built-in library list id (`default_<category>_<label>`). */

@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # HearWrite 听写
 [![Vibe Coded](https://img.shields.io/badge/vibe--coded-%F0%9F%A4%96-8A2BE2)](#关于开发方式)
 [![Release](https://img.shields.io/github/v/release/YangtseSu/HearWrite?sort=semver&logo=android&logoColor=3DDC84&label=%E6%9C%80%E6%96%B0%E7%89%88)](https://github.com/YangtseSu/HearWrite/releases/latest)
@@ -103,4 +106,4 @@ you're = you are         ← 只朗读左侧
 
 本项目在 AI 编码智能体（Oh My Pi）辅助下开发：人类负责产品需求、交互设计与验收，代码主要由 AI 生成，并经单元测试与真机验证。AI 参与的提交在标题末尾带 🤖 标记。使用中如遇问题，欢迎提 [issue](https://github.com/YangtseSu/HearWrite/issues)。
 
-GPL-3.0-or-later，见 [`LICENSE`](LICENSE)。
+GPL-3.0-or-later，见 [`LICENSE`](LICENSE)；每个文件的版权与许可声明按 [REUSE](https://reuse.software) 规范随文件标注（机器校验：`reuse lint`，许可全文见 [`LICENSES/`](LICENSES)）。

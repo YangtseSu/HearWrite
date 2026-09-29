@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # 数据模型重构（英文 + 中文）
 
 **归档**（2026-09-20 移入 `implemented/`）：条目 **#17** 已完成（Phase 1–4），编号与正文照原样保留；仍然生效的规则已提炼进 [`../../AGENTS.md`](../../AGENTS.md)（行/词典分离、lexicon 加载与拨盘显示）、[`../WORDLIST.md`](../WORDLIST.md) §6/§9（资产格式与来源）与 [`../OCR.md`](../OCR.md)（拍照识词/批改），各 Phase 的验收与偏差见下方注记。完成条目索引：[`2026-09-18-ROADMAP-DONE.md`](2026-09-18-ROADMAP-DONE.md) #17；面向用户的版本说明：[`CHANGELOG.md`](../../CHANGELOG.md) `[0.9.0]`。

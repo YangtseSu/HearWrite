@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Yangtse Su
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Extract the 仁爱 textbook IPA into `scripts/data/renai-ipa.tsv`.
 
 One-off extraction tool (not part of the asset pipeline): it reads the OCR'd

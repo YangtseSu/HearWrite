@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Yangtse Su
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # CodeQL static analysis — currently PAUSED.
 #
 # The repo tracks latest-stable Kotlin (no-pin policy, AGENTS.md). CodeQL's
@@ -40,7 +43,8 @@ on:
 jobs:
   analyze:
     name: Analyze
-    runs-on: ubuntu-latest
+    # Same base image as CI (build.yml pins 26.04: the archive's `reuse`).
+    runs-on: ubuntu-26.04
     if: false # paused — see header comment
     permissions:
       security-events: write

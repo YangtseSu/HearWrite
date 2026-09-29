@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 <resources>
     <!-- Night twin of the icon tile: the design source's light blue #EFF6FD
          renders as a glaring white square on dark wallpaper and in the About

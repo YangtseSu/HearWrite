@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Yangtse Su
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 name: 词库问题（错行 / 缺词表）
 description: 报告内置词库里的错字、错拼音、错组词，或申请补充缺失的词表
 title: "[词库] "

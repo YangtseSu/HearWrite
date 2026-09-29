@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Yangtse Su
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # EditorConfig (https://editorconfig.org) — mirrors AGENTS.md §Code Conventions:
 # official Kotlin conventions (4-space indent, LF line endings, UTF-8).
 root = true

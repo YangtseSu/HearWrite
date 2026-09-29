@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # Roadmap 已完成条目（归档）
 
 **归档日期**：2026-09-18（**17** 于 2026-09-19 追加）。本文件是从 [`../ROADMAP.md`](../ROADMAP.md) 拆出的**已完成**条目——正文与编号照原样保留（`Roadmap #N` 的引用按编号索引，号段不重排），拆分时只补了这条说明与失效链接，未改写内容。ROADMAP 现在只留未完成项。

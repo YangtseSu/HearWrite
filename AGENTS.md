@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # Repository Guidelines
 
 ## Project Overview
@@ -127,6 +130,7 @@ Build, test, lint, signing and packaging: `docs/DEVELOPMENT.md` §1.4 and §2 (c
 ## Repo hygiene (non-negotiable)
 
 - **Never push without explicit permission.** No `git push` of any form — plain, `--force-with-lease`, branch rewrite, tag or branch deletion — unless the user asked for it in that same turn. Committing is local work; publishing is the user's call. When a commit is ready to publish, say so and wait for the go-ahead.
+- **Licensing is machine-checked (REUSE)**: the repo is [REUSE](https://reuse.software)-compliant, and `reuse lint` runs in CI (before Gradle) as the gate for anything licensing-related. Every hand-edited text file carries `SPDX-FileCopyrightText` + `SPDX-License-Identifier` in its own comment syntax — after the shebang or XML declaration where one exists; data, generated and binary files are covered by `REUSE.toml`, which also holds the project-wide fallback (GPL-3.0-or-later, 2026 Yangtse Su) and the exceptions (`gradlew`, `gradlew.bat`, `gradle/wrapper/**` → Apache-2.0; `app/src/main/assets/licenses/**` → the FSF's GPL text; `app/src/main/java/io/edge/**` → LGPL-3.0-or-later). A new license needs its text in `LICENSES/`; the root `LICENSE` stays the canonical GPL-3.0 text and `LICENSES/GPL-3.0-or-later.txt` links to it. New files follow the convention — `reuse lint` is what keeps anyone honest.
 - **No hardware identifiers in tracked content.** Docs, code comments, commit messages, test fixtures and file names MUST NOT carry a device model, serial or other device-unique id, or an emulator/AVD name. Name the class instead — `真机` / `模拟器` / `device` — keeping only what the evidence needs (API level, locale, screen size, app version). A ROM/vendor name is allowed only where that ROM *is* the finding; never shorthand for "the machine I ran this on". The signing certificate's subject identity is out too — see `docs/DEVELOPMENT.md` §4.4.
 
 ## Code Conventions

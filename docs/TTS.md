@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # TTS 朗读链路（发音来源 · 音色 · 缓存）
 
 本文是 [`AGENTS.md`](../AGENTS.md) *TTS priority chain* 一节的展开：四条发音来源的协议、音色选择、缓存键与失败降级。规则（哪条是默认、谁是兜底、组词短语走哪条）以 AGENTS.md 为准，本文补充"怎么接线、怎么失效、怎么修"。

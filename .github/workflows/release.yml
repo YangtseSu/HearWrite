@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Yangtse Su
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Release — tag-triggered signed build + GitHub Release (APK + R8 mapping).
 # Signing material comes from repository Secrets (KEYSTORE_BASE64,
 # KEYSTORE_STORE_PASSWORD, KEYSTORE_KEY_PASSWORD); keyAlias is not secret.
@@ -13,7 +16,8 @@ on:
 jobs:
   release:
     name: Signed release
-    runs-on: ubuntu-latest
+    # Same base image as CI (build.yml pins 26.04: the archive's `reuse`).
+    runs-on: ubuntu-26.04
     permissions:
       contents: write # softprops/action-gh-release
     env:

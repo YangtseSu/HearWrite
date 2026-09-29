@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Yangtse Su
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Validate the bundled word-list library under `app/src/main/assets/`.
 
 The library ships verbatim into the APK and is the app's only source of truth

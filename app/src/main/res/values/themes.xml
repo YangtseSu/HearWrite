@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 <resources>
     <!-- Pre-Compose window theme only; all theming happens in Compose (ui/theme). -->
     <style name="Theme.HearWrite" parent="android:Theme.Material.Light.NoActionBar" />

@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # 更新日志（面向用户，中文）
 
 > 给用户看的版本说明。每次发版在打 tag 前追加一节；GitHub Release 正文

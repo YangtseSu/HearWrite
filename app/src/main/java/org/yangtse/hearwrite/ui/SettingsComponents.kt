@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package org.yangtse.hearwrite.ui
 
 import androidx.compose.animation.animateContentSize

@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Yangtse Su -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # Roadmap — HearWrite 听写
 
 功能想法登记处。状态：💡 idea（只有想法）→ 📋 spec（有设计）→ ✅ done。**只记未完成项**——条目做完就把正文移进 [`implemented/2026-09-18-ROADMAP-DONE.md`](implemented/2026-09-18-ROADMAP-DONE.md)，**编号不重排**，代码注释与文档里的 `Roadmap #N` 引用照旧有效；已实现功能见 README。

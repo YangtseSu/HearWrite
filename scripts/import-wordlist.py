@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Yangtse Su
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Turn a pasted / OCR'd / hand-typed word list into a file this repo can accept.
 
 The app's word-line format is strict (`docs/WORDLIST.md`): one entry per line,
