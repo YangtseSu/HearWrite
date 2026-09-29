@@ -22,7 +22,7 @@ From-scratch Kotlin + Jetpack Compose. **[alice](https://github.com/vvenv/alice)
 | Tool | Baseline (2026-09) | Notes |
 | --- | --- | --- |
 | JDK | 27 | toolchain level 21; daemon set to an installed JDK via user-level `~/.gradle/gradle.properties` (never committed) |
-| Gradle | 9.8.0 (wrapper) | also installed machine-wide |
+| Gradle | 9.8.0 (wrapper) | the wrapper is the only Gradle — no system install needed (docs/DEVELOPMENT.md §1.4) |
 | AGP | 9.4.0 | max API 37, needs Gradle ≥ 9.5.0 — check Gradle when bumping; minor SDK levels via `compileSdk { version = release(37) { minorApiLevel = 2 } }` (flat `compileSdkVersion` removed in AGP 10) |
 | Kotlin | 2.4.20 | Compose compiler via `org.jetbrains.kotlin.plugin.compose`; AGP 9 built-in Kotlin — `kotlin-android` is forbidden. **KSP tracks Kotlin** — bump together |
 | Compose BOM | 2026.09.00 | Material 3 |

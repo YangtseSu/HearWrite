@@ -22,7 +22,7 @@ git clone https://github.com/YangtseSu/HearWrite.git && cd HearWrite
 守护进程 JDK 的选择**不入库**（仓库的 `gradle.properties` 不提交 `org.gradle.java.home`），在用户级 `~/.gradle/gradle.properties` 固定——每台机器各自的设置：
 
 ```bash
-# ~/.gradle/gradle.properties（本机已配置）
+# ~/.gradle/gradle.properties（每台机器各自配置，仓库不提交该文件）
 org.gradle.java.home=/usr/lib/jvm/java-27-openjdk
 ```
 
@@ -68,7 +68,7 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties   # 已被 gitignore，机�
 ~/Android/Sdk/emulator/emulator -list-avds        # 列出 ~/.android/avd/ 下的全部 AVD
 ```
 
-有输出就启动其中一个（本机模拟器为 API 37 / x86_64 / google_apis），没有输出才回到真机：
+有输出就启动其中一个，没有输出才回到真机：
 
 ```bash
 ~/Android/Sdk/emulator/emulator -avd <AVD 名> &    # 名字用上一步 -list-avds 列出的
