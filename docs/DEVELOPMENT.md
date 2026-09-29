@@ -7,7 +7,7 @@
 
 ## 1. 环境搭建（新机器）
 
-工具链相关的一切（Gradle 9.7.1 wrapper、AGP 9.4.0、Kotlin 2.4.20、Compose BOM 2026.09.00）都已锁定在仓库内；只有三样东西是机器本地的：**JDK 26**、**Android SDK** 和 GitHub 认证。
+工具链相关的一切（Gradle 9.7.1 wrapper、AGP 9.4.0、Kotlin 2.4.20、Compose BOM 2026.09.00）都已锁定在仓库内；只有三样东西是机器本地的：**JDK 27**、**Android SDK** 和 GitHub 认证。
 
 ### 1.1 克隆仓库
 
@@ -17,16 +17,16 @@ git clone https://github.com/YangtseSu/HearWrite.git && cd HearWrite
 
 仓库公开，克隆无需认证；推送代码前完成 GitHub 认证即可（`gh auth login` 或 SSH 密钥）。
 
-### 1.2 JDK 26
+### 1.2 JDK 27
 
 守护进程 JDK 的选择**不入库**（仓库的 `gradle.properties` 不提交 `org.gradle.java.home`），在用户级 `~/.gradle/gradle.properties` 固定——每台机器各自的设置：
 
 ```bash
 # ~/.gradle/gradle.properties（本机已配置）
-org.gradle.java.home=/usr/lib/jvm/java-26-openjdk
+org.gradle.java.home=/usr/lib/jvm/java-27-openjdk
 ```
 
-- Arch 系 Linux：`sudo pacman -S jdk-openjdk`（当前 latest = 26；升级 JDK 后同步改上面的路径，路径形如 `/usr/lib/jvm/java-26-openjdk`）。CI 与本地守护进程都用 JDK 26：CI 经 `actions/setup-java` 装 Temurin 26（`build.yml`/`release.yml`）。
+- Arch 系 Linux：`sudo pacman -S jdk-openjdk`（当前 latest = 27；升级 JDK 后同步改上面的路径，路径形如 `/usr/lib/jvm/java-27-openjdk`）。CI 与本地守护进程都用 JDK 27：CI 经 `actions/setup-java` 装 Temurin 27（`build.yml`/`release.yml`/`codeql.yml`）。
 - 其他操作系统/发行版：路径不同，改用户级配置里的路径即可；也可以用环境变量 `JAVA_HOME` 指向对应 JDK。
 
 任何 JVM ≥ 21 都能运行守护进程；编译目标在 `app/build.gradle.kts` 中固定为 Java 21。

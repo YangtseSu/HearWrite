@@ -61,11 +61,11 @@ jobs:
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
-      - name: Set up JDK 26
+      - name: Set up JDK 27
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: "26"
+          java-version: "27"
       # `packages: platform-tools` is required, not cosmetic: the action's
       # default is `tools platform-tools`, but Google retired the standalone
       # `tools` package (folded into `cmdline-tools`), so `sdkmanager tools`
