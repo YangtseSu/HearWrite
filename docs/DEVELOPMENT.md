@@ -7,7 +7,7 @@
 
 ## 1. 环境搭建（新机器）
 
-工具链相关的一切（Gradle 9.7.1 wrapper、AGP 9.4.0、Kotlin 2.4.20、Compose BOM 2026.09.00）都已锁定在仓库内；只有三样东西是机器本地的：**JDK 27**、**Android SDK** 和 GitHub 认证。
+工具链相关的一切（Gradle 9.8.0 wrapper、AGP 9.4.0、Kotlin 2.4.20、Compose BOM 2026.09.00）都已锁定在仓库内；只有三样东西是机器本地的：**JDK 27**、**Android SDK** 和 GitHub 认证。
 
 ### 1.1 克隆仓库
 
@@ -58,7 +58,7 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties   # 已被 gitignore，机�
 ./gradlew :app:assembleDebug :app:testDebugUnitTest
 ```
 
-无需系统安装 Gradle：wrapper 会一次性把 Gradle 9.7.1（当前版本，wrapper 文件锁 SHA-256 防篡改）下载到 `~/.gradle/wrapper/dists` 并缓存复用（默认从官方 `services.gradle.org` 下载；若官方地址不可达——例如国内网络——把 `gradle-wrapper.properties` 注释中的腾讯镜像 URL 换上去即可）。其余依赖均从 Google Maven / Maven Central 解析。首次构建需要几分钟，之后都是增量构建。
+无需系统安装 Gradle：wrapper 会一次性把 Gradle 9.8.0（当前版本，wrapper 文件锁 SHA-256 防篡改）下载到 `~/.gradle/wrapper/dists` 并缓存复用（默认从官方 `services.gradle.org` 下载；若官方地址不可达——例如国内网络——把 `gradle-wrapper.properties` 注释中的腾讯镜像 URL 换上去即可）。其余依赖均从 Google Maven / Maven Central 解析。首次构建需要几分钟，之后都是增量构建。
 
 ### 1.5 在设备上运行
 
