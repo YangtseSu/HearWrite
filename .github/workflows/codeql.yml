@@ -1,51 +1,53 @@
 # SPDX-FileCopyrightText: 2026 Yangtse Su
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# CodeQL static analysis — currently PAUSED.
+# CodeQL static analysis — Kotlin/Java. Runs on pushes to main, pull requests,
+# and a weekly schedule; finds security vulnerabilities in the app code (the
+# repo has no backend, so scanning covers the Android module).
 #
-# The repo tracks latest-stable Kotlin (no-pin policy, AGENTS.md). CodeQL's
-# Kotlin extractor rejects the current Kotlin 2.4.20 with
+# Paused 2026-09-10 → 2026-09-29 (b91d6f4 … the commit that re-enabled it):
+# CodeQL's Kotlin extractor rejected the then-current Kotlin with
 #   KotlinVersionTooRecentError: CodeQL currently supports versions below 2.4.20
+# and the repo tracks latest-stable Kotlin (no-pin policy, AGENTS.md), so
+# pinning Kotlin back to satisfy CodeQL was off the table. The upstream fix
+# (github/codeql#22404, "Kotlin: support 2.4.20") merged 2026-09-08 — one day
+# past the 2.27.0 release cut — hence 2.27.1 was the first stable bundle to
+# carry it, published 2026-09-22. The `@v4` actions below now resolve to a
+# bundle that includes it (v4.38.2 → codeql-bundle-v2.27.1). The A/B evidence
+# (same commit, same workflow body, only the bundle differed: stable 2.27.0
+# failed, the nightly passed) is recorded in issue #7.
 #
-# Verified 2026-09-16 against both bundles available that day:
-#   - codeql-bundle-v2.27.0 (the latest *stable*, 2026-09-09): Autobuild fails
-#     with the error above — the support PR (github/codeql#22404, "Kotlin:
-#     support 2.4.20") merged 2026-09-08 and missed the 2.27.0 release cut.
-#   - codeql-bundle-20260915 (nightly, CLI 2.27.1+20260914): Autobuild compiles
-#     the Kotlin sources and the analysis completes with no KotlinVersionTooRecent
-#     error. Upstream says 2.27.1 ships the fix, ~2026-09-24.
-# The same workflow body was used for both runs (only `tools:` differed), so the
-# Kotlin version alone decides it.
+# If Kotlin ever advances past the extractor again, pause this workflow the same
+# way (`if: false` + `workflow_dispatch`) rather than pinning Kotlin back.
+# Tracking issue: https://github.com/YangtseSu/HearWrite/issues/7
 #
-# Honoring latest-stable Kotlin takes precedence over CodeQL coverage, so this
-# workflow stays off until a *stable* bundle carries #22404. Re-enable = restore
-# `on:` (push to main, pull_request, weekly schedule) and delete the `if: false`
-# guard; the rest of this file is already the exact shape the re-enable needs,
-# and was rehearsed green on 2026-09-16 (real push trigger, no guard, @v4
-# actions, nightly bundle standing in for stable 2.27.1):
+# Two step details are load-bearing, both settled while the workflow was paused:
 #   - `packages: platform-tools` on the SDK step — the standalone `tools`
-#     package no longer exists and would otherwise fail the job before any
-#     repo code ran, looking like a CodeQL problem (same fix as build.yml /
-#     release.yml).
+#     package no longer exists, so the action's `tools platform-tools` default
+#     would fail the job before any repo code ran, looking like a CodeQL
+#     problem (same narrowing as build.yml / release.yml).
 #   - `@v4` on the three codeql-action steps — v3 is deprecated in December
-#     2026. Renovate watches these pins too (github-actions manager, added to
-#     enabledManagers in renovate.json); digest pinning is deliberately off —
-#     the repo tracks latest stable, not immutable SHAs.
-# Tracked in: https://github.com/YangtseSu/HearWrite/issues/7
+#     2026. Renovate watches these pins (github-actions manager in
+#     renovate.json); digest pinning is deliberately off — the repo tracks
+#     latest stable, not immutable SHAs.
 #
 # Secret scanning + push protection are enabled repo-wide (independent of
 # CodeQL) and cover the credential-leak class that matters most here.
 name: "CodeQL"
 
 on:
-  workflow_dispatch: # manual run only; scheduled/push runs disabled below
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "21 4 * * 1" # weekly: Monday 04:21 UTC
 
 jobs:
   analyze:
     name: Analyze
     # Same base image as CI (build.yml pins 26.04: the archive's `reuse`).
     runs-on: ubuntu-26.04
-    if: false # paused — see header comment
     permissions:
       security-events: write
       actions: read
