@@ -5,7 +5,7 @@
 # stable — no pins. Renovate bumps these daily; current values as of 2026-09.
 [versions]
 agp = "9.4.1"
-kotlin = "2.4.20"            # applied via the Compose compiler plugin (AGP 9 built-in Kotlin; kotlin-android is forbidden)
+kotlin = "2.4.21"            # applied via the Compose compiler plugin (AGP 9 built-in Kotlin; kotlin-android is forbidden)
 composeBom = "2026.09.00"
 coreKtx = "1.19.1"
 activityCompose = "1.13.0"
