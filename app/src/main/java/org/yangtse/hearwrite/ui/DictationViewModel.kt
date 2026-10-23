@@ -224,6 +224,21 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
     /** Whole seconds of the finished run (score summary); null mid-run. */
     val elapsedSec: StateFlow<Long?> = _elapsedSec.asStateFlow()
 
+    // Declared here — before [init] — because init's OCR-config collector can
+    // emit synchronously while the constructor is still running: DataStore
+    // 1.3.0 replays the cached value without suspending, so a field declared
+    // later would still be null, the NPE would cancel the collector, and
+    // 拍照批改's pre-check would stay off for the whole session.
+    private val _ocrConfigured = MutableStateFlow(false)
+
+    /**
+     * True when a complete BYOK OCR provider config is stored, mirrored from
+     * the settings repository (same shape as `HomeViewModel.ocrConfigured`).
+     * [openGradePane] gates on it so an unconfigured service is reported
+     * before the user takes and crops a photo.
+     */
+    val ocrConfigured: StateFlow<Boolean> = _ocrConfigured.asStateFlow()
+
     /** Rows of the run in progress (initial session or a review round). */
     private val _activeRows = MutableStateFlow(sessionRows)
     val activeRows: StateFlow<List<ResolvedWord>> = _activeRows.asStateFlow()
@@ -736,16 +751,6 @@ class DictationViewModel(application: Application) : AndroidViewModel(applicatio
      * 拍照批改 write, or [openGradePane]'s pre-check refusal (no OCR config).
      */
     val gradeNotice: StateFlow<String?> = _gradeNotice.asStateFlow()
-
-    private val _ocrConfigured = MutableStateFlow(false)
-
-    /**
-     * True when a complete BYOK OCR provider config is stored, mirrored from
-     * the settings repository (same shape as `HomeViewModel.ocrConfigured`).
-     * [openGradePane] gates on it so an unconfigured service is reported
-     * before the user takes and crops a photo.
-     */
-    val ocrConfigured: StateFlow<Boolean> = _ocrConfigured.asStateFlow()
 
     /**
      * Open the 拍照批改 pane. The recognition language follows this run's own
